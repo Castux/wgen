@@ -1,0 +1,12 @@
+{
+	"authors": [
+		"tenoch"
+	],
+	"copyright": "Copyright © 2024, tenoch",
+	"description": "A minimal D application.",
+	"license": "MIT",
+	"name": "wgen",
+
+	"targetType": "executable",
+	"mainSourceFile": "source/test.d"
+}
