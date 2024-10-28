@@ -97,6 +97,81 @@ local function edgeEnd(e)
 	return e.tri[e.index % 3 + 1]
 end
 
+-- Make a new triangle from a point and a border edge
+local function pointWithEdge(p, border, index, triangles)
+
+	-- Create triangle
+	local e = border[index]
+	local new = new_tri(edgeStart(e), p, edgeEnd(e))
+	connect(new, 3, e.tri, e.index)
+
+	-- Replace border edge with two new edges
+	border[index] = edge(new, 1)
+	table.insert(border, index + 1, edge(new, 2))
+
+	table.insert(triangles, new)
+end
+
+-- Make a new triangle from two border edges that form a concavity
+local function edgeWithEdge(border, index, triangles)
+
+	local e1 = border[index]
+	local e2 = border[index % #border + 1]
+
+	local a,b,c = edgeStart(e1),edgeEnd(e1),edgeEnd(e2)
+	local new = new_tri(a,c,b)
+	connect(new, 2, e2.tri, e2.index)
+	connect(new, 3, e1.tri, e1.index)
+
+	-- Replace two border edges with the new one
+	border[index] = edge(new, 1)
+	table.remove(border, index % #border + 1)
+
+	table.insert(triangles, new)
+end
+
+local function processPoint(p, triangles, border)
+
+	-- Find any border we're on the correct side of
+	local found, index
+	for i,e in ipairs(border) do
+		if clockwise(p, edgeEnd(e), edgeStart(e)) then
+			found = e
+			index = i
+			break
+		end
+	end
+
+	if index == nil then
+		print "Could not find valid border edge"
+		return
+	end
+
+	-- Create new triangle
+	-- Connect it to the edge we inserted in
+	pointWithEdge(p, border, index, triangles)
+
+	-- Fix hull to keep it convex
+	local i = index + 1
+	while true do
+		e1 = border[i]
+		e2 = border[i % #border + 1]
+
+		assert(edgeEnd(e1) == edgeStart(e2))
+		local a,b,c = edgeStart(e1),edgeEnd(e1),edgeEnd(e2)
+
+		if clockwise(a,b,c) then
+			break
+		end
+
+		edgeWithEdge(border, i, triangles)
+
+		i = i % #border + 1
+	end
+
+	-- Same in the other direction
+end
+
 local function delaunay(points)
 
 	-- Find the most central triangle to start with
@@ -147,32 +222,7 @@ local function delaunay(points)
 
 	for foo,p in ipairs(points) do
 		if foo == 4 then break end
-		-- Find any border we're on the correct side of
-		local found, index
-		for i,e in ipairs(border) do
-			if clockwise(p, edgeEnd(e), edgeStart(e)) then
-				found = e
-				index = i
-				break
-			end
-		end
-
-		if index == nil then
-			print "Could not find valid border edge"
-			break
-		end
-
-		-- Create new triangle
-		-- Connect it to the edge we inserted in
-		local new = new_tri(edgeStart(found), p, edgeEnd(found))
-		connect(new, 3, found.tri, found.index)
-
-		-- Replace edge with two new edges
-		border[index] = edge(new, 1)
-		table.insert(border, index + 1, edge(new, 2))
-
-		-- Save triangle
-		table.insert(triangles, new)
+		processPoint(p, triangles, border)
 	end
 
 	return triangles
