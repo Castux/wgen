@@ -34,8 +34,8 @@ local function write(path, width, height, data)
 	writeByte(32)
 	writeByte(40) -- descriptor: 8 bit alpha, top to bottom
 
-	for row = 0,height-1 do
-		for col = 0,width-1 do
+	for row = 0, height-1 do
+		for col = 0, width-1 do
 			writePixel(data[row][col])
 		end
 	end
@@ -81,18 +81,18 @@ local function fromFile(path)
 
 	local img = image.new(width, height)
 
-	local rstart,rend,rdir = 0, height-1, 1
+	local rstart, rend, rdir = 0, height-1, 1
 	if topToBottom ~= 1 then
-		rstart,rend,rdir = rend,rstart,-1
+		rstart, rend, rdir = rend, rstart, -1
 	end
 
-	local cstart,cend,cdir = 0, width-1, 1
+	local cstart, cend, cdir = 0, width-1, 1
 	if rightToLeft == 1 then
-		cstart,cend,cdir = cend,cstart,-1
+		cstart, cend, cdir = cend, cstart, -1
 	end
 
-	for row = rstart,rend,rdir do
-		for col = cstart,cend,cdir do
+	for row = rstart, rend, rdir do
+		for col = cstart, cend, cdir do
 			-- TGA uses BGR(A) order
 		 	local pixel =
 				readByte() <<  8 |
@@ -100,7 +100,7 @@ local function fromFile(path)
 				readByte() << 24 |
 				(bpp == 4 and readByte() or 255)
 
-			img.setPixel(row,col,pixel)
+			img.setPixel(row, col, pixel)
 		end
 	end
 	fp:close()
@@ -109,7 +109,7 @@ local function fromFile(path)
 end
 
 local function toFile(path, img)
-	write(path, img.width, img.height, img.data)
+	write(path, img.width, img.height, img)
 end
 
 return
