@@ -62,7 +62,7 @@ local function circumcenter(ax, ay, bx, by, cx, cy)
 	return {x, y}
 end
 
-local function new_tri(p1,p2,p3)
+local function newTri(p1,p2,p3)
 	local t = {}
 
 	if not clockwise(p1,p2,p3) then
@@ -128,7 +128,7 @@ end
 local function pointWithEdge(p, e, triangles)
 
 	-- Create triangle
-	local new = new_tri(edgeStart(e), p, edgeEnd(e))
+	local new = newTri(edgeStart(e), p, edgeEnd(e))
 	connect(new, 3, e.tri, e.index)
 
 	-- Replace border edge with two new edges
@@ -145,7 +145,7 @@ end
 local function edgeWithEdge(e, triangles)
 
 	local a,b,c = edgeStart(e),edgeEnd(e),edgeEnd(e.next)
-	local new = new_tri(a,c,b)
+	local new = newTri(a,c,b)
 	connect(new, 2, e.next.tri, e.next.index)
 	connect(new, 3, e.tri, e.index)
 
@@ -231,7 +231,7 @@ local function delaunay(points)
 		a,b,c = c,b,a
 	end
 
-	local start = new_tri(a,b,c)
+	local start = newTri(a,b,c)
 	local triangles = {start}
 
 	local border = newBorder(edge(start,1))
@@ -264,6 +264,6 @@ end
 
 return
 {
-	new_tri = new_tri,
+	newTri = newTri,
 	delaunay = delaunay
 }
