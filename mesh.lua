@@ -256,7 +256,6 @@ local function delaunay(points)
 	-- Add points one at a time
 
 	for foo,p in ipairs(points) do
---		if foo == 5 then break end
 		border = processPoint(p, triangles, border)
 	end
 
