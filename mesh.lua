@@ -73,7 +73,28 @@ local function new_tri(p1,p2,p3)
 	t[2] = p2
 	t[3] = p3
 
+	t.reverse = {}
+
 	return t
+end
+
+-- Edges are references to a triangle and the index of the starting vertex
+
+local function edge(tri,index)
+	return {tri = tri, index = index}
+end
+
+local function connect(t1, e1, t2, e2)
+	t1.reverse[e1] = edge(t2,e2)
+	t2.reverse[e2] = edge(t1,e1)
+end
+
+local function edgeStart(e)
+	return e.tri[e.index]
+end
+
+local function edgeEnd(e)
+	return e.tri[e.index % 3 + 1]
 end
 
 local function delaunay(points)
@@ -104,7 +125,11 @@ local function delaunay(points)
 	local start = new_tri(a,b,c)
 	local triangles = {start}
 
-	local border = {a,b,c}
+	local border = {
+		edge(start, 1),
+		edge(start, 2),
+		edge(start, 3)
+	}
 
 	-- Recompute distances from a point inside this triangle
 	cx = (a.x + b.x + c.x) / 3
@@ -120,31 +145,33 @@ local function delaunay(points)
 
 	-- Add points one at a time
 
-	for ind,p in ipairs(points) do
-		--if ind == 4 then break end
-		-- Find any border we're on the right side of
-		local b1,b2,borderIndex
-		for i = 1, #border do
-			b1 = border[i]
-			b2 = border[i % #border + 1]
-
-			if clockwise(p, b2, b1) then
-				borderIndex = i
+	for foo,p in ipairs(points) do
+		if foo == 4 then break end
+		-- Find any border we're on the correct side of
+		local found, index
+		for i,e in ipairs(border) do
+			if clockwise(p, edgeEnd(e), edgeStart(e)) then
+				found = e
+				index = i
 				break
 			end
 		end
 
-		if borderIndex == nil then
-			print "Could not find closest border edge"
+		if index == nil then
+			print "Could not find valid border edge"
 			break
 		end
 
 		-- Create new triangle
-		-- Its first edge is the reverse of the border edge we found
-		local new = new_tri(p, b2, b1)
+		-- Connect it to the edge we inserted in
+		local new = new_tri(edgeStart(found), p, edgeEnd(found))
+		connect(new, 3, found.tri, found.index)
 
-		-- Insert new point on border
-		table.insert(border, borderIndex + 1, p)
+		-- Replace edge with two new edges
+		border[index] = edge(new, 1)
+		table.insert(border, index + 1, edge(new, 2))
+
+		-- Save triangle
 		table.insert(triangles, new)
 	end
 

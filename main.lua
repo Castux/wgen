@@ -9,7 +9,7 @@ local function update()
 
 	for x = 0,999 do
 		for y = 0,999 do
-			if math.random() < 1/(100*100) then
+			if math.random() < 1/(200^2) then
 				table.insert(points, {x=x, y=y})
 			end
 		end
