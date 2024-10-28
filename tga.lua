@@ -12,10 +12,11 @@ local function write(path, width, height, data)
 		fp:write(string.char((s >> 8) & 0xff))
 	end
 
-	local function writeInt(i)
-		fp:write(string.char((i >> 24) & 0xff))
-		fp:write(string.char((i >> 16) & 0xff))
+	local function writePixel(i)
+		-- BGRA order
 		fp:write(string.char((i >> 8) & 0xff))
+		fp:write(string.char((i >> 16) & 0xff))
+		fp:write(string.char((i >> 24) & 0xff))
 		fp:write(string.char((i >> 0) & 0xff))
 	end
 
@@ -35,7 +36,7 @@ local function write(path, width, height, data)
 
 	for row = 0,height-1 do
 		for col = 0,width-1 do
-			writeInt(data[row][col])
+			writePixel(data[row][col])
 		end
 	end
 
@@ -92,10 +93,11 @@ local function fromFile(path)
 
 	for row = rstart,rend,rdir do
 		for col = cstart,cend,cdir do
+			-- TGA uses BGR(A) order
 		 	local pixel =
-				readByte() << 24 |
-				readByte() << 16 |
 				readByte() <<  8 |
+				readByte() << 16 |
+				readByte() << 24 |
 				(bpp == 4 and readByte() or 255)
 
 			img.setPixel(row,col,pixel)
