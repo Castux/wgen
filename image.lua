@@ -19,14 +19,14 @@ local function pixel(r,g,b,a,denormalize)
 	a = clamp(a or 255,0,255)
 
 	return
-		b << 24 | g << 16 | r << 8 | a
+		r << 24 | g << 16 | b << 8 | a
 end
 
 local function rgba(int, normalize)
 	local r,g,b,a =
-		(int >>  8) & 0xff,
-		(int >> 16) & 0xff,
 		(int >> 24) & 0xff,
+		(int >> 16) & 0xff,
+		(int >>  8) & 0xff,
 		(int >>  0) & 0xff
 
 	if normalize then
