@@ -4,7 +4,7 @@ local function new(width, height, fill)
 	for row = 0, height-1 do
 		t[row] = {}
 		for col = 0, width-1 do
-			t[row][col] = fill
+			t[row][col] = type(fill) == "function" and fill(row,col) or fill
 		end
 	end
 
@@ -35,6 +35,10 @@ local function new(width, height, fill)
 				end
 			end
 		end)
+	end
+
+	t.copy = function()
+		return new(width, height, function(row,col) return t[row][col] end)
 	end
 
 	return t
