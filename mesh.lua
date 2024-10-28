@@ -97,18 +97,45 @@ local function edgeEnd(e)
 	return e.tri[e.index % 3 + 1]
 end
 
+local function newBorder(first)
+	first.next = first
+	first.prev = first
+
+	return first
+end
+
+local function borderInsert(node, new)
+	new.next = node.next
+	new.next.prev = new
+
+	node.next = new
+	new.prev = node
+
+	return new
+end
+
+local function borderRemove(node)
+	local next = node.next
+	local prev = node.prev
+
+	prev.next = next
+	next.prev = prev
+
+	return prev,next
+end
+
 -- Make a new triangle from a point and a border edge
-local function pointWithEdge(p, border, index, triangles)
+local function pointWithEdge(p, e, triangles)
 
 	-- Create triangle
-	local e = border[index]
 	local new = new_tri(edgeStart(e), p, edgeEnd(e))
 	connect(new, 3, e.tri, e.index)
 
 	-- Replace border edge with two new edges
-	border[index] = edge(new, 1)
-	table.insert(border, index + 1, edge(new, 2))
-
+	e = borderRemove(e)
+	e = borderInsert(e, edge(new,1))
+	e = borderInsert(e, edge(new,2))
+	
 	table.insert(triangles, new)
 end
 
@@ -133,41 +160,42 @@ end
 local function processPoint(p, triangles, border)
 
 	-- Find any border we're on the correct side of
-	local found, index
-	for i,e in ipairs(border) do
-		if clockwise(p, edgeEnd(e), edgeStart(e)) then
-			found = e
-			index = i
+	local first = border
+	local found
+	repeat
+		if clockwise(p, edgeEnd(border), edgeStart(border)) then
+			found = true
 			break
 		end
-	end
+		border = border.next
+	until border == first
 
-	if index == nil then
+	if not found then
 		print "Could not find valid border edge"
 		return
 	end
 
 	-- Create new triangle
 	-- Connect it to the edge we inserted in
-	pointWithEdge(p, border, index, triangles)
-
-	-- Fix hull to keep it convex
-	local i = index + 1
-	while true do
-		e1 = border[i]
-		e2 = border[i % #border + 1]
-
-		assert(edgeEnd(e1) == edgeStart(e2))
-		local a,b,c = edgeStart(e1),edgeEnd(e1),edgeEnd(e2)
-
-		if clockwise(a,b,c) then
-			break
-		end
-
-		edgeWithEdge(border, i, triangles)
-
-		i = i % #border + 1
-	end
+	pointWithEdge(p, border, triangles)
+	--
+	-- -- Fix hull to keep it convex
+	-- local i = index + 1
+	-- while true do
+	-- 	e1 = border[i]
+	-- 	e2 = border[i % #border + 1]
+	--
+	-- 	assert(edgeEnd(e1) == edgeStart(e2))
+	-- 	local a,b,c = edgeStart(e1),edgeEnd(e1),edgeEnd(e2)
+	--
+	-- 	if clockwise(a,b,c) then
+	-- 		break
+	-- 	end
+	--
+	-- 	edgeWithEdge(border, i, triangles)
+	--
+	-- 	i = i % #border + 1
+	-- end
 
 	-- Same in the other direction
 end
@@ -200,11 +228,9 @@ local function delaunay(points)
 	local start = new_tri(a,b,c)
 	local triangles = {start}
 
-	local border = {
-		edge(start, 1),
-		edge(start, 2),
-		edge(start, 3)
-	}
+	local border = newBorder(edge(start, 1))
+	border = borderInsert(border, edge(start,2))
+	border = borderInsert(border, edge(start,3))
 
 	-- Recompute distances from a point inside this triangle
 	cx = (a.x + b.x + c.x) / 3
