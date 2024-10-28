@@ -80,6 +80,10 @@ end
 
 -- Edges are references to a triangle and the index of the starting vertex
 
+local function mod3(i)
+	return (i - 1) % 3 + 1
+end
+
 local function edge(tri,index)
 	return {tri = tri, index = index}
 end
@@ -94,7 +98,7 @@ local function edgeStart(e)
 end
 
 local function edgeEnd(e)
-	return e.tri[e.index % 3 + 1]
+	return e.tri[mod3(e.index + 1)]
 end
 
 local function newBorder(first)
@@ -124,6 +128,34 @@ local function borderRemove(node)
 	return prev,next
 end
 
+
+--          p1                    pl
+--        /||\                  /  \
+--     e4/ || \e1            e4/    \e1
+--      /  ||  \              /  t1  \
+--     / t1||t2 \    flip    /________\
+--   p4\   ||   /p2   =>   p4\--------/p2
+--      \  ||  /              \  t2  /
+--     e3\ || /e2            e3\    /e2
+--        \||/                  \  /
+--         p3                    p3
+
+local function flipEdge(t1, i1)
+	if not t1.reverse[i1] then return end
+	local t2 = t1.reverse[i1].tri
+	local i2 = t1.reverse[i1].index
+
+	assert(t1[i1] == t2[mod3(i2 + 1)])
+	assert(t1[mod3(i1 + 1)] == t2[i2])
+
+	local p1 = t1[i1]
+	local p3 = t1[mod3(i1 + 1)]
+	local p4 = t1[mod3(i1 + 2)]
+
+	local p2 = t2[mod3(i2 + 2)]
+
+end
+
 -- Make a new triangle from a point and a border edge
 local function pointWithEdge(p, e, triangles)
 
@@ -137,6 +169,8 @@ local function pointWithEdge(p, e, triangles)
 	e = borderInsert(e, edge(new,2))
 
 	table.insert(triangles, new)
+
+	flipEdge(new, 3)
 
 	return e.prev, e
 end
@@ -158,6 +192,7 @@ local function edgeWithEdge(e, triangles)
 
 	return e
 end
+
 
 local function processPoint(p, triangles, border)
 

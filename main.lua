@@ -7,7 +7,7 @@ local border
 
 local function update()
 	points = {}
-	for i = 1,100000 do
+	for i = 1,1000 do
 		points[i] = {x = math.random() * 2000, y = math.random() * 2000}
 	end
 
