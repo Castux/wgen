@@ -3,6 +3,7 @@ local mesh = require "mesh"
 
 local points
 local tris
+local border
 
 local function update()
 	points = {}
@@ -14,8 +15,8 @@ local function update()
 			end
 		end
 	end
-	print(#points)
-	tris = mesh.delaunay(points)
+
+	tris,border = mesh.delaunay(points)
 end
 
 function love.load()
@@ -25,11 +26,13 @@ function love.load()
 end
 
 function love.draw()
-	love.graphics.setPointSize(3)
+	love.graphics.setPointSize(2)
+	love.graphics.setColor(1,1,1)
 	for i,p in ipairs(points) do
 		love.graphics.points(p.x, p.y)
 	end
 
+	love.graphics.setLineWidth(2)
   for i,tri in ipairs(tris) do
 	if i == 1 then
 		love.graphics.setColor(1,0,0)
@@ -41,6 +44,16 @@ function love.draw()
 	for j,p in ipairs(tri) do
 		love.graphics.print(i .. ":" .. j, p.x, p.y + (i%2) * 10)
 	end
+
+	love.graphics.setPointSize(5)
+	love.graphics.setColor(0,1,0)
+	local curr = border
+	repeat
+		local p = curr.tri[curr.index]
+		love.graphics.points(p.x, p.y)
+		curr = curr.next
+
+	until curr == border
   end
 
 end

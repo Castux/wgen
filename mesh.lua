@@ -135,26 +135,28 @@ local function pointWithEdge(p, e, triangles)
 	e = borderRemove(e)
 	e = borderInsert(e, edge(new,1))
 	e = borderInsert(e, edge(new,2))
-	
+
 	table.insert(triangles, new)
+
+	return e.prev, e
 end
 
 -- Make a new triangle from two border edges that form a concavity
-local function edgeWithEdge(border, index, triangles)
+local function edgeWithEdge(e, triangles)
 
-	local e1 = border[index]
-	local e2 = border[index % #border + 1]
-
-	local a,b,c = edgeStart(e1),edgeEnd(e1),edgeEnd(e2)
+	local a,b,c = edgeStart(e),edgeEnd(e),edgeEnd(e.next)
 	local new = new_tri(a,c,b)
-	connect(new, 2, e2.tri, e2.index)
-	connect(new, 3, e1.tri, e1.index)
+	connect(new, 2, e.next.tri, e.next.index)
+	connect(new, 3, e.tri, e.index)
 
 	-- Replace two border edges with the new one
-	border[index] = edge(new, 1)
-	table.remove(border, index % #border + 1)
+	borderRemove(e.next)
+	e = borderRemove(e)
+	e = borderInsert(e, edge(new, 1))
 
 	table.insert(triangles, new)
+
+	return e
 end
 
 local function processPoint(p, triangles, border)
@@ -177,27 +179,31 @@ local function processPoint(p, triangles, border)
 
 	-- Create new triangle
 	-- Connect it to the edge we inserted in
-	pointWithEdge(p, border, triangles)
-	--
-	-- -- Fix hull to keep it convex
-	-- local i = index + 1
-	-- while true do
-	-- 	e1 = border[i]
-	-- 	e2 = border[i % #border + 1]
-	--
-	-- 	assert(edgeEnd(e1) == edgeStart(e2))
-	-- 	local a,b,c = edgeStart(e1),edgeEnd(e1),edgeEnd(e2)
-	--
-	-- 	if clockwise(a,b,c) then
-	-- 		break
-	-- 	end
-	--
-	-- 	edgeWithEdge(border, i, triangles)
-	--
-	-- 	i = i % #border + 1
-	-- end
+	local left,right = pointWithEdge(p, border, triangles)
+	assert(edgeEnd(left) == p)
+	assert(edgeStart(right) == p)
+	assert(left ~= right)
+
+	-- Fix hull to keep it convex
+	local current = right
+	while true do
+		assert(edgeEnd(current) == edgeStart(current.next))
+		local a,b,c = edgeStart(current),edgeEnd(current),edgeEnd(current.next)
+		if clockwise(a,b,c) then break end
+		current = edgeWithEdge(current, triangles)
+	end
 
 	-- Same in the other direction
+	local current = left.prev
+	while true do
+		assert(edgeEnd(current) == edgeStart(current.next))
+		local a,b,c = edgeStart(current),edgeEnd(current),edgeEnd(current.next)
+		if clockwise(a,b,c) then break end
+		current = edgeWithEdge(current, triangles)
+		current = current.prev
+	end
+
+	return current
 end
 
 local function delaunay(points)
@@ -228,9 +234,12 @@ local function delaunay(points)
 	local start = new_tri(a,b,c)
 	local triangles = {start}
 
-	local border = newBorder(edge(start, 1))
+	local border = newBorder(edge(start,1))
 	border = borderInsert(border, edge(start,2))
 	border = borderInsert(border, edge(start,3))
+
+	assert(border.next.next.next == border)
+	assert(border.prev.prev.prev == border)
 
 	-- Recompute distances from a point inside this triangle
 	cx = (a.x + b.x + c.x) / 3
@@ -247,11 +256,11 @@ local function delaunay(points)
 	-- Add points one at a time
 
 	for foo,p in ipairs(points) do
-		if foo == 4 then break end
-		processPoint(p, triangles, border)
+--		if foo == 5 then break end
+		border = processPoint(p, triangles, border)
 	end
 
-	return triangles
+	return triangles, border
 end
 
 return
