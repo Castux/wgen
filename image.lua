@@ -22,6 +22,20 @@ local function pixel(r,g,b,a,denormalize)
 		b << 24 | g << 16 | r << 8 | a
 end
 
+local function rgba(int, normalize)
+	local r,g,b,a =
+		(int >>  8) & 0xff,
+		(int >> 16) & 0xff,
+		(int >> 24) & 0xff,
+		(int >>  0) & 0xff
+
+	if normalize then
+		r,g,b,a = r / 255, g / 255, b / 255, a / 255
+	end
+
+	return r,g,b,a
+end
+
 local function new(width, height, fill)
 	fill = fill or pixel(0,0,0,255)
 
@@ -40,18 +54,7 @@ local function new(width, height, fill)
 	}
 
 	img.getRGBA = function(row,col,normalize)
-		local int = data[row][col]
-		local r,g,b,a =
-			(int >>  8) & 0xff,
-			(int >> 16) & 0xff,
-			(int >> 24) & 0xff,
-			(int >>  0) & 0xff
-
-		if normalize then
-			r,g,b,a = r / 255, g / 255, b / 255, a / 255
-		end
-
-		return r,g,b,a
+		return rgba(data[row][col], normalize)
 	end
 
 	img.setPixel = function(row,col,pixel)
@@ -64,8 +67,8 @@ local function new(width, height, fill)
 
 	img.iter = function()
 		return coroutine.wrap(function()
-			for row = 0,img.height-1 do
-				for col = 0,img.width-1 do
+			for row = 0,height-1 do
+				for col = 0,width-1 do
 					coroutine.yield(row,col,data[row][col])
 				end
 			end
@@ -74,9 +77,9 @@ local function new(width, height, fill)
 
 	img.iterRGBA = function(normalize)
 		return coroutine.wrap(function()
-			for row = 0,img.height-1 do
-				for col = 0,img.width-1 do
-					coroutine.yield(row,col,img.getRGBA(row,col,normalize))
+			for row = 0,height-1 do
+				for col = 0,width-1 do
+					coroutine.yield(row,col,rgba(data[row][col],normalize))
 				end
 			end
 		end)

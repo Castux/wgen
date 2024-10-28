@@ -7,7 +7,7 @@ local img = tga.fromFile "pink.tga"
 
 for row,col,r,g,b,a in img.iterRGBA() do
 	img.setRGBA(row,col,
-		(r+b)//2,
+		(r+b) // 2,
 		r,
 		0
 	)
