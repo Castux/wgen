@@ -1,4 +1,4 @@
-local d2 = require "d2"
+local d2 = require "delauney"
 local graph = require "graph"
 
 local points
@@ -8,8 +8,6 @@ local foo
 
 
 local function relax()
-
-	local points = {}
 	for _,center in ipairs(g.centers) do
 
 		local x,y = 0,0
@@ -17,33 +15,35 @@ local function relax()
 			x = x + corner.x
 			y = y + corner.y
 		end
-
-		table.insert(points, {
-			x = x / #center.corners,
-			y = y / #center.corners
-		})
+		center.x = x / #center.corners
+		center.y = y / #center.corners
 	end
 
-	g = graph.fromDelaunayHalfEdges(d2.delaunay(points))
-	print"relaxed"
+	g = graph.fromDelaunayHalfEdges(d2.delaunay(g.centers))
 end
 
 
 local function newPoints()
 	points = {}
-	while #points < 1000000 do
-		local p = {x = math.random() * 1200, y = math.random() * 800,
-			vx = math.random(-20,20), vy = math.random(-20,20)
-		}
-		--if (p.x - 600)^2 + (p.y - 400)^2 < 400^2 then
-			table.insert(points, p)
-		--end
+-- 	while #points < 4*10000 do
+-- 		local p = {
+-- 			x = math.random() * love.graphics.getWidth(),
+-- 			y = math.random() * love.graphics.getHeight(),
+-- --			vx = math.random(-20,20), vy = math.random(-20,20)
+-- 		}
+-- 		table.insert(points, p)
+-- 	end
+	local res = 16
+	for x = 0,love.graphics.getWidth(), res do
+		for y = 0,love.graphics.getHeight(), res do
+			table.insert(points, {
+				x = x + math.random() * res * 1.5,
+				y = y + math.random() * res * 1.5
+			})
+		end
 	end
-	local b = 20
-	table.insert(points, {x = -b, y = -b, vx = 0, vy = 0})
-	table.insert(points, {x = -b, y = 800+b, vx = 0, vy = 0})
-	table.insert(points, {x = 1200+b, y = -b, vx = 0, vy = 0})
-	table.insert(points, {x = 1200+b, y = 800+b, vx = 0, vy = 0})
+
+	print(#points)
 
 	local now = os.clock()
 	edges = d2.delaunay(points)
@@ -69,50 +69,58 @@ end
 
 function love.load()
 	math.randomseed(os.time())
-	love.window.setMode(1200, 800)
+	love.window.setMode(1024*16, 1024*16)
 
 	newPoints()
+	relax()
+	relax()
+
+	love.graphics.captureScreenshot("out.png")
 end
 
-function love.update(dt)
-
-	-- for _,p in ipairs(points) do
-	--
-	-- 	p.x = p.x + p.vx * dt
-	-- 	if p.x < 0 or p.x > 1200 then p.vx = -p.vx end
-	-- 	p.y = p.y + p.vy * dt
-	-- 	if p.y < 0 or p.y > 800 then p.vy = -p.vy end
-	--
-	-- end
-
-
---	relax()
-end
-
+local voronoi = false
 function love.draw()
 	love.graphics.clear(1,1,1)
 
-	for i,center in ipairs(g.centers) do
+	-- for i,center in ipairs(g.centers) do
+	--
+	-- 	-- love.graphics.setPointSize(4)
+	-- 	-- love.graphics.points(center.x, center.y)
+	--
+	-- 	-- if #center.corners >= 3 then
+	-- 	-- 	local coords = {}
+	-- 	-- 	for _,c in ipairs(center.corners) do
+	-- 	-- 		table.insert(coords, c.x)
+	-- 	-- 		table.insert(coords, c.y)
+	-- 	-- 	end
+	-- 	--
+	-- 	-- 	love.graphics.setColor(0,1,1)
+	-- 	-- 	love.graphics.polygon("line", coords)
+	-- 	-- end
+	--
+	--
+	-- end
 
-		-- love.graphics.setPointSize(4)
-		-- love.graphics.points(center.x, center.y)
+	love.graphics.setColor(0,1,1)
 
-		if #center.corners >= 3 then
-			local coords = {}
-			for _,c in ipairs(center.corners) do
-				table.insert(coords, c.x)
-				table.insert(coords, c.y)
+	for _,edge in ipairs(g.edges) do
+
+		if voronoi then
+			love.graphics.line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y)
+		else
+			if edge.corner2 then
+				love.graphics.line(edge.corner1.x, edge.corner1.y, edge.corner2.x, edge.corner2.y)
 			end
-
-			love.graphics.setColor(0,1,1)
-			love.graphics.polygon("line", coords)
 		end
-
 	end
 
 
 --	drawVoronoi(edges)
 
+end
+
+function love.keypressed()
+	voronoi = not voronoi
 end
 
 function love.mousepressed()
