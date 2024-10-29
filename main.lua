@@ -71,7 +71,7 @@ end
 
 function love.load()
 	math.randomseed(os.time())
-	love.window.setMode(1024*16, 1024*16)
+	love.window.setMode(1024*1, 1024*1)
 
 	newPoints()
 	relax()

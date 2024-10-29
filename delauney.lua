@@ -276,19 +276,20 @@ local function delaunay(points)
 		a,b,c = c,b,a
 	end
 
+	-- Create initial three edges with that triangle
+
 	local e1, e2, e3 = newTri(a, b, c)
-	setInitialHull(e1, e2, e3)
-	local edges = {e1, e2, e3}
-
 	assert(e1.next.next.next == e1)
-	assert(e1.hullNext.hullNext.hullNext == e1)
-	assert(e1.hullPrev.hullPrev.hullPrev == e1)
 
-	-- Setup hull edges hashing
-	edges.hash = {}
-	edges.hashSize = math.ceil(math.sqrt(#points))
+	local edges = {
+		e1, e2, e3,
+		ignored = {},
+		hash = {},
+		hashSize = math.ceil(math.sqrt(#points))
+	}
 
 	-- Recompute distances from a point inside this triangle
+
 	cx = (a.x + b.x + c.x) / 3
 	cy = (a.y + b.y + c.y) / 3
 
@@ -299,13 +300,20 @@ local function delaunay(points)
 		p.hash = math.floor(angle * edges.hashSize) % edges.hashSize
 	end
 
+	table.sort(points, function(a,b) return a.dist < b.dist end)
+
+	-- Initialize the hull
+
+	setInitialHull(e1, e2, e3)
+
+	assert(e1.hullNext.hullNext.hullNext == e1)
+	assert(e1.hullPrev.hullPrev.hullPrev == e1)
+
 	hashAdd(edges, e1)
 	hashAdd(edges, e2)
 	hashAdd(edges, e3)
 
-	table.sort(points, function(a,b) return a.dist < b.dist end)
-
-	edges.ignored = {}
+	-- Add points one by one in radius order
 
 	for _,p in ipairs(points) do
 		if p ~= a and p ~= b and p ~= c then
