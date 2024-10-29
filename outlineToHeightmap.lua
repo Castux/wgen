@@ -30,15 +30,25 @@ end
 local function generateGraph(w, h, res)
 
 	local points = {}
-	local margin = 30
+	local margin = 100
 
-	for x = -margin, w + margin, res do
-		for y = -margin, h + margin, res do
+	for x = 0, w, res do
+		for y = 0, h, res do
 			table.insert(points, {
 				x = x + (math.random() -  0.5) * res * 1.0,
 				y = y + (math.random() -  0.5) * res * 1.0
 			})
 		end
+	end
+
+	for x = -margin, w + margin, res do
+		table.insert(points, {x = x, y = -margin})
+		table.insert(points, {x = x, y = h + margin})
+	end
+
+	for y = -margin, h + margin, res do
+		table.insert(points, {x = -margin, y = y})
+		table.insert(points, {x = w + margin, y = y})
 	end
 
 	local edges = delaunay.delaunay(points)
@@ -79,6 +89,21 @@ local function assignLandmasses(graph, outline)
 			center.kind = "out"
 		else
 			center.kind = v > 0.5 and "land" or "water"
+		end
+	end
+
+	for _,center in ipairs(graph.centers) do
+		if center.kind == "out" then
+			for _,n in ipairs(center.neighbours) do
+				if n.kind == "land" then
+					center.kind = "land"
+					break
+				end
+			end
+
+			if center.kind == "out" then
+				center.kind = "water"
+			end
 		end
 	end
 end
@@ -192,24 +217,16 @@ local function computeRiverFlow(graph)
 end
 
 
-local function output(graph, w, h)
+local function output(graph, w, h, maxDist)
 	local svg = require "EzSVG"
 
-	local doc = svg.Document(w,h)
-	svg.setStyle {stroke_width = 0.75, stroke = "grey"}
-	--
-	-- for _,edge in ipairs(graph.edges) do
-	-- 	if edge.corner2 then
-	-- 		local ax,ay = edge.corner1.x, edge.corner1.y
-	-- 		local bx,by = edge.corner2.x, edge.corner2.y
-	-- 		doc:add(svg.Line(ax, ay, bx, by, {stroke = "blue"}))
-	-- 	end
-	--
-	-- 	doc:add(svg.Line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, {stroke = "yellow"}))
-	-- end
+	local doc = svg.Document(w,h, "darkblue")
+
 
 	local cells = svg.Group()
 	local rivers = svg.Group()
+
+	maxDist = maxDist * 0.75
 
 	for _,center in ipairs(graph.centers) do
 
@@ -221,22 +238,54 @@ local function output(graph, w, h)
 
 		local color
 		if center.kind == "land" then
-			color = "#54A932"
+
+			local f = (center.dist / maxDist)^1.5
+			color = svg.rgb(
+				lerp(84, 255, f),
+				lerp(169, 255, f),
+				lerp(50, 255, f)
+			)
+		elseif center.kind == "water" then
+			local f = (-center.dist / maxDist)^0.25
+			color = svg.rgb(
+				lerp(95, 0, f),
+				lerp(132, 10, f),
+				lerp(255, 100, f)
+			)
 		else
-			color = "darkblue"
+			color = "pink"
 		end
 
-		cells:add(svg.Polygon(coords, {fill = color}))
+		cells:add(svg.Polygon(coords, {fill = color, stroke = "none"}))
 
 		if center.downhill then
+
+			local width = (center.flow / 5)^3
+
 			rivers:add(svg.Line(center.x, center.y,
 				center.downhill.x, center.downhill.y,
-				{stroke = "blue"}
+				{stroke = "blue", stroke_width = width * 4}
 			))
 		end
 	end
-	doc:add(cells)
-	doc:add(rivers)
+
+	--
+	-- for _,edge in ipairs(graph.edges) do
+	-- 	-- if edge.corner2 then
+	-- 	-- 	local ax,ay = edge.corner1.x, edge.corner1.y
+	-- 	-- 	local bx,by = edge.corner2.x, edge.corner2.y
+	-- 	-- 	doc:add(svg.Line(ax, ay, bx, by, {stroke = "blue"}))
+	-- 	-- end
+	--
+	-- 	cells:add(svg.Line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, {stroke = "yellow"}))
+	-- end
+
+	local container = svg.Group()
+	container:add(cells)
+	container:add(rivers)
+--	container:scale(0.5):translate(w/2, h/2)
+
+	doc:add(container)
 	doc:writeTo("out.svg")
 end
 
@@ -248,7 +297,7 @@ local function main(args)
 	local width, height = outline.width,outline.height
 
 	print("Generating graph")
-	local graph = generateGraph(width, height, 4)
+	local graph = generateGraph(width, height, 30)
 
 	print("Assigning landmasses")
 	assignLandmasses(graph, outline)
@@ -263,7 +312,7 @@ local function main(args)
 
 	print("Outputing")
 	--shittyOutput(graph, width, height, max, 0.5)
-	output(graph, width, height)
+	output(graph, width, height, max)
 end
 
 main {...}
