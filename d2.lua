@@ -100,6 +100,23 @@ local function newTriOnTwoEdges(left, right, edges)
 	return e3
 end
 
+local function fixHull(edge, direction, edges)
+
+	local current = edge
+
+	while true do
+		if direction == "left" then
+			current = current.hullPrev
+		end
+
+		assert(current.to == current.hullNext.from)
+		local a,b,c = current.from, current.to, current.hullNext.to
+		if clockwise(a, b, c) then break end
+		current = newTriOnTwoEdges(current, current.hullNext, edges)
+	end
+
+end
+
 local function processPoint(p, edges)
 
 	-- Find any hull edge we're on the correct side of
@@ -119,22 +136,8 @@ local function processPoint(p, edges)
 	local left, right = newTriOnEdge(p, found, edges)
 
 	-- Fix hull to keep it convex
-	local current = right
-	while true do
-		assert(current.to == current.hullNext.from)
-		local a,b,c = current.from, current.to, current.hullNext.to
-		if clockwise(a, b, c) then break end
-		current = newTriOnTwoEdges(current, current.hullNext, edges)
-	end
-
-	local current = left.hullPrev
-	while true do
-		assert(current.to == current.hullNext.from)
-		local a,b,c = current.from, current.to, current.hullNext.to
-		if clockwise(a, b, c) then break end
-		current = newTriOnTwoEdges(current, current.hullNext, edges)
-		current = current.hullPrev
-	end
+	fixHull(right, "right", edges)
+	fixHull(left, "left", edges)
 end
 
 local function delaunay(points)
