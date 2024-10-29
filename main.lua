@@ -1,16 +1,43 @@
 local d2 = require "d2"
+local graph = require "graph"
 
 local points
-local edges
+local g
 local co
 local foo
 
+
+local function relax()
+
+	local points = {}
+	for _,center in ipairs(g.centers) do
+
+		local x,y = 0,0
+		for _,corner in ipairs(center.corners) do
+			x = x + corner.x
+			y = y + corner.y
+		end
+
+		table.insert(points, {
+			x = x / #center.corners,
+			y = y / #center.corners
+		})
+	end
+
+	g = graph.fromDelaunayHalfEdges(d2.delaunay(points))
+	print"relaxed"
+end
+
+
 local function newPoints()
 	points = {}
-	for i = 1,60 do
-		points[i] = {x = math.random() * 1200, y = math.random() * 800,
+	while #points < 1000000 do
+		local p = {x = math.random() * 1200, y = math.random() * 800,
 			vx = math.random(-20,20), vy = math.random(-20,20)
 		}
+		--if (p.x - 600)^2 + (p.y - 400)^2 < 400^2 then
+			table.insert(points, p)
+		--end
 	end
 	local b = 20
 	table.insert(points, {x = -b, y = -b, vx = 0, vy = 0})
@@ -22,10 +49,21 @@ local function newPoints()
 	edges = d2.delaunay(points)
 	local d = (os.clock() - now)
 	print("d2.delaunay(points)", d)
+
+	local now = os.clock()
+	g = graph.fromDelaunayHalfEdges(edges)
+	local d = (os.clock() - now)
+	print("graph.fromDelaunayHalfEdges(edges)", d)
 end
 
 if not love then
 	newPoints()
+
+	local now = os.clock()
+	relax()
+	local d = (os.clock() - now)
+	print("relax()", d)
+
 	return
 end
 
@@ -36,30 +74,8 @@ function love.load()
 	newPoints()
 end
 
-local function drawVoronoi(edges)
-
-
-	love.graphics.setLineWidth(1)
-	love.graphics.setColor(0.75,0,0)
-	for _,edge in ipairs(edges) do
-		if edge.rev and not edge.rev.done then
-			local p1,p2,p3 = edge.from, edge.next.from, edge.next.next.from
-			local cx, cy = d2.circumcenter(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-
-			edge = edge.rev
-			local p1,p2,p3 = edge.from, edge.next.from, edge.next.next.from
-			local cx2, cy2 = d2.circumcenter(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
-
-			love.graphics.line(cx, cy, cx2, cy2)
-
-			edge.rev.done = true
-		end
-	end
-
-end
-
 function love.update(dt)
-	--
+
 	-- for _,p in ipairs(points) do
 	--
 	-- 	p.x = p.x + p.vx * dt
@@ -70,30 +86,37 @@ function love.update(dt)
 	-- end
 
 
-	edges = d2.delaunay(points)
+--	relax()
 end
 
 function love.draw()
 	love.graphics.clear(1,1,1)
-	love.graphics.setPointSize(2)
-	--
-	love.graphics.setLineWidth(2)
-	love.graphics.setColor(0,0,0.8)
-  	for _,edge in ipairs(edges) do
-		love.graphics.line(edge.from.x, edge.from.y, edge.to.x, edge.to.y)
+
+	for i,center in ipairs(g.centers) do
+
+		-- love.graphics.setPointSize(4)
+		-- love.graphics.points(center.x, center.y)
+
+		if #center.corners >= 3 then
+			local coords = {}
+			for _,c in ipairs(center.corners) do
+				table.insert(coords, c.x)
+				table.insert(coords, c.y)
+			end
+
+			love.graphics.setColor(0,1,1)
+			love.graphics.polygon("line", coords)
+		end
+
 	end
 
-	-- love.graphics.setPointSize(5)
-	-- love.graphics.setColor(0,0,1)
-	-- for _,edge in ipairs(d2.hull(edges)) do
-	-- 	love.graphics.points(edge.from.x, edge.from.y)
-	-- end
 
-	drawVoronoi(edges)
+--	drawVoronoi(edges)
 
 end
 
 function love.mousepressed()
 
-	newPoints()
+	--newPoints()
+	relax()
 end

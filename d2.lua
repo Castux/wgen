@@ -25,22 +25,6 @@ local function inCircle(ax, ay, bx, by, cx, cy, px, py)
 		   ap * (ex * fy - ey * fx) > 0
 end
 
-local function circumcenter(ax, ay, bx, by, cx, cy)
-	local dx = bx - ax
-	local dy = by - ay
-	local ex = cx - ax
-	local ey = cy - ay
-
-	local bl = dx * dx + dy * dy
-	local cl = ex * ex + ey * ey
-	local d = 0.5 / (dx * ey - dy * ex)
-
-	local x = ax + (ey * bl - dy * cl) * d
-	local y = ay + (dx * cl - ex * bl) * d
-
-	return x, y
-end
-
 local function link(e1, e2)
 	e1.rev = e2
 	e2.rev = e1
@@ -242,14 +226,14 @@ local function processPoint(p, edges)
 		current = current.hullNext
 	until current == first
 
-	assert(found, "Could not find valid hull edge")
+	if found then
+		-- Create new triangle on that edge
+		local left, right = newTriOnEdge(p, found, edges)
 
-	-- Create new triangle on that edge
-	local left, right = newTriOnEdge(p, found, edges)
-
-	-- Fix hull to keep it convex
-	fixHull(right, "right", edges)
-	fixHull(left, "left", edges)
+		-- Fix hull to keep it convex
+		fixHull(right, "right", edges)
+		fixHull(left, "left", edges)
+	end
 end
 
 local function delaunay(points)
