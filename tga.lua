@@ -1,4 +1,5 @@
 local image = require "image"
+local bitutils = jit and require "bitutilsjit" or require "bitutils"
 
 local function write(path, width, height, data)
 	local fp = io.open(path, "wb")
@@ -8,16 +9,19 @@ local function write(path, width, height, data)
 	end
 
 	local function writeShort(s)
-		fp:write(string.char(s & 0xff))
-		fp:write(string.char((s >> 8) & 0xff))
+		local hi,lo = bitutils.decomposeShort(s)
+
+		fp:write(string.char(lo))
+		fp:write(string.char(hi))
 	end
 
 	local function writePixel(i)
+		local r,g,b,a = bitutils.decomposeInt(i)
 		-- BGRA order
-		fp:write(string.char((i >> 8) & 0xff))
-		fp:write(string.char((i >> 16) & 0xff))
-		fp:write(string.char((i >> 24) & 0xff))
-		fp:write(string.char((i >> 0) & 0xff))
+		fp:write(string.char(b))
+		fp:write(string.char(g))
+		fp:write(string.char(r))
+		fp:write(string.char(a))
 	end
 
 	writeByte(0) -- idLength
@@ -68,9 +72,9 @@ local function fromFile(path)
 	local depth = readByte()
 
 	local descriptor = readByte()
-	local alphaDepth = descriptor & 0x0F
-	local rightToLeft = (descriptor >> 4) & 0x01
-	local topToBottom = (descriptor >> 5) & 0x01
+	local alphaDepth = bitutils.shiftMask(descriptor, 0, 0x0F)
+	local rightToLeft = bitutils.shiftMask(descriptor, 4, 0x01)
+	local topToBottom = bitutils.shiftMask(descriptor, 5, 0x01)
 
 	assert(imgType == 2)
 	assert(depth == 24 or depth == 32)
@@ -94,13 +98,14 @@ local function fromFile(path)
 	for row = rstart, rend, rdir do
 		for col = cstart, cend, cdir do
 			-- TGA uses BGR(A) order
-		 	local pixel =
-				readByte() <<  8 |
-				readByte() << 16 |
-				readByte() << 24 |
-				(bpp == 4 and readByte() or 255)
 
-			img.setPixel(row, col, pixel)
+			local b = readByte()
+			local g = readByte()
+			local r = readByte()
+			local a = bpp == 4 and readByte() or 255
+
+		 	local pixel = bitutils.composeInt(r,g,b,a)
+			img.set(row, col, pixel)
 		end
 	end
 	fp:close()

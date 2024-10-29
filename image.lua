@@ -1,4 +1,5 @@
 local array = require "array"
+local bitutils = jit and require "bitutilsjit" or require "bitutils"
 
 local function clamp(x, a, b)
 	if x < a then return a end
@@ -20,16 +21,11 @@ local function pixel(r, g, b, a, denormalize)
 	b = clamp(b, 0, 255)
 	a = clamp(a or 255, 0, 255)
 
-	return
-		r << 24 | g << 16 | b << 8 | a
+	return bitutils.composeInt(r,g,b,a)
 end
 
 local function rgba(int, normalize)
-	local r, g, b, a =
-		(int >> 24) & 0xff,
-		(int >> 16) & 0xff,
-		(int >>  8) & 0xff,
-		(int >>  0) & 0xff
+	local r, g, b, a = bitutils.decomposeInt(int)
 
 	if normalize then
 		r, g, b, a = r / 255, g / 255, b / 255, a / 255
@@ -45,10 +41,6 @@ local function new(width, height, fill)
 
 	img.getRGBA = function(row, col, normalize)
 		return rgba(img.get(row, col), normalize)
-	end
-
-	img.setPixel = function(row, col, pixel)
-		img.set(row, col, pixel)
 	end
 
 	img.setRGBA = function(row, col, r, g, b, a, denormalize)

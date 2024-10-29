@@ -51,8 +51,8 @@ local function bilinearSample(x, y, img)
 	x = x * (img.width - 1)
 	y = y * (img.height - 1)
 
-	local xint, xfrac = x // 1, x % 1
-	local yint, yfrac = y // 1, y % 1
+	local xint, xfrac = math.floor(x), x % 1
+	local yint, yfrac = math.floor(y), y % 1
 
 	local a = img.getDefault(xint    , yint    , 0/0)
 	local b = img.getDefault(xint + 1, yint    , 0/0)
@@ -160,14 +160,14 @@ local function main(args)
 	local outline = tga.fromFile(path).toGreyScale()
 	local width, height = outline.width,outline.height
 
-	local graph = generateGraph(1, 1, 4/(2048*2))
+	local graph = generateGraph(1, 1, 4/(1024*1))
 	assignLandmasses(graph, outline)
 	local shores = markShores(graph)
 
 	local max =  computeDistanceFromShore(graph, shores)
 	print("Max dist", max)
 
-	shittyOutput(graph, 2048*2, 2048*2, max)
+	shittyOutput(graph, 1024*1, 1024*1, max)
 end
 
 main {...}
