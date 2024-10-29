@@ -42,7 +42,9 @@ end
 
 local function newTri(p1, p2, p3, rev1, rev2, rev3)
 
-	assert(clockwise(p1, p2, p3), "Non clockwise triangle")
+	if not clockwise(p1, p2, p3) then
+		return
+	end
 
 	local e1 = {from = p1, to = p2}
 	local e2 = {from = p2, to = p3}
@@ -140,6 +142,9 @@ local function newTriOnEdge(p, edge, edges)
 
 	-- e1 is against the existing edge, e2 and e3 are the new ones
 	local e1, e2, e3 = newTri(edge.to, edge.from, p, edge)
+	if not e1 then
+		return
+	end
 
 	table.insert(edges, e1)
 	table.insert(edges, e2)
@@ -164,6 +169,9 @@ local function newTriOnTwoEdges(left, right, edges)
 
 	-- e1 and e2 rest against right and left, e3 is the new one
 	local e1, e2, e3 = newTri(right.to, left.to, left.from, right, left)
+	if not e1 then
+		return
+	end
 
 	table.insert(edges, e1)
 	table.insert(edges, e2)
@@ -189,7 +197,7 @@ local function fixHull(edge, direction, edges)
 
 	local current = edge
 
-	while true do
+	while current do
 		if direction == "left" then
 			current = current.hullPrev
 		end
@@ -226,14 +234,21 @@ local function processPoint(p, edges)
 		current = current.hullNext
 	until current == first
 
-	if found then
-		-- Create new triangle on that edge
-		local left, right = newTriOnEdge(p, found, edges)
-
-		-- Fix hull to keep it convex
-		fixHull(right, "right", edges)
-		fixHull(left, "left", edges)
+	if not found then
+		table.insert(edges.ignored, p)
+		return
 	end
+
+	-- Create new triangle on that edge
+	local left, right = newTriOnEdge(p, found, edges)
+	if not left then
+		table.insert(edges.ignored, p)
+		return
+	end
+
+	-- Fix hull to keep it convex
+	fixHull(right, "right", edges)
+	fixHull(left, "left", edges)
 end
 
 local function delaunay(points)
@@ -289,6 +304,8 @@ local function delaunay(points)
 	hashAdd(edges, e3)
 
 	table.sort(points, function(a,b) return a.dist < b.dist end)
+
+	edges.ignored = {}
 
 	for _,p in ipairs(points) do
 		if p ~= a and p ~= b and p ~= c then

@@ -34,8 +34,8 @@ local function newPoints()
 -- 		table.insert(points, p)
 -- 	end
 	local res = 16
-	for x = 0,love.graphics.getWidth(), res do
-		for y = 0,love.graphics.getHeight(), res do
+	for x = 0,love and love.graphics.getWidth() or 2000, res do
+		for y = 0,love and love.graphics.getHeight() or 2000, res do
 			table.insert(points, {
 				x = x + math.random() * res * 1.5,
 				y = y + math.random() * res * 1.5
@@ -49,6 +49,8 @@ local function newPoints()
 	edges = d2.delaunay(points)
 	local d = (os.clock() - now)
 	print("d2.delaunay(points)", d)
+
+	print("ignored", #edges.ignored)
 
 	local now = os.clock()
 	g = graph.fromDelaunayHalfEdges(edges)
