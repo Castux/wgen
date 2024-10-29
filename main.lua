@@ -31,6 +31,14 @@ function love.draw()
 		love.graphics.line(edge.from.x, edge.from.y, edge.to.x, edge.to.y)
 	end
 
+	love.graphics.setPointSize(4)
+	love.graphics.setColor(0,1,0)
+	local curr = edges.hull
+	repeat
+		love.graphics.points(curr.from.x, curr.from.y)
+		curr = curr.hullNext
+	until curr == edges.hull
+
 end
 
 function love.mousepressed()

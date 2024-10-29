@@ -67,15 +67,37 @@ local function newTriOnEdge(p, edge, edges)
 	-- e1 is against the existing edge, e2 and e3 are the new ones
 	local e1, e2, e3 = newTri(edge.to, edge.from, p, edge)
 
+	table.insert(edges, e1)
+	table.insert(edges, e2)
+	table.insert(edges, e3)
+
 	local left,right = hullRemove(edge)
 	hullInsert(e2, left, right)
 	hullInsert(e3, e2, right)
+
+	edges.hull = e2
+	return e2, e3
+end
+
+-- Make a new triangle from two border edges that form a concavity
+local function newTriOnTwoEdges(left, right, edges)
+
+	-- e1 and e2 rest against right and left, e3 is the new one
+	local e1, e2, e3 = newTri(right.to, left.to, left.from, right, left)
 
 	table.insert(edges, e1)
 	table.insert(edges, e2)
 	table.insert(edges, e3)
 
-	edges.hull = e2
+	-- Replace two border edges with the new one
+	local lleft, lright = hullRemove(left)
+	assert(lright == right)
+	local lleft, rright = hullRemove(right)
+	hullInsert(e3, lleft, rright)
+
+	edges.hull = e3
+
+	return e3
 end
 
 local function processPoint(p, edges)
@@ -94,7 +116,25 @@ local function processPoint(p, edges)
 	assert(found, "Could not find valid hull edge")
 
 	-- Create new triangle on that edge
-	newTriOnEdge(p, found, edges)
+	local left, right = newTriOnEdge(p, found, edges)
+
+	-- Fix hull to keep it convex
+	local current = right
+	while true do
+		assert(current.to == current.hullNext.from)
+		local a,b,c = current.from, current.to, current.hullNext.to
+		if clockwise(a, b, c) then break end
+		current = newTriOnTwoEdges(current, current.hullNext, edges)
+	end
+
+	local current = left.hullPrev
+	while true do
+		assert(current.to == current.hullNext.from)
+		local a,b,c = current.from, current.to, current.hullNext.to
+		if clockwise(a, b, c) then break end
+		current = newTriOnTwoEdges(current, current.hullNext, edges)
+		current = current.hullPrev
+	end
 end
 
 local function delaunay(points)
@@ -145,7 +185,6 @@ local function delaunay(points)
 
 	for _,p in ipairs(points) do
 		processPoint(p, edges)
-		break
 	end
 
 	return edges
