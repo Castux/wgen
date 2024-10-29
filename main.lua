@@ -7,13 +7,16 @@ local foo
 
 local function newPoints()
 	points = {}
-	for i = 1,6000 do
+	for i = 1,60 do
 		points[i] = {x = math.random() * 1200, y = math.random() * 800,
 			vx = math.random(-20,20), vy = math.random(-20,20)
 		}
 	end
-
-	foo = points[1]
+	local b = 20
+	table.insert(points, {x = -b, y = -b, vx = 0, vy = 0})
+	table.insert(points, {x = -b, y = 800+b, vx = 0, vy = 0})
+	table.insert(points, {x = 1200+b, y = -b, vx = 0, vy = 0})
+	table.insert(points, {x = 1200+b, y = 800+b, vx = 0, vy = 0})
 
 	local now = os.clock()
 	edges = d2.delaunay(points)
@@ -56,15 +59,15 @@ local function drawVoronoi(edges)
 end
 
 function love.update(dt)
-
-	for _,p in ipairs(points) do
-
-		p.x = p.x + p.vx * dt
-		if p.x < 0 or p.x > 1200 then p.vx = -p.vx end
-		p.y = p.y + p.vy * dt
-		if p.y < 0 or p.y > 800 then p.vy = -p.vy end
-
-	end
+	--
+	-- for _,p in ipairs(points) do
+	--
+	-- 	p.x = p.x + p.vx * dt
+	-- 	if p.x < 0 or p.x > 1200 then p.vx = -p.vx end
+	-- 	p.y = p.y + p.vy * dt
+	-- 	if p.y < 0 or p.y > 800 then p.vy = -p.vy end
+	--
+	-- end
 
 
 	edges = d2.delaunay(points)
@@ -74,12 +77,12 @@ function love.draw()
 	love.graphics.clear(1,1,1)
 	love.graphics.setPointSize(2)
 	--
-	-- love.graphics.setLineWidth(2)
-	-- love.graphics.setColor(0,0,0.8)
-  	-- for _,edge in ipairs(edges) do
-	-- 	love.graphics.line(edge.from.x, edge.from.y, edge.to.x, edge.to.y)
-	-- end
-	--
+	love.graphics.setLineWidth(2)
+	love.graphics.setColor(0,0,0.8)
+  	for _,edge in ipairs(edges) do
+		love.graphics.line(edge.from.x, edge.from.y, edge.to.x, edge.to.y)
+	end
+
 	-- love.graphics.setPointSize(5)
 	-- love.graphics.setColor(0,0,1)
 	-- for _,edge in ipairs(d2.hull(edges)) do

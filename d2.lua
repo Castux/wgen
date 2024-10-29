@@ -304,8 +304,6 @@ local function delaunay(points)
 	hashAdd(edges, e2)
 	hashAdd(edges, e3)
 
---	for i = 1,3 do table.remove(points, 1) end
-
 	table.sort(points, function(a,b) return a.dist < b.dist end)
 
 	for _,p in ipairs(points) do
