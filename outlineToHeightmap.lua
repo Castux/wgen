@@ -3,41 +3,47 @@ local image = require "image"
 local delaunay = require "delaunay"
 local graph = require "graph"
 
+local function relaxGraph(g, w, h)
 
-local function relaxGraph(g)
-
+	local new = {}
 	for _,center in ipairs(g.centers) do
+		if center.x < 0 or center.x > w or center.y < 0 or center.y > h then
+			table.insert(new, {x = center.x, y = center.y})
+		else
+			local x,y = 0,0
+			for _,corner in ipairs(center.corners) do
+				x = x + corner.x
+				y = y + corner.y
+			end
 
-		local x,y = 0,0
-		for _,corner in ipairs(center.corners) do
-			x = x + corner.x
-			y = y + corner.y
+			table.insert(new, {
+				x = x / #center.corners,
+				y = y / #center.corners
+			})
 		end
-		center.x = x / #center.corners
-		center.y = y / #center.corners
 	end
 
-	local edges = delaunay.delaunay(g.centers)
+	local edges = delaunay.delaunay(new)
 	return graph.fromDelaunayHalfEdges(edges)
 end
 
 local function generateGraph(w, h, res)
 
 	local points = {}
+	local margin = 30
 
-	for x = 0, w, res do
-		for y = 0, h, res do
+	for x = -margin, w + margin, res do
+		for y = -margin, h + margin, res do
 			table.insert(points, {
-				x = x + math.random() * res * 1.5,
-				y = y + math.random() * res * 1.5
+				x = x + (math.random() -  0.5) * res * 0.5,
+				y = y + (math.random() -  0.5) * res * 0.5
 			})
 		end
 	end
 
 	local edges = delaunay.delaunay(points)
 	local graph = graph.fromDelaunayHalfEdges(edges)
-	graph = relaxGraph(graph)
-	graph = relaxGraph(graph)
+	graph = relaxGraph(graph, w, h)
 
 	return graph
 end
@@ -47,9 +53,6 @@ local function lerp(a,b,x)
 end
 
 local function bilinearSample(x, y, img)
-
-	x = x * (img.width - 1)
-	y = y * (img.height - 1)
 
 	local xint, xfrac = math.floor(x), x % 1
 	local yint, yfrac = math.floor(y), y % 1
@@ -130,24 +133,116 @@ local function computeDistanceFromShore(graph, shores)
 	return max
 end
 
-local function shittyOutput(graph, w, h, max)
-	local img = image.new(w, h, 0x000000FF)
+local function computeRiverFlow(graph)
 
 	for _,center in ipairs(graph.centers) do
-		local x,y = math.floor(center.x * w), math.floor(center.y * h)
-
-		local color
-		if center.shore then
-			color = 0xffff00ff
-		elseif center.kind == "land" then
-			color = image.pixel(1, 0, center.dist/max, 1, "denorm")
-		elseif center.kind == "water" then
-			color = image.pixel(0, 1, center.dist/max, 1, "denorm")
-		elseif center.kind == "out" then
-			color = 0xffffffff
+		if center.kind ~= "land" or center.shore then
+			goto skip
 		end
 
-		img.setSafe(y,x, color)
+		local lowest
+		for _,neighbour in ipairs(center.neighbours) do
+			if not lowest or neighbour.dist < lowest.dist then
+				lowest = neighbour
+			end
+		end
+
+		if lowest then
+			center.downhill = lowest
+			lowest.uphill = lowest.uphill or {}
+			table.insert(lowest.uphill, center)
+		end
+
+		::skip::
+	end
+
+	local function rec(center)
+
+		if not center.uphill or #center.uphill == 0 then
+			center.flow = 1
+
+		else
+			local counts = {}
+			local max = 0
+
+			for _,up in ipairs(center.uphill) do
+				local ups = rec(up)
+				counts[ups] = (counts[ups] or 0) + 1
+				max = math.max(max, ups)
+			end
+
+			assert(counts[max] > 0)
+			if counts[max] == 1 then
+				center.flow = max
+			else
+				center.flow = max + 1
+			end
+		end
+
+		return center.flow
+	end
+
+	for _,center in ipairs(graph.centers) do
+		if center.shore then
+			rec(center)
+		end
+	end
+end
+
+local function line(ax, ay, bx, by, img, color)
+	local steps = math.max(math.abs(ax-bx), math.abs(ay-by))
+
+	for i = 0,steps do
+		x = math.floor(lerp(ax, bx, i/steps))
+		y = math.floor(lerp(ay, by, i/steps))
+		img.setSafe(y, x, color)
+	end
+end
+
+local function basicGraphOutput(graph, w, h)
+
+	local img = image.new(w, h, 0x5555ffFF)
+
+	for _,edge in ipairs(graph.edges) do
+		if edge.corner2 then
+			local ax,ay = edge.corner1.x, edge.corner1.y
+			local bx,by = edge.corner2.x, edge.corner2.y
+			line(ax, ay, bx, by, img, 0xff00ffff)
+		end
+
+		line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, img, 0x000000FF)
+	end
+
+	tga.toFile("graph.tga", img)
+end
+
+local palette = {}
+for i = 1,100 do
+	palette[i] = image.pixel(i * 20, 255 - i * 20, 0)
+end
+
+local function shittyOutput(graph, w, h, max, s)
+	s = s or 1
+	local img = image.new(w * s, h * s, 0x5555ffFF)
+
+	for _,center in ipairs(graph.centers) do
+
+		if center.downhill and center.flow then
+			local ax,ay = center.x * s, center.y * s
+			local bx,by = center.downhill.x * s, center.downhill.y * s
+			line(ax, ay, bx, by, img, palette[center.flow])
+		end
+
+	end
+
+	for _,edge in ipairs(graph.edges) do
+		if edge.corner2 then
+			local ax,ay = edge.corner1.x * s, edge.corner1.y * s
+			local bx,by = edge.corner2.x * s, edge.corner2.y * s
+			line(ax, ay, bx, by, img, 0x101010ff)
+		end
+
+		--line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, img, 0x000000FF)
 	end
 
 	tga.toFile("graph.tga", img)
@@ -157,17 +252,26 @@ end
 local function main(args)
 	local path = args[1]
 
+	print("Loading " .. path)
 	local outline = tga.fromFile(path).toGreyScale()
 	local width, height = outline.width,outline.height
 
-	local graph = generateGraph(1, 1, 4/(1024*1))
+	print("Generating graph")
+	local graph = generateGraph(width, height, 4)
+
+	print("Assigning landmasses")
 	assignLandmasses(graph, outline)
 	local shores = markShores(graph)
 
-	local max =  computeDistanceFromShore(graph, shores)
+	print("Computing distance from shore")
+	local max = computeDistanceFromShore(graph, shores)
 	print("Max dist", max)
 
-	shittyOutput(graph, 1024*1, 1024*1, max)
+	print("Generating rivers")
+	computeRiverFlow(graph)
+
+	print("Outputing")
+	shittyOutput(graph, width, height, max, 2)
 end
 
 main {...}
