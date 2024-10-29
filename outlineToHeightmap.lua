@@ -46,39 +46,105 @@ local function lerp(a,b,x)
 	return a * (1-x) + b * x
 end
 
-
 local function bilinearSample(x, y, img)
 
 	local xint, xfrac = x // 1, x % 1
 	local yint, yfrac = y // 1, y % 1
 
-	local a = img.getDefault(xint    , yint    , 0)
-	local b = img.getDefault(xint + 1, yint    , 0)
-	local c = img.getDefault(xint    , yint + 1, 0)
-	local d = img.getDefault(xint + 1, yint + 1, 0)
+	local a = img.getDefault(xint    , yint    , 0/0)
+	local b = img.getDefault(xint + 1, yint    , 0/0)
+	local c = img.getDefault(xint    , yint + 1, 0/0)
+	local d = img.getDefault(xint + 1, yint + 1, 0/0)
 
-	return lerp(
+	local value = lerp(
 		lerp(a, c, yfrac),
 		lerp(b, d, yfrac),
 		xfrac
 	)
+	if x < 0 or y < 0 then assert(value ~= value) end
+	return value
 end
 
 local function assignLandmasses(graph, outline)
 	for _,center in ipairs(graph.centers) do
 		local v = bilinearSample(center.y, center.x, outline)
-		center.land = v > 0.5
+
+		if v ~= v then	-- NaN
+			center.kind = "out"
+		else
+			center.kind = v > 0.5 and "land" or "water"
+		end
 	end
 end
 
-local function shittyOutput(graph, outline)
-	local img = image.new(outline.width, outline.height, 0x0000FFFF)
+local function markShores(graph)
+	local shores = {}
+	for _,center in ipairs(graph.centers) do
+		if center.kind == "land" then
+			for _,neighbour in ipairs(center.neighbours) do
+				if neighbour.kind == "water" then
+					table.insert(shores, center)
+					center.shore = true
+					break
+				end
+			end
+		end
+	end
+
+	return shores
+end
+
+local function computeDistanceFromShore(graph, shores)
+
+	local queue = shores
+	local max = 0
+
+	for _,v in ipairs(shores) do
+		v.dist = 0
+	end
+
+	local i = 1
+	while i < #queue do
+		local v = queue[i]
+		max = math.max(max, v.dist)
+
+		if v.kind == "out" then
+			print(v.dist)
+		end
+
+		for _,neigh in ipairs(v.neighbours) do
+			if not neigh.dist or neigh.dist > v.dist + 1 then
+				neigh.dist = v.dist + 1
+				if neigh.kind ~= "out" then
+					queue[#queue + 1] = neigh
+				end
+			end
+		end
+
+		i = i + 1
+	end
+
+	return max
+end
+
+local function shittyOutput(graph, outline, max)
+	local img = image.new(outline.width + 50, outline.height + 50, 0x000000FF)
 
 	for _,center in ipairs(graph.centers) do
-		if center.land then
-			local x,y = math.floor(center.x), math.floor(center.y)
-			img.setSafe(y,x, 0xFF0000FF)
+		local x,y = math.floor(center.x), math.floor(center.y)
+
+		local color
+		if center.shore then
+			color = 0xffff00ff
+		elseif center.kind == "land" then
+			color = image.pixel(1, 0, center.dist/max, 1, "denorm")
+		elseif center.kind == "water" then
+			color = image.pixel(0, 1, center.dist/max, 1, "denorm")
+		elseif center.kind == "out" then
+			color = 0xffffffff
 		end
+
+		img.setSafe(y,x, color)
 	end
 
 	tga.toFile("graph.tga", img)
@@ -91,10 +157,14 @@ local function main(args)
 	local outline = tga.fromFile(path).toGreyScale()
 	local width, height = outline.width,outline.height
 
-	local graph = generateGraph(width, height, 4)
+	local graph = generateGraph(width, height, 3)
 	assignLandmasses(graph, outline)
+	local shores = markShores(graph)
 
-	shittyOutput(graph, outline)
+	local max =  computeDistanceFromShore(graph, shores)
+	print("Max dist", max)
+
+	shittyOutput(graph, outline, max)
 end
 
 main {...}
