@@ -25,9 +25,35 @@ local function inCircle(ax, ay, bx, by, cx, cy, px, py)
 		   ap * (ex * fy - ey * fx) > 0
 end
 
+local function circumcenter(ax, ay, bx, by, cx, cy)
+	local dx = bx - ax
+	local dy = by - ay
+	local ex = cx - ax
+	local ey = cy - ay
+
+	local bl = dx * dx + dy * dy
+	local cl = ex * ex + ey * ey
+	local d = 0.5 / (dx * ey - dy * ex)
+
+	local x = ax + (ey * bl - dy * cl) * d
+	local y = ay + (dx * cl - ex * bl) * d
+
+	return x, y
+end
+
 local function link(e1, e2)
 	e1.rev = e2
 	e2.rev = e1
+end
+
+local function hashAdd(edges, e)
+	edges.hash[e.from.hash] = e
+end
+
+local function hashRemove(edges, e)
+	if edges.hash[e.from.hash] == e then
+		edges.hash[e.from.hash] = nil
+	end
 end
 
 local function newTri(p1, p2, p3, rev1, rev2, rev3)
@@ -136,9 +162,13 @@ local function newTriOnEdge(p, edge, edges)
 	table.insert(edges, e3)
 
 	local left,right = hullRemove(edge)
+
 	hullInsert(e2, left, right)
 	hullInsert(e3, e2, right)
-	edges.hull = e2
+
+	hashRemove(edges, edge)
+	hashAdd(edges, e2)
+	hashAdd(edges, e3)
 
 	checkDelaunayCondition(e1)
 
@@ -160,7 +190,10 @@ local function newTriOnTwoEdges(left, right, edges)
 	assert(lright == right)
 	local lleft, rright = hullRemove(right)
 	hullInsert(e3, lleft, rright)
-	edges.hull = e3
+
+	hashRemove(edges, left)
+	hashRemove(edges, right)
+	hashAdd(edges, e3)
 
 	checkDelaunayCondition(e1)
 	checkDelaunayCondition(e2)
@@ -188,7 +221,18 @@ end
 local function processPoint(p, edges)
 
 	-- Find any hull edge we're on the correct side of
-	local current = edges.hull
+	-- Use the hash for a good starting guess
+
+	local current
+
+	local h = p.hash
+	while not current do
+		current = edges.hash[h]
+		h = (h + 1) % edges.hashSize
+	end
+
+	current = current.hullPrev
+	local first = current
 	local found
 	repeat
 		if clockwise(p, current.to, current.from) then
@@ -196,7 +240,7 @@ local function processPoint(p, edges)
 			break
 		end
 		current = current.hullNext
-	until current == edges.hull
+	until current == first
 
 	assert(found, "Could not find valid hull edge")
 
@@ -236,32 +280,63 @@ local function delaunay(points)
 	local e1, e2, e3 = newTri(a, b, c)
 	setInitialHull(e1, e2, e3)
 	local edges = {e1, e2, e3}
-	edges.hull = e1
 
 	assert(e1.next.next.next == e1)
 	assert(e1.hullNext.hullNext.hullNext == e1)
 	assert(e1.hullPrev.hullPrev.hullPrev == e1)
 
+	-- Setup hull edges hashing
+	edges.hash = {}
+	edges.hashSize = math.ceil(math.sqrt(#points))
+
 	-- Recompute distances from a point inside this triangle
 	cx = (a.x + b.x + c.x) / 3
 	cy = (a.y + b.y + c.y) / 3
 
-	for i = 1,3 do table.remove(points, 1) end
-
 	for i,p in ipairs(points) do
 		p.dist = dist(cx, cy, p.x, p.y)
+		local angle = (math.atan2(p.y - cy, p.x - cx) + math.pi) / (2 * math.pi)
+
+		p.hash = math.floor(angle * edges.hashSize) % edges.hashSize
 	end
+
+	hashAdd(edges, e1)
+	hashAdd(edges, e2)
+	hashAdd(edges, e3)
+
+--	for i = 1,3 do table.remove(points, 1) end
 
 	table.sort(points, function(a,b) return a.dist < b.dist end)
 
 	for _,p in ipairs(points) do
-		processPoint(p, edges)
+		if p ~= a and p ~= b and p ~= c then
+			processPoint(p, edges)
+		end
 	end
 
 	return edges
 end
 
+local function getHull(edges)
+	local res = {}
+	local start
+	for i = 0, edges.hashSize-1 do
+		start = edges.hash[i]
+		if start then break end
+	end
+
+	local current = start
+	repeat
+		table.insert(res, current)
+		current = current.hullNext
+	until current == start
+
+	return res
+end
+
 return
 {
-	delaunay = delaunay
+	delaunay = delaunay,
+	hull = getHull,
+	circumcenter = circumcenter
 }
