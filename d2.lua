@@ -8,6 +8,23 @@ local function dist(ax, ay, bx, by)
 	return dx * dx + dy * dy
 end
 
+local function inCircle(ax, ay, bx, by, cx, cy, px, py)
+	local dx = ax - px
+	local dy = ay - py
+	local ex = bx - px
+	local ey = by - py
+	local fx = cx - px
+	local fy = cy - py
+
+	local ap = dx * dx + dy * dy
+	local bp = ex * ex + ey * ey
+	local cp = fx * fx + fy * fy
+
+	return dx * (ey * cp - bp * fy) -
+		   dy * (ex * cp - bp * fx) +
+		   ap * (ex * fy - ey * fx) > 0
+end
+
 local function link(e1, e2)
 	e1.rev = e2
 	e2.rev = e1
@@ -62,6 +79,53 @@ local function hullInsert(new, left, right)
 	right.hullPrev = new
 end
 
+--          p1                    pl
+--        /||\                  /  \
+--     o4/ || \o1            o4/    \o1
+--      /  ||  \              /  i1  \
+--     / i1||i2 \    flip    /________\
+--   p4\   ||   /p2   =>   p4\--------/p2
+--      \  ||  /              \  i2  /
+--     o3\ || /o2            o3\    /o2
+--        \||/                  \  /
+--         p3                    p3
+
+local function checkDelaunayCondition(edge)
+
+	if not edge.rev then return end
+
+	local i1, i2 = edge, edge.rev
+	local o1, o2 = i2.next, i2.next.next
+	local o3, o4 = i1.next, i1.next.next
+
+	local p1, p2, p3, p4 = o1.from, o2.from, o3.from, o4.from
+	assert(p1 == o4.to and p2 == o1.to and p3 == o2.to and p4 == o3.to)
+
+	if inCircle(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4.x, p4.y) then
+		-- Flip
+		i1.from = p2
+		i1.to = p4
+
+		i2.from = p4
+		i2.to = p2
+
+		o1.next = i1
+		i1.next = o4
+		o4.next = o1
+
+		o2.next = o3
+		o3.next = i2
+		i2.next = o2
+
+		checkDelaunayCondition(o1)
+		checkDelaunayCondition(o2)
+		checkDelaunayCondition(o3)
+		checkDelaunayCondition(o4)
+	end
+
+	assert(i1.rev == i2 and i2.rev == i1)
+end
+
 local function newTriOnEdge(p, edge, edges)
 
 	-- e1 is against the existing edge, e2 and e3 are the new ones
@@ -74,8 +138,10 @@ local function newTriOnEdge(p, edge, edges)
 	local left,right = hullRemove(edge)
 	hullInsert(e2, left, right)
 	hullInsert(e3, e2, right)
-
 	edges.hull = e2
+
+	checkDelaunayCondition(e1)
+
 	return e2, e3
 end
 
@@ -94,8 +160,10 @@ local function newTriOnTwoEdges(left, right, edges)
 	assert(lright == right)
 	local lleft, rright = hullRemove(right)
 	hullInsert(e3, lleft, rright)
-
 	edges.hull = e3
+
+	checkDelaunayCondition(e1)
+	checkDelaunayCondition(e2)
 
 	return e3
 end

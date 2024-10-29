@@ -5,8 +5,8 @@ local edges
 
 local function update()
 	points = {}
-	for i = 1,1000 do
-		points[i] = {x = math.random() * 2000, y = math.random() * 2000}
+	for i = 1,100000 do
+		points[i] = {x = math.random() * 1200, y = math.random() * 800}
 	end
 
 	edges = d2.delaunay(points)
@@ -14,7 +14,7 @@ end
 
 function love.load()
 	math.randomseed(os.time())
-	love.window.setMode(2000, 2000)
+	love.window.setMode(1200, 800)
 	update()
 end
 
