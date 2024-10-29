@@ -63,6 +63,13 @@ local function new(width, height, fill)
 		end)
 	end
 
+	img.toGreyScale = function()
+		return array.new(img.width, img.height, function(r,c)
+			local r,g,b,a = img.getRGBA(r,c)
+			return (r + g + b) / 3 / 255
+		end)
+	end
+
 	return img
 end
 

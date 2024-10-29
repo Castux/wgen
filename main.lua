@@ -1,4 +1,4 @@
-local d2 = require "delauney"
+local d2 = require "delaunay"
 local graph = require "graph"
 
 local points
