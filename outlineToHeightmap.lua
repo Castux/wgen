@@ -48,6 +48,9 @@ end
 
 local function bilinearSample(x, y, img)
 
+	x = x * (img.width - 1)
+	y = y * (img.height - 1)
+
 	local xint, xfrac = x // 1, x % 1
 	local yint, yfrac = y // 1, y % 1
 
@@ -127,11 +130,11 @@ local function computeDistanceFromShore(graph, shores)
 	return max
 end
 
-local function shittyOutput(graph, outline, max)
-	local img = image.new(outline.width + 50, outline.height + 50, 0x000000FF)
+local function shittyOutput(graph, w, h, max)
+	local img = image.new(w, h, 0x000000FF)
 
 	for _,center in ipairs(graph.centers) do
-		local x,y = math.floor(center.x), math.floor(center.y)
+		local x,y = math.floor(center.x * w), math.floor(center.y * h)
 
 		local color
 		if center.shore then
@@ -157,14 +160,14 @@ local function main(args)
 	local outline = tga.fromFile(path).toGreyScale()
 	local width, height = outline.width,outline.height
 
-	local graph = generateGraph(width, height, 3)
+	local graph = generateGraph(1, 1, 4/(2048*2))
 	assignLandmasses(graph, outline)
 	local shores = markShores(graph)
 
 	local max =  computeDistanceFromShore(graph, shores)
 	print("Max dist", max)
 
-	shittyOutput(graph, outline, max)
+	shittyOutput(graph, 2048*2, 2048*2, max)
 end
 
 main {...}
