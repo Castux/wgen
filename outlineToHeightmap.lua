@@ -35,8 +35,8 @@ local function generateGraph(w, h, res)
 	for x = -margin, w + margin, res do
 		for y = -margin, h + margin, res do
 			table.insert(points, {
-				x = x + (math.random() -  0.5) * res * 0.5,
-				y = y + (math.random() -  0.5) * res * 0.5
+				x = x + (math.random() -  0.5) * res * 1.0,
+				y = y + (math.random() -  0.5) * res * 1.0
 			})
 		end
 	end
@@ -114,10 +114,6 @@ local function computeDistanceFromShore(graph, shores)
 		local v = queue[i]
 		max = math.max(max, v.dist)
 
-		if v.kind == "out" then
-			print(v.dist)
-		end
-
 		for _,neigh in ipairs(v.neighbours) do
 			if not neigh.dist or neigh.dist > v.dist + 1 then
 				neigh.dist = v.dist + 1
@@ -130,19 +126,25 @@ local function computeDistanceFromShore(graph, shores)
 		i = i + 1
 	end
 
+	for _,center in ipairs(graph.centers) do
+		if center.kind == "water" then
+			center.dist = -center.dist
+		end
+	end
+
 	return max
 end
 
 local function computeRiverFlow(graph)
 
 	for _,center in ipairs(graph.centers) do
-		if center.kind ~= "land" or center.shore then
+		if center.kind ~= "land" then
 			goto skip
 		end
 
 		local lowest
 		for _,neighbour in ipairs(center.neighbours) do
-			if not lowest or neighbour.dist < lowest.dist then
+			if not lowest or (neighbour.dist and neighbour.dist < lowest.dist) then
 				lowest = neighbour
 			end
 		end
@@ -189,64 +191,53 @@ local function computeRiverFlow(graph)
 	end
 end
 
-local function line(ax, ay, bx, by, img, color)
-	local steps = math.max(math.abs(ax-bx), math.abs(ay-by))
 
-	for i = 0,steps do
-		x = math.floor(lerp(ax, bx, i/steps))
-		y = math.floor(lerp(ay, by, i/steps))
-		img.setSafe(y, x, color)
-	end
-end
+local function output(graph, w, h)
+	local svg = require "EzSVG"
 
-local function basicGraphOutput(graph, w, h)
+	local doc = svg.Document(w,h)
+	svg.setStyle {stroke_width = 0.75, stroke = "grey"}
+	--
+	-- for _,edge in ipairs(graph.edges) do
+	-- 	if edge.corner2 then
+	-- 		local ax,ay = edge.corner1.x, edge.corner1.y
+	-- 		local bx,by = edge.corner2.x, edge.corner2.y
+	-- 		doc:add(svg.Line(ax, ay, bx, by, {stroke = "blue"}))
+	-- 	end
+	--
+	-- 	doc:add(svg.Line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, {stroke = "yellow"}))
+	-- end
 
-	local img = image.new(w, h, 0x5555ffFF)
-
-	for _,edge in ipairs(graph.edges) do
-		if edge.corner2 then
-			local ax,ay = edge.corner1.x, edge.corner1.y
-			local bx,by = edge.corner2.x, edge.corner2.y
-			line(ax, ay, bx, by, img, 0xff00ffff)
-		end
-
-		line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, img, 0x000000FF)
-	end
-
-	tga.toFile("graph.tga", img)
-end
-
-local palette = {}
-for i = 1,100 do
-	palette[i] = image.pixel(i * 20, 255 - i * 20, 0)
-end
-
-local function shittyOutput(graph, w, h, max, s)
-	s = s or 1
-	local img = image.new(w * s, h * s, 0x5555ffFF)
+	local cells = svg.Group()
+	local rivers = svg.Group()
 
 	for _,center in ipairs(graph.centers) do
 
-		if center.downhill and center.flow then
-			local ax,ay = center.x * s, center.y * s
-			local bx,by = center.downhill.x * s, center.downhill.y * s
-			line(ax, ay, bx, by, img, palette[center.flow])
+		local coords = {}
+		for _,v in ipairs(center.corners) do
+			table.insert(coords, v.x)
+			table.insert(coords, v.y)
 		end
 
-	end
-
-	for _,edge in ipairs(graph.edges) do
-		if edge.corner2 then
-			local ax,ay = edge.corner1.x * s, edge.corner1.y * s
-			local bx,by = edge.corner2.x * s, edge.corner2.y * s
-			line(ax, ay, bx, by, img, 0x101010ff)
+		local color
+		if center.kind == "land" then
+			color = "#54A932"
+		else
+			color = "darkblue"
 		end
 
-		--line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, img, 0x000000FF)
+		cells:add(svg.Polygon(coords, {fill = color}))
+
+		if center.downhill then
+			rivers:add(svg.Line(center.x, center.y,
+				center.downhill.x, center.downhill.y,
+				{stroke = "blue"}
+			))
+		end
 	end
-
-	tga.toFile("graph.tga", img)
-
+	doc:add(cells)
+	doc:add(rivers)
+	doc:writeTo("out.svg")
 end
 
 local function main(args)
@@ -271,7 +262,8 @@ local function main(args)
 	computeRiverFlow(graph)
 
 	print("Outputing")
-	shittyOutput(graph, width, height, max, 2)
+	--shittyOutput(graph, width, height, max, 0.5)
+	output(graph, width, height)
 end
 
 main {...}
