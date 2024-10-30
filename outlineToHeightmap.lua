@@ -270,9 +270,8 @@ local function computeRiverFlow(graph)
 	end
 end
 
-local function output(graph, w, h, maxDist, resolution)
+local function output(graph, w, h, maxDist, resolution, path)
 	local svg = require "EzSVG"
-
 	local doc = svg.Document(w,h, "darkblue")
 
 
@@ -351,12 +350,43 @@ local function output(graph, w, h, maxDist, resolution)
 	--container:scale(0.5):translate(w/2, h/2)
 
 	doc:add(container)
-	doc:writeTo("out.svg")
+	doc:writeTo(path)
+end
+
+local function outputHeightmap(graph, w, h, path)
+
+	local svg = require "EzSVG"
+	local doc = svg.Document(w,h, "black")
+
+	local lowest = math.huge
+	for _,center in ipairs(graph.centers) do
+		if center.dist then
+			lowest = math.min(lowest, center.dist)
+		end
+	end
+
+	print("Sea level", -lowest)
+
+	for _,center in ipairs(graph.centers) do
+
+		local coords = {}
+		for _,v in ipairs(center.corners) do
+			table.insert(coords, v.x)
+			table.insert(coords, v.y)
+		end
+
+		local d = center.dist and center.dist - lowest or 0
+		local color = svg.rgb(d, d, d)
+		doc:add(svg.Polygon(coords, {fill = color, stroke = color}))
+	end
+
+	doc:writeTo(path)
 end
 
 local function main(args)
 	local path = args[1]
 	local resolution = args[2] or 10
+	local heightmap = args[3] == "-h"
 
 	print("Loading " .. path)
 	local outline = tga.fromFile(path).toGreyScale()
@@ -383,8 +413,9 @@ local function main(args)
 	computeRiverFlow(graph)
 
 	print("Outputing")
-	--shittyOutput(graph, width, height, max, 0.5)
-	output(graph, width, height, max, resolution)
+
+	output(graph, width, height, max, resolution, path:gsub(".tga", ".svg"))
+	outputHeightmap(graph, width, height, path:gsub(".tga", "-h.svg"))
 end
 
 main {...}
