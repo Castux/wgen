@@ -164,7 +164,22 @@ local function fromDelaunayHalfEdges(hedges)
 	{
 		centers = centers,
 		edges = edges,
-		corners = corners
+		corners = corners,
+
+		iter = function(kind)
+			local t =
+				kind == "co" and corners or
+				kind == "ce" and centers or
+				kind == "e" and edges
+
+			assert(t, "Bad argument to graph.iter()")
+
+			return coroutine.wrap(function()
+				for _,v in ipairs(t) do
+					coroutine.yield(v)
+				end
+			end)
+		end
 	}
 end
 

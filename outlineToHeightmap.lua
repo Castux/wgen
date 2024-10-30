@@ -84,7 +84,7 @@ local function bilinearSample(x, y, img)
 end
 
 local function assignLandmasses(graph, outline)
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 		local v = bilinearSample(center.y, center.x, outline)
 
 		if v ~= v then	-- NaN
@@ -142,7 +142,7 @@ local function markLakes(graph)
 
 	local done = {}
 
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 
 		if center.kind == "water" and not done[center] then
 			local lake, cells = isLake(center)
@@ -159,7 +159,7 @@ end
 
 local function markShores(graph)
 	local shores = {}
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 		if center.kind == "land" then
 			for _,neighbour in ipairs(center.neighbours) do
 				if neighbour.kind == "water" then
@@ -210,7 +210,7 @@ local function computeDistanceFromShore(graph, shores)
 		i = i + 1
 	end
 
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 		if center.kind == "water" then
 			center.dist = -center.dist
 		end
@@ -221,7 +221,7 @@ end
 
 local function computeRiverFlow(graph)
 
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 		if center.kind ~= "land" and center.kind ~= "lake" then
 			goto skip
 		end
@@ -263,7 +263,7 @@ local function computeRiverFlow(graph)
 		return center.flow
 	end
 
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 		if center.shore then
 			rec(center)
 		end
@@ -281,7 +281,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 
 	maxDist = maxDist * 0.75
 
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 
 		local coords = {}
 		for _,v in ipairs(center.corners) do
@@ -332,15 +332,14 @@ local function output(graph, w, h, maxDist, resolution, path)
 		end
 	end
 
+	-- for edge in graph.iter "e" do
+	-- 	if edge.corner2 then
+	-- 		local ax,ay = edge.corner1.x, edge.corner1.y
+	-- 		local bx,by = edge.corner2.x, edge.corner2.y
+	-- 		doc:add(svg.Line(ax, ay, bx, by, {stroke = "blue"}))
+	-- 	end
 	--
-	-- for _,edge in ipairs(graph.edges) do
-	-- 	-- if edge.corner2 then
-	-- 	-- 	local ax,ay = edge.corner1.x, edge.corner1.y
-	-- 	-- 	local bx,by = edge.corner2.x, edge.corner2.y
-	-- 	-- 	doc:add(svg.Line(ax, ay, bx, by, {stroke = "blue"}))
-	-- 	-- end
-	--
-	-- 	cells:add(svg.Line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, {stroke = "yellow"}))
+	-- 	land:add(svg.Line(edge.center1.x, edge.center1.y, edge.center2.x, edge.center2.y, {stroke = "yellow"}))
 	-- end
 
 	local container = svg.Group()
@@ -359,7 +358,7 @@ local function outputHeightmap(graph, w, h, path)
 	local doc = svg.Document(w,h, "black")
 
 	local lowest = math.huge
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 		if center.dist then
 			lowest = math.min(lowest, center.dist)
 		end
@@ -367,7 +366,7 @@ local function outputHeightmap(graph, w, h, path)
 
 	print("Sea level", -lowest)
 
-	for _,center in ipairs(graph.centers) do
+	for center in graph.iter "ce" do
 
 		local coords = {}
 		for _,v in ipairs(center.corners) do
