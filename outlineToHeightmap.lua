@@ -91,21 +91,65 @@ local function assignLandmasses(graph, outline)
 			center.kind = v > 0.5 and "land" or "water"
 		end
 	end
+	--
+	-- for _,center in ipairs(graph.centers) do
+	-- 	if center.kind == "out" then
+	-- 		for _,n in ipairs(center.neighbours) do
+	-- 			if n.kind == "land" then
+	-- 				center.kind = "land"
+	-- 				break
+	-- 			end
+	-- 		end
+	--
+	-- 		if center.kind == "out" then
+	-- 			center.kind = "water"
+	-- 		end
+	-- 	end
+	-- end
+end
+
+local function isLake(start)
+
+	local visited = {}
+	local foundOut = false
+
+	local function rec(c)
+		if c.kind == "out" then
+			foundOut = true
+			return
+		end
+
+		if visited[c] or c.kind ~= "water" then
+			return
+		end
+
+		visited[c] = true
+		for _,neighbour in ipairs(c.neighbours) do
+			rec(neighbour)
+		end
+	end
+
+	rec(start)
+	return not foundOut, visited
+end
+
+local function markLakes(graph)
+
+	local done = {}
 
 	for _,center in ipairs(graph.centers) do
-		if center.kind == "out" then
-			for _,n in ipairs(center.neighbours) do
-				if n.kind == "land" then
-					center.kind = "land"
-					break
-				end
-			end
 
-			if center.kind == "out" then
-				center.kind = "water"
+		if center.kind == "water" and not done[center] then
+			local lake, cells = isLake(center)
+			for k in pairs(cells) do
+				done[k] = true
+				if lake then
+					k.kind = "lake"
+				end
 			end
 		end
 	end
+
 end
 
 local function markShores(graph)
@@ -140,8 +184,16 @@ local function computeDistanceFromShore(graph, shores)
 		max = math.max(max, v.dist)
 
 		for _,neigh in ipairs(v.neighbours) do
-			if not neigh.dist or neigh.dist > v.dist + 1 then
-				neigh.dist = v.dist + 1
+
+			local new
+			if neigh.kind == "lake" then
+				new = v.dist + 0.1
+			else
+				new = v.dist + 1
+			end
+
+			if not neigh.dist or neigh.dist > new then
+				neigh.dist = new
 				if neigh.kind ~= "out" then
 					queue[#queue + 1] = neigh
 				end
@@ -163,7 +215,7 @@ end
 local function computeRiverFlow(graph)
 
 	for _,center in ipairs(graph.centers) do
-		if center.kind ~= "land" then
+		if center.kind ~= "land" and center.kind ~= "lake" then
 			goto skip
 		end
 
@@ -178,6 +230,11 @@ local function computeRiverFlow(graph)
 			center.downhill = lowest
 			lowest.uphill = lowest.uphill or {}
 			table.insert(lowest.uphill, center)
+
+		else
+			print "===="
+			print(center.dist)
+			for _,n in ipairs(center.neighbours) do print(n.dist) end
 		end
 
 		::skip::
@@ -189,21 +246,11 @@ local function computeRiverFlow(graph)
 			center.flow = 1
 
 		else
-			local counts = {}
-			local max = 0
-
+			local sum = 1
 			for _,up in ipairs(center.uphill) do
-				local ups = rec(up)
-				counts[ups] = (counts[ups] or 0) + 1
-				max = math.max(max, ups)
+				sum = sum + rec(up)
 			end
-
-			assert(counts[max] > 0)
-			if counts[max] == 1 then
-				center.flow = max
-			else
-				center.flow = max + 1
-			end
+			center.flow = sum
 		end
 
 		return center.flow
@@ -216,15 +263,15 @@ local function computeRiverFlow(graph)
 	end
 end
 
-
-local function output(graph, w, h, maxDist)
+local function output(graph, w, h, maxDist, resolution)
 	local svg = require "EzSVG"
 
 	local doc = svg.Document(w,h, "darkblue")
 
 
-	local cells = svg.Group()
+	local land = svg.Group()
 	local rivers = svg.Group()
+	local sea = svg.Group()
 
 	maxDist = maxDist * 0.75
 
@@ -237,6 +284,7 @@ local function output(graph, w, h, maxDist)
 		end
 
 		local color
+		local group
 		if center.kind == "land" then
 
 			local f = (center.dist / maxDist)^1.5
@@ -245,6 +293,11 @@ local function output(graph, w, h, maxDist)
 				lerp(169, 255, f),
 				lerp(50, 255, f)
 			)
+			group = land
+		elseif center.kind == "lake" then
+			color = "#0E443D"
+			group = land
+
 		elseif center.kind == "water" then
 			local f = (-center.dist / maxDist)^0.25
 			color = svg.rgb(
@@ -252,19 +305,21 @@ local function output(graph, w, h, maxDist)
 				lerp(132, 10, f),
 				lerp(255, 100, f)
 			)
+			group = sea
 		else
 			color = "pink"
+			group = sea
 		end
 
-		cells:add(svg.Polygon(coords, {fill = color, stroke = "none"}))
+		group:add(svg.Polygon(coords, {fill = color, stroke = color}))
 
-		if center.downhill then
+		if center.downhill and center.flow then
 
-			local width = (center.flow / 5)^3
+			local width = center.flow^0.5 * (resolution/30)^2
 
 			rivers:add(svg.Line(center.x, center.y,
 				center.downhill.x, center.downhill.y,
-				{stroke = "blue", stroke_width = width * 4}
+				{stroke = "#0E443D", stroke_width = width}
 			))
 		end
 	end
@@ -281,9 +336,10 @@ local function output(graph, w, h, maxDist)
 	-- end
 
 	local container = svg.Group()
-	container:add(cells)
+	container:add(land)
 	container:add(rivers)
---	container:scale(0.5):translate(w/2, h/2)
+	container:add(sea)
+	--container:scale(0.5):translate(w/2, h/2)
 
 	doc:add(container)
 	doc:writeTo("out.svg")
@@ -291,16 +347,18 @@ end
 
 local function main(args)
 	local path = args[1]
+	local resolution = args[2] or 10
 
 	print("Loading " .. path)
 	local outline = tga.fromFile(path).toGreyScale()
 	local width, height = outline.width,outline.height
 
 	print("Generating graph")
-	local graph = generateGraph(width, height, 30)
+	local graph = generateGraph(width, height, resolution)
 
 	print("Assigning landmasses")
 	assignLandmasses(graph, outline)
+	markLakes(graph)
 	local shores = markShores(graph)
 
 	print("Computing distance from shore")
@@ -312,7 +370,7 @@ local function main(args)
 
 	print("Outputing")
 	--shittyOutput(graph, width, height, max, 0.5)
-	output(graph, width, height, max)
+	output(graph, width, height, max, resolution)
 end
 
 main {...}
