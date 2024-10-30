@@ -75,7 +75,7 @@ local colors = {
 	[image.pixel(109, 148, 194)] = "lake"
 }
 
-local function assignLandmasses(graph, outline)
+local function assignCellTypes(graph, outline)
 	for center in graph.iter "ce" do
 
 		local row, col = math.floor(center.y), math.floor(center.x)
@@ -110,6 +110,12 @@ local function markShores(graph)
 	return shores
 end
 
+local gradients = {
+	sea = 1,
+	land = 1,
+	lake = 0.01
+}
+
 local function computeElevation(graph, shores)
 
 	assert(#shores > 0)
@@ -127,17 +133,11 @@ local function computeElevation(graph, shores)
 		max = math.max(max, v.z)
 
 		for neigh in v.iter "n" do
-
-			local new
-			if neigh.kind == "lake" then
-				new = v.z + 0.001
-			else
-				new = v.z + 1
-			end
-
-			if not neigh.z or neigh.z > new then
-				neigh.z = new
-				if neigh.kind ~= "out" then
+			local gradient = gradients[neigh.kind]
+			if gradient then
+				local new = v.z + gradient
+				if not neigh.z or neigh.z > new then
+					neigh.z = new
 					queue[#queue + 1] = neigh
 				end
 			end
@@ -158,13 +158,13 @@ end
 local function computeRiverFlow(graph)
 
 	for center in graph.iter "ce" do
-		if center.kind ~= "land" and center.kind ~= "lake" then
+		if not center.z then
 			goto skip
 		end
 
 		local lowest
 		for neighbour in center.iter "n" do
-			if not lowest or (neighbour.z and neighbour.z < lowest.z) then
+			if neighbour.z and (not lowest or neighbour.z < lowest.z) then
 				lowest = neighbour
 			end
 		end
@@ -175,9 +175,7 @@ local function computeRiverFlow(graph)
 			table.insert(lowest.uphill, center)
 
 		else
-			print "===="
-			print(center.z)
-			for _,n in ipairs(center.neighbours) do print(n.z) end
+			error("Didn't find lowest neighbour")
 		end
 
 		::skip::
@@ -209,7 +207,6 @@ end
 local function output(graph, w, h, maxDist, resolution, path)
 	local svg = require "EzSVG"
 	local doc = svg.Document(w,h, "darkblue")
-
 
 	local land = svg.Group()
 	local rivers = svg.Group()
@@ -310,12 +307,14 @@ local function outputHeightmap(graph, w, h, path)
 			table.insert(coords, corner.y)
 		end
 
-		local d = 0
+		local color
 		if center.z then
-			d = (center.z - lowest) / (highest - lowest) * 255
+			local d = (center.z - lowest) / (highest - lowest) * 255
 			if center.shore then newSeaLevel = d end
+			color = svg.rgb(d, d, d)
+		else
+			color = "pink"
 		end
-		local color = svg.rgb(d, d, d)
 		doc:add(svg.Polygon(coords, {fill = color, stroke = color}))
 	end
 
@@ -338,7 +337,7 @@ local function main(args)
 	print(#graph.centers .. " points")
 
 	print("Assigning landmasses")
-	assignLandmasses(graph, outline)
+	assignCellTypes(graph, outline)
 
 	print("Marking shores")
 	local shores = markShores(graph)
