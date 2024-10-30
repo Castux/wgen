@@ -72,7 +72,9 @@ local colors = {
 	[image.pixel(209, 184, 134)] = "hills",
 	[image.pixel(101, 72, 31)] = "mountains",
 
-	[image.pixel(109, 148, 194)] = "lake"
+	[image.pixel(109, 148, 194)] = "lake",
+	[image.pixel(153, 153, 153)] = "flat",
+
 }
 
 local function assignCellTypes(graph, outline)
@@ -115,7 +117,8 @@ local gradients = {
 	plains = 1,
 	hills = 2,
 	mountains = 4,
-	lake = 0.01
+	lake = 0.01,
+	flat = 0.2
 }
 
 local function computeElevation(graph, shores)
@@ -262,8 +265,8 @@ local function output(graph, w, h, maxDist, resolution, path)
 
 			rivers:add(svg.Line(center.x, center.y,
 				center.downhill.x, center.downhill.y,
-				{stroke = "#0E443D", stroke_width = width}
-				--{stroke = "blue", stroke_width = width}
+				--{stroke = "#0E443D", stroke_width = width}
+				{stroke = "blue", stroke_width = width}
 			))
 		end
 	end
