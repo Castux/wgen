@@ -65,50 +65,16 @@ local function lerp(a,b,x)
 	return a * (1-x) + b * x
 end
 
-local function bilinearSample(x, y, img)
-
-	local xint, xfrac = math.floor(x), x % 1
-	local yint, yfrac = math.floor(y), y % 1
-
-	local a = img.getDefault(xint    , yint    , 0/0)
-	local b = img.getDefault(xint + 1, yint    , 0/0)
-	local c = img.getDefault(xint    , yint + 1, 0/0)
-	local d = img.getDefault(xint + 1, yint + 1, 0/0)
-
-	local value = lerp(
-		lerp(a, c, yfrac),
-		lerp(b, d, yfrac),
-		xfrac
-	)
-	if x < 0 or y < 0 then assert(value ~= value) end
-	return value
-end
-
 local function assignLandmasses(graph, outline)
 	for center in graph.iter "ce" do
-		local v = bilinearSample(center.y, center.x, outline)
 
-		if v ~= v then	-- NaN
+		local v = outline.getDefault(math.floor(center.y), math.floor(center.x))
+		if not v then
 			center.kind = "out"
 		else
 			center.kind = v > 0.5 and "land" or "water"
 		end
 	end
-	--
-	-- for _,center in ipairs(graph.centers) do
-	-- 	if center.kind == "out" then
-	-- 		for _,n in ipairs(center.neighbours) do
-	-- 			if n.kind == "land" then
-	-- 				center.kind = "land"
-	-- 				break
-	-- 			end
-	-- 		end
-	--
-	-- 		if center.kind == "out" then
-	-- 			center.kind = "water"
-	-- 		end
-	-- 	end
-	-- end
 end
 
 local function isLake(start)
