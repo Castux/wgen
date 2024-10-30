@@ -221,15 +221,13 @@ local function computeRiverFlow(graph, shores)
 	end
 end
 
-local function output(graph, w, h, maxDist, resolution, path)
+local function output(graph, w, h, maxElevation, resolution, path)
 	local svg = require "EzSVG"
 	local doc = svg.Document(w,h, "darkblue")
 
 	local land = svg.Group()
 	local rivers = svg.Group()
 	local sea = svg.Group()
-
-	maxDist = maxDist * 0.75
 
 	for center in graph.iter "ce" do
 
@@ -247,7 +245,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 			group = land
 
 		elseif center.kind == "sea" then
-			local f = (-center.z / maxDist)^0.25
+			local f = -center.z / maxElevation
 			color = svg.rgb(
 				lerp(95, 0, f),
 				lerp(132, 10, f),
@@ -260,7 +258,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 			group = sea
 
 		else
-			local f = (center.z / maxDist)^2
+			local f = center.z / maxElevation
 			color = svg.rgb(
 				lerp(84, 255, f),
 				lerp(169, 255, f),
