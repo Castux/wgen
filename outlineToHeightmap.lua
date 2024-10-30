@@ -65,6 +65,12 @@ local function lerp(a,b,x)
 	return a * (1-x) + b * x
 end
 
+local colors = {
+	[0x151864FF] = "sea",
+	[0x764020FF] = "land",
+	[0x6D94C2FF] = "lake"
+}
+
 local function assignLandmasses(graph, outline)
 	for center in graph.iter "ce" do
 
@@ -72,56 +78,13 @@ local function assignLandmasses(graph, outline)
 		if not v then
 			center.kind = "out"
 		else
-			center.kind = v > 0.5 and "land" or "water"
-		end
-	end
-end
-
-local function isLake(start)
-
-	local added = {}
-	local foundOut = false
-
-	local queue = {start}
-	added[start] = true
-
-	local i = 1
-	while i <= #queue do
-		local c = queue[i]
-
-		for neighbour in c.iter "n" do
-			if neighbour.kind == "out" then
-				foundOut = true
-
-			elseif not added[neighbour] and neighbour.kind == "water" then
-				table.insert(queue, neighbour)
-				added[neighbour] = true
-			end
+			center.kind = colors[v]
 		end
 
-		i = i + 1
-	end
-
-	return not foundOut, added
-end
-
-local function markLakes(graph)
-
-	local done = {}
-
-	for center in graph.iter "ce" do
-
-		if center.kind == "water" and not done[center] then
-			local lake, cells = isLake(center)
-			for k in pairs(cells) do
-				done[k] = true
-				if lake then
-					k.kind = "lake"
-				end
-			end
+		if not center.kind then
+			center.kind = "out"
 		end
 	end
-
 end
 
 local function markShores(graph)
@@ -129,7 +92,7 @@ local function markShores(graph)
 	for center in graph.iter "ce" do
 		if center.kind == "land" then
 			for neighbour in center.iter "n" do
-				if neighbour.kind == "water" then
+				if neighbour.kind == "sea" then
 					table.insert(shores, center)
 					center.shore = true
 					break
@@ -178,7 +141,7 @@ local function computeElevation(graph, shores)
 	end
 
 	for center in graph.iter "ce" do
-		if center.kind == "water" then
+		if center.kind == "sea" then
 			center.z = -center.z
 		end
 	end
@@ -272,7 +235,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 			color = "#0E443D"
 			group = land
 
-		elseif center.kind == "water" then
+		elseif center.kind == "sea" then
 			local f = (-center.z / maxDist)^0.25
 			color = svg.rgb(
 				lerp(95, 0, f),
@@ -361,8 +324,8 @@ local function main(args)
 	local heightmap = args[3] == "-h"
 
 	print("Loading " .. path)
-	local outline = tga.fromFile(path).toGreyScale()
-	local width, height = outline.width,outline.height
+	local outline = tga.fromFile(path)
+	local width, height = outline.width, outline.height
 
 	print("Generating graph...")
 	local graph = generateGraph(width, height, resolution)
@@ -370,9 +333,6 @@ local function main(args)
 
 	print("Assigning landmasses")
 	assignLandmasses(graph, outline)
-
-	print("Marking lakes")
-	markLakes(graph)
 
 	print("Marking shores")
 	local shores = markShores(graph)
