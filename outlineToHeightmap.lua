@@ -275,8 +275,8 @@ local function output(graph, w, h, maxElevation, resolution, path)
 
 			rivers:add(svg.Line(center.x, center.y,
 				center.downhill.x, center.downhill.y,
-				--{stroke = "#0E443D", stroke_width = width}
-				{stroke = "blue", stroke_width = width}
+				{stroke = "#0E443D", stroke_width = width}
+				--{stroke = "blue", stroke_width = width}
 			))
 		end
 	end
@@ -299,6 +299,8 @@ local function output(graph, w, h, maxElevation, resolution, path)
 
 	doc:add(container)
 	doc:writeTo(path)
+
+	os.execute(string.format("rsvg-convert %s > %s", path, path:gsub(".svg", ".png")))
 end
 
 local function outputHeightmap(graph, w, h, path)
@@ -369,7 +371,7 @@ local function main(args)
 
 	output(graph, width, height, max, resolution, path:gsub(".tga", ".svg"))
 	outputHeightmap(graph, width, height, path:gsub(".tga", "-h.svg"))
-	obj.toFile(graph, path:gsub(".tga", "-h.obj"), width, height)
+	obj.toFile(graph, path:gsub(".tga", ".obj"), width, height)
 end
 
 main {...}

@@ -1,5 +1,8 @@
 local function toFile(graph, path, width, height)
 
+	local mtlPath = path:gsub(".obj", ".mtl")
+	local pngPath = path:gsub(".obj", ".png"):gsub(".*/", "")
+
 	local lowest,highest = math.huge, -math.huge
 	for center in graph.iter "ce" do
 		if center.z then
@@ -12,6 +15,11 @@ local function toFile(graph, path, width, height)
 	local centerToIndex = {}
 	local seaLevel
 
+	local lines = {
+		string.format("mtllib %s", mtlPath:gsub(".*/", "")),
+		"usemtl material0"
+	}
+
 	for center,id in graph.iter "ce" do
 		centerToIndex[center] = id
 
@@ -23,15 +31,9 @@ local function toFile(graph, path, width, height)
 			end
 		end
 
-		local line = string.format("v %f %f %f", center.x, z, center.y)
-		table.insert(lines, line)
+		table.insert(lines, string.format("v %f %f %f", center.x, z, center.y))
+		table.insert(lines, string.format("vt %f %f", center.x / width, 1 - center.y / height))
 	end
-
-	-- Add water plane corners
-	table.insert(lines, string.format("v %f %f %f", 0, seaLevel, 0))
-	table.insert(lines, string.format("v %f %f %f", 0, seaLevel, height))
-	table.insert(lines, string.format("v %f %f %f", width, seaLevel, height))
-	table.insert(lines, string.format("v %f %f %f", width, seaLevel, 0))
 
 	for corner in graph.iter "co" do
 		local ids = {}
@@ -43,20 +45,26 @@ local function toFile(graph, path, width, height)
 			end
 		end
 
+		for i,v in ipairs(ids) do
+			ids[i] = v .. "/" .. v
+		end
+
 		if not out then
 			local line = "f " .. table.concat(ids, " ")
 			table.insert(lines, line)
 		end
 	end
 
-	-- Add water plane
-	local id = #graph.centers + 1
-	table.insert(lines, string.format("f %d %d %d %d", id, id + 1, id + 2, id + 3))
-
 	local fp = io.open(path, "w")
 	for _,line in ipairs(lines) do
 		fp:write(line, "\n")
 	end
+	fp:close()
+
+	-- Material file
+	local fp = io.open(mtlPath, "w")
+	fp:write("newmtl material0\n")
+	fp:write("map_Kd ", pngPath)
 	fp:close()
 end
 
