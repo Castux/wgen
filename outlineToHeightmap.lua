@@ -66,15 +66,20 @@ local function lerp(a,b,x)
 end
 
 local colors = {
-	[0x151864FF] = "sea",
-	[0x764020FF] = "land",
-	[0x6D94C2FF] = "lake"
+	[image.pixel(66, 66, 125)] = "sea",
+
+	[image.pixel(135, 168, 81)] = "land",	-- plain
+	[image.pixel(209, 184, 134)] = "land",	-- hill
+	[image.pixel(101, 72, 31)] = "land",	-- mountain
+
+	[image.pixel(109, 148, 194)] = "lake"
 }
 
 local function assignLandmasses(graph, outline)
 	for center in graph.iter "ce" do
 
-		local v = outline.getDefault(math.floor(center.y), math.floor(center.x))
+		local row, col = math.floor(center.y), math.floor(center.x)
+		local v = outline.getDefault(row, col)
 		if not v then
 			center.kind = "out"
 		else
@@ -82,7 +87,8 @@ local function assignLandmasses(graph, outline)
 		end
 
 		if not center.kind then
-			center.kind = "out"
+			local r,g,b,a = image.rgba(v)
+			error(string.format("Bad color %d %d %d %d at %d %d", r, g, b, a, row, col))
 		end
 	end
 end

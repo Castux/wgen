@@ -44,7 +44,7 @@ local function new(width, height, fill)
 	end
 
 	img.setRGBA = function(row, col, r, g, b, a, denormalize)
-		img.setPixel(row, col, pixel(r, g, b, a, denormalize))
+		img.set(row, col, pixel(r, g, b, a, denormalize))
 	end
 
 	img.iterRGBA = function(normalize)
@@ -68,5 +68,6 @@ end
 return
 {
 	new = new,
-	pixel = pixel
+	pixel = pixel,
+	rgba = rgba
 }

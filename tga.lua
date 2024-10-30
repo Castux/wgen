@@ -104,8 +104,7 @@ local function fromFile(path)
 			local r = readByte()
 			local a = bpp == 4 and readByte() or 255
 
-		 	local pixel = bitutils.composeInt(r,g,b,a)
-			img.set(row, col, pixel)
+			img.setRGBA(row, col, r, g, b, a)
 		end
 	end
 	fp:close()
