@@ -68,9 +68,9 @@ end
 local colors = {
 	[image.pixel(66, 66, 125)] = "sea",
 
-	[image.pixel(135, 168, 81)] = "land",	-- plain
-	[image.pixel(209, 184, 134)] = "land",	-- hill
-	[image.pixel(101, 72, 31)] = "land",	-- mountain
+	[image.pixel(135, 168, 81)] = "plains",
+	[image.pixel(209, 184, 134)] = "hills",
+	[image.pixel(101, 72, 31)] = "mountains",
 
 	[image.pixel(109, 148, 194)] = "lake"
 }
@@ -96,7 +96,7 @@ end
 local function markShores(graph)
 	local shores = {}
 	for center in graph.iter "ce" do
-		if center.kind == "land" then
+		if center.kind ~= "out" and center.kind ~= "sea" then
 			for neighbour in center.iter "n" do
 				if neighbour.kind == "sea" then
 					table.insert(shores, center)
@@ -112,7 +112,9 @@ end
 
 local gradients = {
 	sea = 1,
-	land = 1,
+	plains = 1,
+	hills = 2,
+	mountains = 4,
 	lake = 0.01
 }
 
@@ -225,16 +227,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 		local color
 		local group
 
-		if center.kind == "land" then
-
-			local f = (center.z / maxDist)^2
-			color = svg.rgb(
-				lerp(84, 255, f),
-				lerp(169, 255, f),
-				lerp(50, 255, f)
-			)
-			group = land
-		elseif center.kind == "lake" then
+		if center.kind == "lake" then
 			color = "#0E443D"
 			group = land
 
@@ -246,9 +239,19 @@ local function output(graph, w, h, maxDist, resolution, path)
 				lerp(255, 100, f)
 			)
 			group = sea
-		else
+
+		elseif center.kind == "out" then
 			color = "pink"
 			group = sea
+
+		else
+			local f = (center.z / maxDist)^2
+			color = svg.rgb(
+				lerp(84, 255, f),
+				lerp(169, 255, f),
+				lerp(50, 255, f)
+			)
+			group = land
 		end
 
 		group:add(svg.Polygon(coords, {fill = color, stroke = color}))
