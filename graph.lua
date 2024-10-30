@@ -28,11 +28,32 @@ local function keys(t)
 	return tmp
 end
 
+local function addIterator(t, keys)
+	t.iter = function(key)
+		local table = t[keys[key]]
+		if not table then
+			error("Bad key for graph.iter(): " .. key)
+		end
+
+		return coroutine.wrap(function()
+			for _,v in ipairs(table) do
+				coroutine.yield(v)
+			end
+		end)
+	end
+end
+
 local function fromDelaunayHalfEdges(hedges)
 
 	local centers = {}
 	local edges = {}
 	local corners = {}
+
+	local centerKeys = {
+		n = "neighbours",
+		e = "edges",
+		c = "corners"
+	}
 
 	local pointsToCenters = {}
 	local function newCenterFromPoint(p)
@@ -49,10 +70,18 @@ local function fromDelaunayHalfEdges(hedges)
 			corners = {}
 		}
 
+		addIterator(center, centerKeys)
+
 		pointsToCenters[p] = center
 		table.insert(centers, center)
 		return center
 	end
+
+	local cornerKeys = {
+		n = "neighbours",
+		e = "edges",
+		c = "centers"
+	}
 
 	local hedgesToCorners = {}
 	local function newCornerFromHalfEdge(h)
@@ -77,6 +106,8 @@ local function fromDelaunayHalfEdges(hedges)
 			edges = {},
 			centers = {}
 		}
+
+		addIterator(corner, cornerKeys)
 
 		hedgesToCorners[h] = corner
 		hedgesToCorners[h2] = corner
@@ -160,27 +191,20 @@ local function fromDelaunayHalfEdges(hedges)
 		end)
 	end
 
-	return
+	local graph =
 	{
 		centers = centers,
 		edges = edges,
-		corners = corners,
-
-		iter = function(kind)
-			local t =
-				kind == "co" and corners or
-				kind == "ce" and centers or
-				kind == "e" and edges
-
-			assert(t, "Bad argument to graph.iter()")
-
-			return coroutine.wrap(function()
-				for _,v in ipairs(t) do
-					coroutine.yield(v)
-				end
-			end)
-		end
+		corners = corners
 	}
+
+	addIterator(graph, {
+		co = "corners",
+		ce = "centers",
+		e = "edges"
+	})
+
+	return graph
 end
 
 return

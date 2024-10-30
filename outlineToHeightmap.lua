@@ -6,12 +6,12 @@ local graph = require "graph"
 local function relaxGraph(g, w, h)
 
 	local new = {}
-	for _,center in ipairs(g.centers) do
+	for center in g.iter "ce" do
 		if center.x < 0 or center.x > w or center.y < 0 or center.y > h then
 			table.insert(new, {x = center.x, y = center.y})
 		else
 			local x,y = 0,0
-			for _,corner in ipairs(center.corners) do
+			for corner in center.iter "c" do
 				x = x + corner.x
 				y = y + corner.y
 			end
@@ -122,7 +122,7 @@ local function isLake(start)
 	while i <= #queue do
 		local c = queue[i]
 
-		for _,neighbour in ipairs(c.neighbours) do
+		for neighbour in c.iter "n" do
 			if neighbour.kind == "out" then
 				foundOut = true
 
@@ -161,7 +161,7 @@ local function markShores(graph)
 	local shores = {}
 	for center in graph.iter "ce" do
 		if center.kind == "land" then
-			for _,neighbour in ipairs(center.neighbours) do
+			for neighbour in center.iter "n" do
 				if neighbour.kind == "water" then
 					table.insert(shores, center)
 					center.shore = true
@@ -190,7 +190,7 @@ local function computeDistanceFromShore(graph, shores)
 		local v = queue[i]
 		max = math.max(max, v.dist)
 
-		for _,neigh in ipairs(v.neighbours) do
+		for neigh in v.iter "n" do
 
 			local new
 			if neigh.kind == "lake" then
@@ -227,7 +227,7 @@ local function computeRiverFlow(graph)
 		end
 
 		local lowest
-		for _,neighbour in ipairs(center.neighbours) do
+		for neighbour in center.iter "n" do
 			if not lowest or (neighbour.dist and neighbour.dist < lowest.dist) then
 				lowest = neighbour
 			end
@@ -284,9 +284,9 @@ local function output(graph, w, h, maxDist, resolution, path)
 	for center in graph.iter "ce" do
 
 		local coords = {}
-		for _,v in ipairs(center.corners) do
-			table.insert(coords, v.x)
-			table.insert(coords, v.y)
+		for corner in center.iter "c" do
+			table.insert(coords, corner.x)
+			table.insert(coords, corner.y)
 		end
 
 		local color
@@ -369,9 +369,9 @@ local function outputHeightmap(graph, w, h, path)
 	for center in graph.iter "ce" do
 
 		local coords = {}
-		for _,v in ipairs(center.corners) do
-			table.insert(coords, v.x)
-			table.insert(coords, v.y)
+		for corner in center.iter "c" do
+			table.insert(coords, corner.x)
+			table.insert(coords, corner.y)
 		end
 
 		local d = center.dist and center.dist - lowest or 0
