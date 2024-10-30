@@ -74,6 +74,7 @@ local colors = {
 
 	[image.pixel(109, 148, 194)] = "lake",
 	[image.pixel(153, 153, 153)] = "flat",
+	[image.pixel(148, 10, 0)] = "cliffs",
 
 }
 
@@ -118,10 +119,11 @@ local gradients = {
 	hills = 2,
 	mountains = 4,
 	lake = 0.01,
-	flat = 0.2
+	flat = 0.2,
+	cliffs = 8
 }
 
-local gradientSmoothing = 0.7
+local gradientSmoothing = 0.6
 
 local function computeElevation(graph, shores)
 
