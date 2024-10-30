@@ -3,14 +3,6 @@ local function toFile(graph, path, width, height)
 	local mtlPath = path:gsub(".obj", ".mtl")
 	local pngPath = path:gsub(".obj", ".png"):gsub(".*/", "")
 
-	local lowest,highest = math.huge, -math.huge
-	for center in graph.iter "ce" do
-		if center.z then
-			lowest = math.min(lowest, center.z)
-			highest = math.max(highest, center.z)
-		end
-	end
-
 	local lines = {}
 	local centerToIndex = {}
 	local seaLevel
@@ -25,7 +17,7 @@ local function toFile(graph, path, width, height)
 
 		local z = 0
 		if center.z then
-			z = (center.z - lowest) / (highest - lowest) * 255
+			z = center.z
 			if center.shore then
 				seaLevel = z
 			end
