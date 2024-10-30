@@ -2,6 +2,7 @@ local tga = require "tga"
 local image = require "image"
 local delaunay = require "delaunay"
 local graph = require "graph"
+local obj = require "obj"
 
 local function relaxGraph(g, w, h)
 
@@ -421,6 +422,7 @@ local function main(args)
 
 	output(graph, width, height, max, resolution, path:gsub(".tga", ".svg"))
 	outputHeightmap(graph, width, height, path:gsub(".tga", "-h.svg"))
+	obj.toFile(graph, path:gsub(".tga", "-h.obj"), width, height)
 end
 
 main {...}

@@ -36,8 +36,8 @@ local function addIterator(t, keys)
 		end
 
 		return coroutine.wrap(function()
-			for _,v in ipairs(table) do
-				coroutine.yield(v)
+			for i,v in ipairs(table) do
+				coroutine.yield(v,i)
 			end
 		end)
 	end
