@@ -357,15 +357,15 @@ local function outputHeightmap(graph, w, h, path)
 	local svg = require "EzSVG"
 	local doc = svg.Document(w,h, "black")
 
-	local lowest = math.huge
+	local lowest,highest = math.huge, -math.huge
 	for center in graph.iter "ce" do
 		if center.dist then
 			lowest = math.min(lowest, center.dist)
+			highest = math.max(highest, center.dist)
 		end
 	end
 
-	print("Sea level", -lowest)
-
+	local newSeaLevel
 	for center in graph.iter "ce" do
 
 		local coords = {}
@@ -374,10 +374,16 @@ local function outputHeightmap(graph, w, h, path)
 			table.insert(coords, corner.y)
 		end
 
-		local d = center.dist and center.dist - lowest or 0
+		local d = 0
+		if center.dist then
+			d = (center.dist - lowest) / (highest - lowest) * 255
+			if center.shore then newSeaLevel = d end
+		end
 		local color = svg.rgb(d, d, d)
 		doc:add(svg.Polygon(coords, {fill = color, stroke = color}))
 	end
+
+	print(string.format("Scaled [%d,%d] to [0,255]. Sea level %.2f.", lowest, highest, newSeaLevel))
 
 	doc:writeTo(path)
 end
