@@ -53,6 +53,8 @@ local function generateGraph(w, h, res)
 
 	local edges = delaunay.delaunay(points)
 	local graph = graph.fromDelaunayHalfEdges(edges)
+
+	print("Relaxing")
 	graph = relaxGraph(graph, w, h)
 
 	return graph
@@ -110,27 +112,30 @@ end
 
 local function isLake(start)
 
-	local visited = {}
+	local added = {}
 	local foundOut = false
 
-	local function rec(c)
-		if c.kind == "out" then
-			foundOut = true
-			return
-		end
+	local queue = {start}
+	added[start] = true
 
-		if visited[c] or c.kind ~= "water" then
-			return
-		end
+	local i = 1
+	while i <= #queue do
+		local c = queue[i]
 
-		visited[c] = true
 		for _,neighbour in ipairs(c.neighbours) do
-			rec(neighbour)
+			if neighbour.kind == "out" then
+				foundOut = true
+
+			elseif not added[neighbour] and neighbour.kind == "water" then
+				table.insert(queue, neighbour)
+				added[neighbour] = true
+			end
 		end
+
+		i = i + 1
 	end
 
-	rec(start)
-	return not foundOut, visited
+	return not foundOut, added
 end
 
 local function markLakes(graph)
@@ -171,6 +176,8 @@ end
 
 local function computeDistanceFromShore(graph, shores)
 
+	assert(#shores > 0)
+
 	local queue = shores
 	local max = 0
 
@@ -179,7 +186,7 @@ local function computeDistanceFromShore(graph, shores)
 	end
 
 	local i = 1
-	while i < #queue do
+	while i <= #queue do
 		local v = queue[i]
 		max = math.max(max, v.dist)
 
@@ -187,7 +194,7 @@ local function computeDistanceFromShore(graph, shores)
 
 			local new
 			if neigh.kind == "lake" then
-				new = v.dist + 0.1
+				new = v.dist + 0.001
 			else
 				new = v.dist + 1
 			end
@@ -285,9 +292,10 @@ local function output(graph, w, h, maxDist, resolution)
 
 		local color
 		local group
+
 		if center.kind == "land" then
 
-			local f = (center.dist / maxDist)^1.5
+			local f = (center.dist / maxDist)^2
 			color = svg.rgb(
 				lerp(84, 255, f),
 				lerp(169, 255, f),
@@ -320,6 +328,7 @@ local function output(graph, w, h, maxDist, resolution)
 			rivers:add(svg.Line(center.x, center.y,
 				center.downhill.x, center.downhill.y,
 				{stroke = "#0E443D", stroke_width = width}
+				--{stroke = "blue", stroke_width = width}
 			))
 		end
 	end
@@ -353,12 +362,17 @@ local function main(args)
 	local outline = tga.fromFile(path).toGreyScale()
 	local width, height = outline.width,outline.height
 
-	print("Generating graph")
+	print("Generating graph...")
 	local graph = generateGraph(width, height, resolution)
+	print(#graph.centers .. " points")
 
 	print("Assigning landmasses")
 	assignLandmasses(graph, outline)
+
+	print("Marking lakes")
 	markLakes(graph)
+
+	print("Marking shores")
 	local shores = markShores(graph)
 
 	print("Computing distance from shore")
