@@ -113,13 +113,15 @@ local function markShores(graph)
 end
 
 local gradients = {
-	sea = 1,
+	sea = 0.5,
 	plains = 1,
 	hills = 2,
 	mountains = 4,
 	lake = 0.01,
 	flat = 0.2
 }
+
+local gradientSmoothing = 0.7
 
 local function computeElevation(graph, shores)
 
@@ -130,6 +132,7 @@ local function computeElevation(graph, shores)
 
 	for _,v in ipairs(shores) do
 		v.z = 0
+		v.gradient = gradients[v.kind]
 		table.insert(queue, v)
 	end
 
@@ -141,8 +144,16 @@ local function computeElevation(graph, shores)
 		for neigh in v.iter "n" do
 			local gradient = gradients[neigh.kind]
 			if gradient then
+
+				if neigh.kind ~= "lake" then
+					gradient = lerp(gradient, v.gradient, gradientSmoothing)
+				end
+
+				assert(gradient > 0)
+
 				local new = v.z + gradient
 				if not neigh.z or neigh.z > new then
+					neigh.gradient = gradient
 					neigh.z = new
 					queue[#queue + 1] = neigh
 				end
@@ -172,7 +183,8 @@ local function computeRiverFlow(graph, shores)
 
 		local lowest
 		for neighbour in center.iter "n" do
-			if neighbour.z and (not lowest or neighbour.z < lowest.z) then
+			if neighbour.z and neighbour.z < center.z 		-- It should acctually be downhill (avoid rivers along shores for ex.)
+				and (not lowest or neighbour.z < lowest.z) then
 				lowest = neighbour
 			end
 		end
@@ -348,7 +360,7 @@ local function main(args)
 	print("Marking shores")
 	local shores = markShores(graph)
 
-	print("Computing distance from shore")
+	print("Computing elevation")
 	local max = computeElevation(graph, shores)
 	print("Max dist", max)
 
