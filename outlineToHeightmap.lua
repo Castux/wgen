@@ -175,7 +175,7 @@ local function markShores(graph)
 	return shores
 end
 
-local function computeDistanceFromShore(graph, shores)
+local function computeElevation(graph, shores)
 
 	assert(#shores > 0)
 
@@ -183,25 +183,25 @@ local function computeDistanceFromShore(graph, shores)
 	local max = 0
 
 	for _,v in ipairs(shores) do
-		v.dist = 0
+		v.z = 0
 	end
 
 	local i = 1
 	while i <= #queue do
 		local v = queue[i]
-		max = math.max(max, v.dist)
+		max = math.max(max, v.z)
 
 		for neigh in v.iter "n" do
 
 			local new
 			if neigh.kind == "lake" then
-				new = v.dist + 0.001
+				new = v.z + 0.001
 			else
-				new = v.dist + 1
+				new = v.z + 1
 			end
 
-			if not neigh.dist or neigh.dist > new then
-				neigh.dist = new
+			if not neigh.z or neigh.z > new then
+				neigh.z = new
 				if neigh.kind ~= "out" then
 					queue[#queue + 1] = neigh
 				end
@@ -213,7 +213,7 @@ local function computeDistanceFromShore(graph, shores)
 
 	for center in graph.iter "ce" do
 		if center.kind == "water" then
-			center.dist = -center.dist
+			center.z = -center.z
 		end
 	end
 
@@ -229,7 +229,7 @@ local function computeRiverFlow(graph)
 
 		local lowest
 		for neighbour in center.iter "n" do
-			if not lowest or (neighbour.dist and neighbour.dist < lowest.dist) then
+			if not lowest or (neighbour.z and neighbour.z < lowest.z) then
 				lowest = neighbour
 			end
 		end
@@ -241,8 +241,8 @@ local function computeRiverFlow(graph)
 
 		else
 			print "===="
-			print(center.dist)
-			for _,n in ipairs(center.neighbours) do print(n.dist) end
+			print(center.z)
+			for _,n in ipairs(center.neighbours) do print(n.z) end
 		end
 
 		::skip::
@@ -295,7 +295,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 
 		if center.kind == "land" then
 
-			local f = (center.dist / maxDist)^2
+			local f = (center.z / maxDist)^2
 			color = svg.rgb(
 				lerp(84, 255, f),
 				lerp(169, 255, f),
@@ -307,7 +307,7 @@ local function output(graph, w, h, maxDist, resolution, path)
 			group = land
 
 		elseif center.kind == "water" then
-			local f = (-center.dist / maxDist)^0.25
+			local f = (-center.z / maxDist)^0.25
 			color = svg.rgb(
 				lerp(95, 0, f),
 				lerp(132, 10, f),
@@ -360,9 +360,9 @@ local function outputHeightmap(graph, w, h, path)
 
 	local lowest,highest = math.huge, -math.huge
 	for center in graph.iter "ce" do
-		if center.dist then
-			lowest = math.min(lowest, center.dist)
-			highest = math.max(highest, center.dist)
+		if center.z then
+			lowest = math.min(lowest, center.z)
+			highest = math.max(highest, center.z)
 		end
 	end
 
@@ -376,8 +376,8 @@ local function outputHeightmap(graph, w, h, path)
 		end
 
 		local d = 0
-		if center.dist then
-			d = (center.dist - lowest) / (highest - lowest) * 255
+		if center.z then
+			d = (center.z - lowest) / (highest - lowest) * 255
 			if center.shore then newSeaLevel = d end
 		end
 		local color = svg.rgb(d, d, d)
@@ -412,7 +412,7 @@ local function main(args)
 	local shores = markShores(graph)
 
 	print("Computing distance from shore")
-	local max = computeDistanceFromShore(graph, shores)
+	local max = computeElevation(graph, shores)
 	print("Max dist", max)
 
 	print("Generating rivers")

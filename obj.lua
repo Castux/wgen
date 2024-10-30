@@ -2,9 +2,9 @@ local function toFile(graph, path, width, height)
 
 	local lowest,highest = math.huge, -math.huge
 	for center in graph.iter "ce" do
-		if center.dist then
-			lowest = math.min(lowest, center.dist)
-			highest = math.max(highest, center.dist)
+		if center.z then
+			lowest = math.min(lowest, center.z)
+			highest = math.max(highest, center.z)
 		end
 	end
 
@@ -15,15 +15,15 @@ local function toFile(graph, path, width, height)
 	for center,id in graph.iter "ce" do
 		centerToIndex[center] = id
 
-		local y = 0
-		if center.dist then
-			y = (center.dist - lowest) / (highest - lowest) * 255
+		local z = 0
+		if center.z then
+			z = (center.z - lowest) / (highest - lowest) * 255
 			if center.shore then
-				seaLevel = y
+				seaLevel = z
 			end
 		end
 
-		local line = string.format("v %f %f %f", center.x, y, center.y)
+		local line = string.format("v %f %f %f", center.x, z, center.y)
 		table.insert(lines, line)
 	end
 
@@ -37,7 +37,7 @@ local function toFile(graph, path, width, height)
 		local ids = {}
 		local out = false
 		for center in corner.iter "c" do
-			table.insert(ids, 1, centerToIndex[center])		-- reverse order, we're using opposite clockwiseness
+			table.insert(ids, 1, centerToIndex[center])		-- reverse order, OBJ wants counter-clockwise
 			if center.kind == "out" then
 				out = true
 			end
