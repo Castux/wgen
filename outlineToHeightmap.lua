@@ -122,11 +122,12 @@ local function computeElevation(graph, shores)
 
 	assert(#shores > 0)
 
-	local queue = shores
+	local queue = {}
 	local max = 0
 
 	for _,v in ipairs(shores) do
 		v.z = 0
+		table.insert(queue, v)
 	end
 
 	local i = 1
@@ -157,7 +158,9 @@ local function computeElevation(graph, shores)
 	return max
 end
 
-local function computeRiverFlow(graph)
+local function computeRiverFlow(graph, shores)
+
+	-- Find the steepest downhill from every point
 
 	for center in graph.iter "ce" do
 		if not center.z then
@@ -175,13 +178,12 @@ local function computeRiverFlow(graph)
 			center.downhill = lowest
 			lowest.uphill = lowest.uphill or {}
 			table.insert(lowest.uphill, center)
-
-		else
-			error("Didn't find lowest neighbour")
 		end
 
 		::skip::
 	end
+
+	-- Go up from the shores to compute flows
 
 	local function rec(center)
 
@@ -199,10 +201,8 @@ local function computeRiverFlow(graph)
 		return center.flow
 	end
 
-	for center in graph.iter "ce" do
-		if center.shore then
-			rec(center)
-		end
+	for _,center in ipairs(shores) do
+		rec(center)
 	end
 end
 
@@ -321,7 +321,7 @@ local function outputHeightmap(graph, w, h, path)
 		doc:add(svg.Polygon(coords, {fill = color, stroke = color}))
 	end
 
-	print(string.format("Scaled [%d,%d] to [0,255]. Sea level %.2f.", lowest, highest, newSeaLevel))
+	print(string.format("Scaled [%f,%f] to [0,255]. Sea level %.2f.", lowest, highest, newSeaLevel))
 
 	doc:writeTo(path)
 end
@@ -350,7 +350,7 @@ local function main(args)
 	print("Max dist", max)
 
 	print("Generating rivers")
-	computeRiverFlow(graph)
+	computeRiverFlow(graph, shores)
 
 	print("Outputing")
 
