@@ -24,7 +24,7 @@ class Edge
 		this.from = from;
 	}
 
-	Point to()
+	Point to() const
 	{
 		return next.from;
 	}
@@ -33,6 +33,28 @@ class Edge
 	{
 		rev = other;
 		other.rev = this;
+	}
+
+	Edge[] triangle()
+	{
+		return [this, this.next, this.next.next];
+	}
+
+	Edge[] orbit()
+	{
+		Edge[] orbit;
+
+		auto current = this;
+		do
+		{
+			orbit ~= current;
+
+			current = current.rev ?
+				current.rev.next :		// Normal case
+				current.hullPrev.next;	// Hull case
+		} while (current !is this);
+
+		return orbit;
 	}
 
 	struct Pair
@@ -140,8 +162,6 @@ private void checkDelaunayCondition(Edge e)
 
 		checkDelaunayCondition(o1);
 		checkDelaunayCondition(o2);
-		checkDelaunayCondition(o3);
-		checkDelaunayCondition(o4);
 	}
 }
 
@@ -290,16 +310,15 @@ struct Triangulation
 
 	private Edge newTriOnTwoEdges(Edge left, Edge right)
 	{
-		// Occasionally, the hull has collinear points, which don't
-		// Register as "clockwise", but are already correctly convex
-		Triangle tri;
-		try
-			tri = Triangle(right.to, left.to, left.from);
-		catch(Exception e)
+		auto p1 = right.to;
+		auto p2 = left.to;
+		auto p3 = left.from;
+
+		if (!clockwise(p1, p2, p3))
 			return null;
 
 		// e1 and e2 rest against right and left, e3 is the new one
-		with (tri)
+		with (Triangle(p1, p2, p3))
 		{
 			e1.link(right);
 			e2.link(left);

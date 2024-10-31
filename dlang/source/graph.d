@@ -67,7 +67,7 @@ class Graph
 			if (he in cornerMap)
 				continue;
 
-			auto hedges = [he, he.next, he.next.next];
+			auto hedges = he.triangle;
 			Point c = circumcenter(hedges[0].from, hedges[1].from, hedges[2].from);
 			Corner corner = new Corner(c);
 
@@ -89,43 +89,22 @@ class Graph
 			if (he in centerMap)
 				continue;
 
-			// Find all the halfedges coming from the same point
-			HalfEdge[] hedges;
-			auto current = he;
+			auto orbit = he.orbit;
 
-			// Get to the last edge (if on the hull, there is one)
-			while (current.rev)
+			// On the hull, we need to also add the one edge that doesn't come
+			// out of this node
+			foreach(h; orbit)
 			{
-				current = current.rev.next;
-				if (current is he)
-					break;
-			}
-
-			// Traverse the other way
-			auto start = current;
-			while (current)
-			{
-				hedges ~= current;
-				auto tmp = current.next.next;
-
-				if (!tmp.rev)
+				if (!h.rev)
 				{
-					// This half edge (coming into the center) is on the hull
-					// so it doesn't have a coming out counterpart.
-					// We still want to register its full edge
-					hedges ~= tmp;
+					orbit ~= h.hullPrev;
 					break;
 				}
-
-				current = tmp.rev;
-
-				if (current is start)
-					break;
 			}
 
 			Center center = new Center(he.from);
 
-			foreach(hedge; hedges)
+			foreach(hedge; orbit)
 			{
 				centerMap[hedge] = center;
 
