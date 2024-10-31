@@ -91,26 +91,35 @@ class Graph
 			// Find all the halfedges coming from the same point
 			HalfEdge[] hedges;
 			auto current = he;
-			do
+
+			// Get to the last edge (if on the hull, there is one)
+			while (current.rev)
+			{
+				current = current.rev.next;
+				if (current is he)
+					break;
+			}
+
+			// Traverse the other way
+			auto start = current;
+			while (current)
 			{
 				hedges ~= current;
-				current = current.rev ? current.rev.next : null;
+				auto tmp = current.next.next;
 
-			} while (current && current !is he);
-
-			if (current is null)
-			{
-				// If the vertex is on the hull (we broke because no rev)
-				// We have to loop the other way too
-
-				current = he;
-				while (true)
+				if (!tmp.rev)
 				{
-					current = current.next.next.rev;
-					if (!current)
-						break;
-					hedges ~= current;
+					// This half edge (coming into the center) is on the hull
+					// so it doesn't have a coming out counterpart.
+					// We still want to register its full edge
+					hedges ~= tmp;
+					break;
 				}
+
+				current = tmp.rev;
+
+				if (current is start)
+					break;
 			}
 
 			Center center = new Center(he.from);
@@ -129,14 +138,13 @@ class Graph
 
 		foreach(edge; edges)
 		{
-			if (edge.centers.length == 2)
-			{
-				auto c1 = edge.centers[0];
-				auto c2 = edge.centers[1];
+			assert(edge.centers.length == 2);
 
-				c1.neighbours ~= c2;
-				c2.neighbours ~= c1;
-			}
+			auto c1 = edge.centers[0];
+			auto c2 = edge.centers[1];
+
+			c1.neighbours ~= c2;
+			c2.neighbours ~= c1;
 
 			if (edge.corners.length == 2)
 			{

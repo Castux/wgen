@@ -29,7 +29,7 @@ void draw(Point[] points, delaunator.Edge[] edges)
 			.addToCanvas(svg);
 	}
 
-	svg.save("out.svg");
+	svg.save("out1.svg");
 }
 
 void draw(Graph g)
@@ -77,7 +77,7 @@ void draw(Graph g)
 			.addToCanvas(svg);
 	}
 
-	svg.save("out.svg");
+	svg.save("out2.svg");
 }
 
 void main()
@@ -88,6 +88,7 @@ void main()
 		points ~= Point(uniform(0.0, 1000.0), uniform(0.0, 1000.0));
 
 	auto mesh = Triangulation(points);
+	draw(points, mesh.edges);
 
 	auto g = new Graph(mesh.edges);
 	writeln(g.edges.length);
