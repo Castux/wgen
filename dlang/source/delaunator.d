@@ -4,6 +4,8 @@ import std.algorithm;
 
 public import geom;
 
+const EPSILON = pow(2, -52);
+
 private double pseudoAngle(const(Point) p) pure
 {
 	auto a = p.x / (abs(p.x) + abs(p.y));
@@ -211,6 +213,9 @@ struct Triangulation
 		if (!clockwise(p1, p2, p3))
 			swap(p2, p3);
 
+		if (!clockwise(p1, p2, p3))
+			throw new Exception("Cannot triangulate");
+
 		Triangle centerTri = Triangle(p1, p2, p3);
 
 		edges = [centerTri.e1, centerTri.e2, centerTri.e3];
@@ -225,17 +230,24 @@ struct Triangulation
 		hashAdd(centerTri.e2);
 		hashAdd(centerTri.e3);
 
-		// Sort the points by distance to the center triangle
+		// Sort the points by distance to the center triangle's circumcenter
 
-		center = (p1 + p2 + p3) / 3;
+		center = circumcenter(p1, p2, p3);
 		points.sort!((a,b) => a.sqdist(center) < b.sqdist(center));
 
 		// Add points one by one from the center out
 
 		foreach(i,p; points)
 		{
-			if (p != p1 && p != p2 && p != p3)
-				processPoint(p);
+			// Skip the points we added already
+			if (p == p1 || p == p2 || p == p3)
+				continue;
+
+			// Skip near identical to previous point
+			if (i > 0 && abs(p.x - points[i-1].x) <= EPSILON && abs(p.y - points[i-1].y) <= EPSILON)
+				continue;
+
+			processPoint(p);
 		}
 	}
 
@@ -255,38 +267,26 @@ struct Triangulation
 			}
 		}
 
-		if (!startEdge)
-		{
-			ignored ~= p;
-			return;
-		}
-
 		assert(startEdge.hullNext && startEdge.hullPrev);
 		startEdge = startEdge.hullPrev;
 
-		Edge found;
 		Edge current = startEdge;
-		do
-		{
-			if (clockwise(p, current.to, current.from))
-			{
-				found = current;
-				break;
-			}
-			current = current.hullNext;
-		} while (current !is startEdge);
 
-		if (!found)
+		while (!clockwise(p, current.to, current.from))
 		{
-			ignored ~= p;
-			return;
+			current = current.hullNext;
+			if (current is startEdge)
+			{
+				// Likely a near-duplicate point; skip it
+				ignored ~= p;
+				return;
+			}
 		}
 
 		// Create new triangle on that edge
-		with (newTriOnEdge(p, found))
+		with (newTriOnEdge(p, current))
 		{
 			assert(right && left);
-
 			fixHull!"right"(right);
 			fixHull!"left"(left);
 		}
