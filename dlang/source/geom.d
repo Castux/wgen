@@ -26,6 +26,20 @@ struct Point
 
 	}
 
+	int opCmp(ref const Point p) const
+	{
+		if (x < p.x)
+			return -1;
+
+		if (y < p.y)
+			return -1;
+
+		if (y == p.y)
+			return 0;
+
+		return 1;
+	}
+
 	double dot(const(Point) other) const
 	{
 		return x*other.x + y*other.y;

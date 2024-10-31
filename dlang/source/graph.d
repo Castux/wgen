@@ -41,11 +41,12 @@ class Corner
 class Graph
 {
 	Center[] centers;
-	Edge[] edges;
 	Corner[] corners;
 
 	this(HalfEdge[] halfEdges)
 	{
+		Edge[] edges;
+
 		Edge[HalfEdge] edgeMap;
 		foreach(he; halfEdges)
 		{
