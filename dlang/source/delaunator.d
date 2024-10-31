@@ -4,31 +4,6 @@ import std.algorithm;
 
 public import geom;
 
-private bool clockwise(Point a, Point b, Point c)
-{
-	return (b - a).cross(c - a) > 0;
-//	return (b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y) > 0;
-}
-
-private bool inCircle(Point a, Point b, Point c, Point p)
-{
-	auto dx = a.x - p.x;
-	auto dy = a.y - p.y;
-	auto ex = b.x - p.x;
-	auto ey = b.y - p.y;
-	auto fx = c.x - p.x;
-	auto fy = c.y - p.y;
-
-	auto ap = dx * dx + dy * dy;
-	auto bp = ex * ex + ey * ey;
-	auto cp = fx * fx + fy * fy;
-
-	return dx * (ey * cp - bp * fy) -
-		   dy * (ex * cp - bp * fx) +
-		   ap * (ex * fy - ey * fx) > 0;
-
-}
-
 private double pseudoAngle(const(Point) p) pure
 {
 	auto a = p.x / (abs(p.x) + abs(p.y));
@@ -42,7 +17,7 @@ class Edge
 
 	Edge next;		// The next edge in this triangle
 	Edge hullNext;	// Next edge in the hull, if this is in the hull
-	Edge hullPrev;	// Next edge in the hull, if this is in the hull
+	Edge hullPrev;	// Previous edge in the hull, if this is in the hull
 
 	this(Point from)
 	{

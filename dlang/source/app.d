@@ -3,8 +3,9 @@ import std.random;
 import std.algorithm;
 
 import delaunator;
+import graph;
 
-void draw(Point[] points, Edge[] edges)
+void draw(Point[] points, delaunator.Edge[] edges)
 {
 	import canvas;
 	import std.math;
@@ -35,7 +36,7 @@ void main()
 {
 	Point[] points;
 
-	foreach(i; 0..1000000)
+	foreach(i; 0..1000)
 		points ~= Point(uniform(0.0, 1000.0), uniform(0.0, 1000.0));
 
 	auto mesh = Triangulation(points);
@@ -44,4 +45,8 @@ void main()
 	writeln(mesh.edges.length);
 	writeln(mesh.ignored.length);
 	//draw(points, mesh.edges);
+
+	auto g = new Graph(mesh.edges);
+	writeln(g.edges.length);
+	writeln(g.centers.length);
 }
