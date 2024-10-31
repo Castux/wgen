@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"Noé Falzon"
+	],
+	"copyright": "Copyright © 2024, Noé Falzon",
+	"description": "A minimal D application.",
+	"license": "MIT",
+	"name": "wgen"
+}
