@@ -37,7 +37,15 @@ class Edge
 
 	Edge[] triangle()
 	{
-		return [this, this.next, this.next.next];
+		Edge[] edges;
+		Edge current = this;
+		do
+		{
+			edges ~= current;
+			current = current.next;
+		} while (current !is this);
+
+		return edges;
 	}
 
 	Edge[] orbit()
@@ -192,9 +200,13 @@ struct Triangulation
 		// Build the first triangle somewhere close to the center of the points
 
 		Point c = points.fold!((a,b) => a + b) / points.length;
+
+		// The two closest ones to the center
 		Point p1 = points.minElement!(a => a.sqdist(c));
 		Point p2 = points.minElement!(a => (a == p1) ? double.infinity : a.sqdist(c));
-		Point p3 = points.minElement!(a => (a == p1 || a == p2) ? double.infinity : a.sqdist(c));
+
+		// And the one other that forms the smallest circumcircle with them
+		Point p3 = points.minElement!(a => (a == p1 || a == p2) ? double.infinity : circumradius(p1, p2, a));
 
 		if (!clockwise(p1, p2, p3))
 			swap(p2, p3);

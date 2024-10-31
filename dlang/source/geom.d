@@ -130,3 +130,20 @@ Point circumcenter(Point a, Point b, Point c)
 
 	return Point(x, y);
 }
+
+double circumradius(Point a, Point b, Point c)
+{
+	auto dx = b.x - a.x;
+	auto dy = b.y - a.y;
+	auto ex = c.x - a.x;
+	auto ey = c.y - a.y;
+
+	auto bl = dx * dx + dy * dy;
+	auto cl = ex * ex + ey * ey;
+	auto d = 0.5 / (dx * ey - dy * ex);
+
+	auto x = (ey * bl - dy * cl) * d;
+	auto y = (dx * cl - ex * bl) * d;
+
+	return x * x + y * y;
+}

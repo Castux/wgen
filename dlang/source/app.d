@@ -1,87 +1,55 @@
 import std.stdio;
 import std.random;
 import std.algorithm;
+import std.array;
 
 import delaunator;
 import graph;
 
 void draw(Point[] points, delaunator.Edge[] edges)
 {
-	import canvas;
-	import std.math;
-	import std.conv;
+	import std.format;
 
-	auto svg = SVGCanvas(1000,1000);
+	string[] lines;
+
+	lines ~= `<svg width='1000' height='1000' viewBox='0 0 1000 1000' xmlns='http://www.w3.org/2000/svg' version='1.1' xmlns:xlink='http://www.w3.org/1999/xlink'>`;
 
 	foreach(point; points)
-	{
-		new Circle(cast(int) floor(point.x), cast(int) floor(point.y), 3)
-			.setFillColor(Colors.blue)
-			.setStrokeWidth(0)
-			.addToCanvas(svg);
-	}
+		lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="black" />`, point.x, point.y, 2);
 
 	foreach(edge; edges)
 	{
-		new Polyline([edge.from.x, edge.from.y, edge.to.x, edge.to.y].to!(int[]))
-			.setStrokeWidth(1)
-			.setStrokeColor(Colors.black)
-			.addToCanvas(svg);
+		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+			edge.from.x, edge.from.y,
+			edge.to.x, edge.to.y);
 	}
 
-	svg.save("out1.svg");
+	lines ~= "</svg>";
+
+	toFile(lines.join("\n"), "out1.svg");
 }
 
 void draw(Graph g)
 {
-	import canvas;
-	import std.math;
-	import std.conv;
+	import std.format;
 
-	auto svg = SVGCanvas(1000,1000);
+	string[] lines;
+
+	lines ~= `<svg width='1000' height='1000' viewBox='0 0 1000 1000' xmlns='http://www.w3.org/2000/svg' version='1.1' xmlns:xlink='http://www.w3.org/1999/xlink'>`;
 
 	foreach(center; g.centers)
 	{
-		new Circle(cast(int) floor(center.x), cast(int) floor(center.y), 3)
-			.setFillColor(Colors.blue)
-			.setStrokeWidth(0)
-			.addToCanvas(svg);
+		lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="black" />`, center.x, center.y, 2);
 
 		foreach(n; center.neighbours)
-		{
-			if (center.p >= n.p) continue;
-			new Line(
-				cast(int) floor(center.x), cast(int) floor(center.y),
-				cast(int) floor(n.x), cast(int) floor(n.y)
-				)
-				.setStrokeColor(Colors.gray)
-				.setStrokeWidth(1)
-				.addToCanvas(svg);
-		}
+			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+				center.x, center.y,
+				n.x, n.y);
 	}
 
-	foreach(corner; g.corners)
-	{
-		new Circle(cast(int) floor(corner.x), cast(int) floor(corner.y), 3)
-			.setFillColor(Colors.red)
-			.setStrokeWidth(0)
-			.addToCanvas(svg);
+	lines ~= "</svg>";
 
-		foreach(n; corner.neighbours)
-		{
-			if (corner.p >= n.p) continue;
-
-			new Line(
-				cast(int) floor(corner.x), cast(int) floor(corner.y),
-				cast(int) floor(n.x), cast(int) floor(n.y)
-				)
-				.setStrokeColor(Colors.orange)
-				.setStrokeWidth(1)
-				.addToCanvas(svg);
-		}
-	}
-
-	svg.save("out2.svg");
+	toFile(lines.join("\n"), "out2.svg");
 }
 
 void main()
@@ -90,7 +58,7 @@ void main()
 
 	while(points.length < 1000)
 	{
-		auto p = Point(uniform(0.0, 1000.0), uniform(0.0, 1000.0));
+		auto p = Point(uniform(10.0, 990.0), uniform(10.0, 990.0));
 		if (p.dist(Point(500, 500)) < 480)
 			points ~= p;
 	}
@@ -98,6 +66,8 @@ void main()
 	auto mesh = Triangulation(points);
 	writeln("Ignored ", mesh.ignored.length);
 	draw(points, mesh.edges);
+
+	writeln(mesh.edges.all!(e => e.triangle.length == 3));
 
 	auto g = new Graph(mesh.edges);
 	writeln(g.corners.length);
