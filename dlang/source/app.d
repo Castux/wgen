@@ -35,13 +35,13 @@ void main()
 {
 	Point[] points;
 
-	foreach(i; 0..500)
-		points ~= Point(uniform(0,1000), uniform(0,1000));
+	foreach(i; 0..1000000)
+		points ~= Point(uniform(0.0, 1000.0), uniform(0.0, 1000.0));
 
 	auto mesh = Triangulation(points);
 	//writeln(mesh.edges.map!"a.from");
 	//writeln(mesh.ignored);
 	writeln(mesh.edges.length);
-
-	draw(points, mesh.edges);
+	writeln(mesh.ignored.length);
+	//draw(points, mesh.edges);
 }

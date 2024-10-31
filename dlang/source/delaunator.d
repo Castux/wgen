@@ -104,6 +104,9 @@ private Edge.Pair hullRemove(Edge e)
 	prev.hullNext = next;
 	next.hullPrev = prev;
 
+	e.hullNext = null;
+	e.hullPrev = null;
+
 	return Edge.Pair(prev, next);
 }
 
@@ -186,15 +189,11 @@ struct Triangulation
 		hash[hashKey(e.from)] = e;
 	}
 
-	void hashRemove(Edge e)
-	{
-		auto key = hashKey(e.from);
-		if (hash[key] is e)
-			hash[key] = null;
-	}
-
 	this(Point[] points)
 	{
+		if (points.length < 3)
+			throw new Exception("Cannot triangulate fewer than 3 points");
+
 		// Build the first triangle somewhere close to the center of the points
 
 		Point c = points.fold!((a,b) => a + b) / points.length;
@@ -228,9 +227,6 @@ struct Triangulation
 
 		foreach(i,p; points)
 		{
-			// if (i == 10)
-			// 	break;
-
 			if (p != p1 && p != p2 && p != p3)
 				processPoint(p);
 		}
@@ -244,10 +240,21 @@ struct Triangulation
 		Edge startEdge;
 		foreach(i; 0 .. hashSize)
 		{
-			startEdge = hash[(hashKey(p) + i) % hashSize];
-			if (startEdge)
+			auto e = hash[(hashKey(p) + i) % hashSize];
+			if (e !is null && e.rev is null)
+			{
+				startEdge = e;
 				break;
+			}
 		}
+
+		if (!startEdge)
+		{
+			ignored ~= p;
+			return;
+		}
+
+		assert(startEdge.hullNext && startEdge.hullPrev);
 		startEdge = startEdge.hullPrev;
 
 		Edge found;
@@ -295,7 +302,6 @@ struct Triangulation
 				hullInsert(e3, e2, right);
 			}
 
-			hashRemove(edge);
 			hashAdd(e2);
 			hashAdd(e3);
 
@@ -333,8 +339,6 @@ struct Triangulation
 			auto pair = hullRemove(right);
 			hullInsert(e3, pair.left, pair.right);
 
-			hashRemove(left);
-			hashRemove(right);
 			hashAdd(e3);
 
 			checkDelaunayCondition(e1);
@@ -351,9 +355,7 @@ struct Triangulation
 		while (current)
 		{
 			static if (direction == "left")
-			{
 				current = current.hullPrev;
-			}
 
 			if (clockwise(current.from, current.to, current.hullNext.to))
 				break;
