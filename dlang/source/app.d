@@ -32,21 +32,67 @@ void draw(Point[] points, delaunator.Edge[] edges)
 	svg.save("out.svg");
 }
 
+void draw(Graph g)
+{
+	import canvas;
+	import std.math;
+	import std.conv;
+
+	auto svg = SVGCanvas(1000,1000);
+
+	foreach(center; g.centers)
+	{
+		new Circle(cast(int) floor(center.x), cast(int) floor(center.y), 3)
+			.setFillColor(Colors.blue)
+			.setStrokeWidth(0)
+			.addToCanvas(svg);
+	}
+
+	foreach(corner; g.corners)
+	{
+		new Circle(cast(int) floor(corner.x), cast(int) floor(corner.y), 3)
+			.setFillColor(Colors.red)
+			.setStrokeWidth(0)
+			.addToCanvas(svg);
+	}
+
+	foreach(edge; g.edges)
+	{
+		if (edge.corners.length == 2)
+		new Line(
+			cast(int) floor(edge.corners[0].x), cast(int) floor(edge.corners[0].y),
+			cast(int) floor(edge.corners[1].x), cast(int) floor(edge.corners[1].y)
+			)
+			.setStrokeColor(Colors.yellow)
+			.setStrokeWidth(1)
+			.addToCanvas(svg);
+
+		if (edge.centers.length == 2)
+		new Line(
+			cast(int) floor(edge.centers[0].x), cast(int) floor(edge.centers[0].y),
+			cast(int) floor(edge.centers[1].x), cast(int) floor(edge.centers[1].y)
+			)
+			.setStrokeColor(Colors.orange)
+			.setStrokeWidth(1)
+			.addToCanvas(svg);
+	}
+
+	svg.save("out.svg");
+}
+
 void main()
 {
 	Point[] points;
 
-	foreach(i; 0..1000)
+	foreach(i; 0..100)
 		points ~= Point(uniform(0.0, 1000.0), uniform(0.0, 1000.0));
 
 	auto mesh = Triangulation(points);
-	//writeln(mesh.edges.map!"a.from");
-	//writeln(mesh.ignored);
-	writeln(mesh.edges.length);
-	writeln(mesh.ignored.length);
-	//draw(points, mesh.edges);
 
 	auto g = new Graph(mesh.edges);
 	writeln(g.edges.length);
+	writeln(g.corners.length);
 	writeln(g.centers.length);
+
+	draw(g);
 }

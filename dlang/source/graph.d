@@ -60,37 +60,93 @@ class Graph
 			edges ~= edge;
 		}
 
+		Corner[HalfEdge] cornerMap;
+		foreach(he; halfEdges)
+		{
+			if (he in cornerMap)
+				continue;
+
+			auto hedges = [he, he.next, he.next.next];
+			Point c = circumcenter(hedges[0].from, hedges[1].from, hedges[2].from);
+			Corner corner = new Corner(c);
+
+			foreach(hedge; hedges)
+			{
+				cornerMap[hedge] = corner;
+
+				auto e = edgeMap[hedge];
+				corner.edges ~= e;
+				e.corners ~= corner;
+			}
+
+			corners ~= corner;
+		}
+
 		Center[HalfEdge] centerMap;
 		foreach(he; halfEdges)
 		{
 			if (he in centerMap)
 				continue;
 
-			auto he1 = he;
-			auto he2 = he1.next;
-			auto he3 = he2.next;
+			// Find all the halfedges coming from the same point
+			HalfEdge[] hedges;
+			auto current = he;
+			do
+			{
+				hedges ~= current;
+				current = current.rev ? current.rev.next : null;
 
-			Point c = circumcenter(he1.from, he2.from, he3.from);
-			Center center = new Center(c);
+			} while (current && current !is he);
 
-			centerMap[he1] = center;
-			centerMap[he2] = center;
-			centerMap[he3] = center;
+			if (current is null)
+			{
+				// If the vertex is on the hull (we broke because no rev)
+				// We have to loop the other way too
 
-			auto e1 = edgeMap[he1];
-			auto e2 = edgeMap[he2];
-			auto e3 = edgeMap[he3];
+				current = he;
+				while (true)
+				{
+					current = current.next.next.rev;
+					if (!current)
+						break;
+					hedges ~= current;
+				}
+			}
 
-			center.edges ~= e1;
-			center.edges ~= e2;
-			center.edges ~= e3;
+			Center center = new Center(he.from);
 
-			e1.centers ~= center;
-			e2.centers ~= center;
-			e3.centers ~= center;
+			foreach(hedge; hedges)
+			{
+				centerMap[hedge] = center;
+
+				auto e = edgeMap[hedge];
+				e.centers ~= center;
+				center.edges ~= e;
+			}
 
 			centers ~= center;
 		}
 
+		foreach(edge; edges)
+		{
+			if (edge.centers.length == 2)
+			{
+				auto c1 = edge.centers[0];
+				auto c2 = edge.centers[1];
+
+				c1.neighbours ~= c2;
+				c2.neighbours ~= c1;
+			}
+
+			if (edge.corners.length == 2)
+			{
+				auto co1 = edge.corners[0];
+				auto co2 = edge.corners[1];
+
+				co1.neighbours ~= co2;
+				co2.neighbours ~= co1;
+			}
+
+		}
 	}
 }
