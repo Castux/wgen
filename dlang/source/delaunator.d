@@ -29,6 +29,12 @@ private bool inCircle(Point a, Point b, Point c, Point p)
 
 }
 
+private double pseudoAngle(const(Point) p) pure
+{
+	auto a = p.x / (abs(p.x) + abs(p.y));
+	return (p.y > 0 ? 3 - a : 1 + a) / 4;
+}
+
 class Edge
 {
 	Point from;
@@ -53,13 +59,18 @@ class Edge
 		rev = other;
 		other.rev = this;
 	}
+
+	struct Pair
+	{
+		Edge left, right;
+	}
 }
 
 private struct Triangle
 {
 	Edge e1, e2, e3;
 
-	this(Point p1, Point p2, Point p3, Edge rev1 = null, Edge rev2 = null, Edge rev3 = null)
+	this(Point p1, Point p2, Point p3)
 	{
 		if (!clockwise(p1, p2, p3))
 			throw new Exception("Non clockwise triangle");
@@ -71,25 +82,21 @@ private struct Triangle
 		e1.next = e2;
 		e2.next = e3;
 		e3.next = e1;
-
-		if (rev1) e1.link(rev1);
-		if (rev2) e2.link(rev2);
-		if (rev3) e3.link(rev3);
-	}
-
-	void setInitialHull()
-	{
-		e1.hullNext = e2;
-		e2.hullNext = e3;
-		e3.hullNext = e1;
-
-		e1.hullPrev = e3;
-		e2.hullPrev = e1;
-		e3.hullPrev = e2;
 	}
 }
 
-private Tuple!(Edge,Edge) hullRemove(Edge e)
+private void setInitialHull(Triangle t)
+{
+	t.e1.hullNext = t.e2;
+	t.e2.hullNext = t.e3;
+	t.e3.hullNext = t.e1;
+
+	t.e1.hullPrev = t.e3;
+	t.e2.hullPrev = t.e1;
+	t.e3.hullPrev = t.e2;
+}
+
+private Edge.Pair hullRemove(Edge e)
 {
 	auto next = e.hullNext;
 	auto prev = e.hullPrev;
@@ -97,7 +104,7 @@ private Tuple!(Edge,Edge) hullRemove(Edge e)
 	prev.hullNext = next;
 	next.hullPrev = prev;
 
-	return tuple(prev, next);
+	return Edge.Pair(prev, next);
 }
 
 private void hullInsert(Edge e, Edge left, Edge right)
@@ -163,16 +170,37 @@ private void checkDelaunayCondition(Edge e)
 struct Triangulation
 {
 	Edge[] edges;
+	Point[] ignored;
 
-	Edge[] hash;
-	int hashSize;
+	private const(Point) center;
+	private Edge[] hash;
+	private const(int) hashSize;
+
+	int hashKey(const(Point) p) const pure
+	{
+		return cast(int) floor(pseudoAngle(p - center) * (hashSize - 1)) % hashSize;
+	}
+
+	void hashAdd(Edge e)
+	{
+		hash[hashKey(e.from)] = e;
+	}
+
+	void hashRemove(Edge e)
+	{
+		auto key = hashKey(e.from);
+		if (hash[key] is e)
+			hash[key] = null;
+	}
 
 	this(Point[] points)
 	{
-		Point center = points.fold!((a,b) => a + b) / points.length;
-		Point p1 = points.minElement!(a => (a - center).sqlen);
-		Point p2 = points.minElement!(a => (a == p1) ? double.infinity : (a - center).sqlen);
-		Point p3 = points.minElement!(a => (a == p1 || a == p2) ? double.infinity : (a - center).sqlen);
+		// Build the first triangle somewhere close to the center of the points
+
+		Point c = points.fold!((a,b) => a + b) / points.length;
+		Point p1 = points.minElement!(a => a.sqdist(c));
+		Point p2 = points.minElement!(a => (a == p1) ? double.infinity : a.sqdist(c));
+		Point p3 = points.minElement!(a => (a == p1 || a == p2) ? double.infinity : a.sqdist(c));
 
 		if (!clockwise(p1, p2, p3))
 			swap(p2, p3);
@@ -180,5 +208,157 @@ struct Triangulation
 		Triangle centerTri = Triangle(p1, p2, p3);
 
 		edges = [centerTri.e1, centerTri.e2, centerTri.e3];
+
+		// Initialize the hull to be these three edges
+
+		hashSize = cast(int) ceil(sqrt(cast(double) points.length));
+		hash = new Edge[hashSize];
+
+		setInitialHull(centerTri);
+		hashAdd(centerTri.e1);
+		hashAdd(centerTri.e2);
+		hashAdd(centerTri.e3);
+
+		// Sort the points by distance to the center triangle
+
+		center = (p1 + p2 + p3) / 3;
+		points.sort!((a,b) => a.sqdist(center) < b.sqdist(center));
+
+		// Add points one by one from the center out
+
+		foreach(i,p; points)
+		{
+			// if (i == 10)
+			// 	break;
+
+			if (p != p1 && p != p2 && p != p3)
+				processPoint(p);
+		}
+	}
+
+	private void processPoint(Point p)
+	{
+		// Find any hull edge we're on the correct side of
+		// Use the hash for a good starting guess
+
+		Edge startEdge;
+		foreach(i; 0 .. hashSize)
+		{
+			startEdge = hash[(hashKey(p) + i) % hashSize];
+			if (startEdge)
+				break;
+		}
+		startEdge = startEdge.hullPrev;
+
+		Edge found;
+		Edge current = startEdge;
+		do
+		{
+			if (clockwise(p, current.to, current.from))
+			{
+				found = current;
+				break;
+			}
+			current = current.hullNext;
+		} while (current !is startEdge);
+
+		if (!found)
+		{
+			ignored ~= p;
+			return;
+		}
+
+		// Create new triangle on that edge
+		with (newTriOnEdge(p, found))
+		{
+			assert(right && left);
+
+			fixHull!"right"(right);
+			fixHull!"left"(left);
+		}
+	}
+
+	private Edge.Pair newTriOnEdge(Point p, Edge edge)
+	{
+		// e1 is against the existing edge, e2 and e3 are the new ones
+		with (Triangle(edge.to, edge.from, p))
+		{
+			e1.link(edge);
+
+			edges ~= e1;
+			edges ~= e2;
+			edges ~= e3;
+
+			with (hullRemove(edge))
+			{
+				hullInsert(e2, left, right);
+				hullInsert(e3, e2, right);
+			}
+
+			hashRemove(edge);
+			hashAdd(e2);
+			hashAdd(e3);
+
+			checkDelaunayCondition(e1);
+
+			return Edge.Pair(e2, e3);
+		}
+	}
+
+	// Make a new triangle from two border edges that form a concavity
+
+	private Edge newTriOnTwoEdges(Edge left, Edge right)
+	{
+		// Occasionally, the hull has collinear points, which don't
+		// Register as "clockwise", but are already correctly convex
+		Triangle tri;
+		try
+			tri = Triangle(right.to, left.to, left.from);
+		catch(Exception e)
+			return null;
+
+		// e1 and e2 rest against right and left, e3 is the new one
+		with (tri)
+		{
+			e1.link(right);
+			e2.link(left);
+
+			edges ~= e1;
+			edges ~= e2;
+			edges ~= e3;
+
+			// Replace two border edges with the new one
+
+			hullRemove(left);
+			auto pair = hullRemove(right);
+			hullInsert(e3, pair.left, pair.right);
+
+			hashRemove(left);
+			hashRemove(right);
+			hashAdd(e3);
+
+			checkDelaunayCondition(e1);
+			checkDelaunayCondition(e2);
+
+			return e3;
+		}
+	}
+
+	private void fixHull(string direction)(Edge edge)
+	{
+		Edge current = edge;
+
+		while (current)
+		{
+			static if (direction == "left")
+			{
+				current = current.hullPrev;
+			}
+
+			if (clockwise(current.from, current.to, current.hullNext.to))
+				break;
+
+			current = newTriOnTwoEdges(current, current.hullNext);
+		}
 	}
 }
