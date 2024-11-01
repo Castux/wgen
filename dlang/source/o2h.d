@@ -30,6 +30,8 @@ void draw(Map g, int i)
 			if (center.terrain == terrain)
 				col = "rgb(%d,%d,%d)".format(pixel.r, pixel.g, pixel.b);
 		}
+		if (center.shore)
+			col = "yellow";
 
 		lines ~= format(`<polygon points="%s" fill="%s" />`, s, col);
 	}
@@ -73,11 +75,6 @@ void main(string[] args)
 	auto resolution = args[2].to!int;
 
 	Map map = new Map(path, resolution);
-	map.relaxGraph();
-
-	map.assignTerrainTypes();
-
-
 	draw(map, 0);
 	//
 	// writeln("Loading " ~ path);

@@ -42,6 +42,7 @@ const Terrain[Pixel] colors =
 class Center : CenterBase!(Center, Edge, Corner)
 {
 	Terrain terrain;
+	bool shore;
 
 	this(Point p)
 	{
@@ -73,6 +74,8 @@ class Map : Graph!(Center, Edge, Corner)
 	int height;
 	int resolution;
 
+	Center[] shores;
+
 	this(string path, int resolution)
 	{
 		outline.loadFromFile(path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
@@ -83,12 +86,40 @@ class Map : Graph!(Center, Edge, Corner)
 		this.height = outline.height;
 		this.resolution = resolution;
 
+		writeln("Triangulating");
 		auto triangulation = generateTriangulation(width, height, resolution);
 
+		writeln("Building graph");
 		super(triangulation.edges);
+
+		generate();
 	}
 
-	Pixel getPixel(int row, int col)
+	private void generate()
+	{
+		writeln("Relaxing");
+		relaxGraph();
+
+		writeln("Assingning terrain types");
+		assignTerrainTypes();
+
+		writeln("Computing elevation");
+		computeElevation();
+	}
+
+	private void relaxGraph()
+	{
+		auto points = centers.map!(c => c.corners.map!"a.p".fold!((a,b) => a + b) / c.corners.length).array;
+
+		auto triangulation = Triangulation(points);
+		auto tmp = new Graph!(Center, Edge, Corner)(triangulation.edges);
+
+		edges = tmp.edges;
+		centers = tmp.centers;
+		corners = tmp.corners;
+	}
+
+	private Pixel getPixel(int row, int col)
 	{
 		row = clamp(row, 0, height - 1);
 		col = clamp(col, 0, width - 1);
@@ -105,19 +136,7 @@ class Map : Graph!(Center, Edge, Corner)
 		);
 	}
 
-	void relaxGraph()
-	{
-		auto points = centers.map!(c => c.corners.map!"a.p".fold!((a,b) => a + b) / c.corners.length).array;
-
-		auto triangulation = Triangulation(points);
-		auto tmp = new Graph!(Center, Edge, Corner)(triangulation.edges);
-
-		edges = tmp.edges;
-		centers = tmp.centers;
-		corners = tmp.corners;
-	}
-
-	void assignTerrainTypes()
+	private void assignTerrainTypes()
 	{
 		foreach(center; centers)
 		{
@@ -127,7 +146,22 @@ class Map : Graph!(Center, Edge, Corner)
 			auto pixel = getPixel(row, col);
 			center.terrain = colors.get(pixel, Terrain.none);
 		}
+
+		foreach(center; centers)
+		{
+			if (center.terrain != Terrain.sea
+				&& center.neighbours.any!(n => n.terrain == Terrain.sea))
+			{
+				center.shore = true;
+				shores ~= center;
+			}
+		}
 	}
+
+	private void computeElevation()
+	{
+	}
+
 }
 
 private Triangulation generateTriangulation(int width, int height, int res)
@@ -141,36 +175,6 @@ private Triangulation generateTriangulation(int width, int height, int res)
 			x + uniform(-res, res),
 			y + uniform(-res, res)
 		);
-	//
-	// for(auto x = -margin; x < width + margin; x += res)
-	// {
-	// 	points ~= Point(x, -margin);
-	// 	points ~= Point(x, height + margin);
-	// }
-	//
-	// for(auto y = -margin; y < height + margin; y += res)
-	// {
-	// 	points ~= Point(-margin, y);
-	// 	points ~= Point(height + margin, y);
-	// }
 
 	return Triangulation(points);
 }
-//
-// Map relaxGraph(Map g, int width, int height)
-// {
-// 	Point[] points;
-//
-// 	foreach (center; g.centers)
-// 	{
-// 		if (center.x < 0 || center.x > width || center.y < 0 || center.y > height)
-// 			points ~= Point(center.x, center.y);
-// 		else
-// 			points ~= center.corners.map!"a.p".fold!((a,b) => a + b) / center.corners.length;
-// 	}
-//
-// 	auto triangulation = Triangulation(points);
-// 	auto graph = new Map(triangulation.edges);
-//
-// 	return graph;
-// }
