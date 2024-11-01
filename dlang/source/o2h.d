@@ -1,102 +1,57 @@
 import std.stdio;
-import std.random;
-import std.algorithm;
+import std.format;
+import std.array;
 
-import gamut;
-import delaunator;
-import graph;
+import map;
 
-class Center : CenterBase!(Center, Edge, Corner)
+
+void draw(Map g)
 {
-	int foo;
+	string[] lines;
 
-	this(Point p)
+	lines ~=
+		`<svg width='%f' height='%f'
+		viewBox='0 0 %f %f'
+		xmlns='http://www.w3.org/2000/svg'
+		version='1.1'
+		xmlns:xlink='http://www.w3.org/1999/xlink'>`
+			.format(g.width, g.height, g.width, g.height);
+
+	// foreach(center; g.centers)
+	// {
+	// 	lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="black" />`, center.x, center.y, 2);
+	//
+	// 	foreach(n; center.neighbours)
+	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+	// 			center.x, center.y,
+	// 			n.x, n.y);
+	// }
+	//
+	// foreach(corner; g.corners)
+	// {
+	// 	lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="red" />`, corner.x, corner.y, 2);
+	//
+	// 	foreach(n; corner.neighbours)
+	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="pink" />`,
+	// 			corner.x, corner.y,
+	// 			n.x, n.y);
+	// }
+
+	foreach(edge; g.edges)
 	{
-		 super(p);
-	}
-}
+		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+ 			edge.center1.x, edge.center1.y,
+ 			edge.center2.x, edge.center2.y);
 
-class Edge : EdgeBase!(Center, Edge, Corner)
-{
-	int meh;
-	this()
-	{
-	}
-}
-
-class Corner : CornerBase!(Center, Edge, Corner)
-{
-	int lol;
-	this(Point p)
-	{
-		super(p);
-	}
-}
-
-class Map : Graph!(Center, Edge, Corner)
-{
-	this(delaunator.Edge[] halfEdges)
-	{
-		super(halfEdges);
-	}
-}
-
-Image loadOutline(string path)
-{
-	Image image;
-	image.loadFromFile(path);
-	if (image.isError)
-		throw new Exception("Could not load " ~ path);
-
-	return image;
-}
-
-Map generateGraph(int width, int height, int res)
-{
-	Point[] points;
-	auto margin = 100;
-
-	for(auto x = 0; x < width; x += res)
-	for(auto y = 0; y < height; y += res)
-		points ~= Point(
-			x + uniform(-res / 2, res / 2),
-			y + uniform(-res / 2, res / 2)
-		);
-
-	for(auto x = -margin; x < width + margin; x += res)
-	{
-		points ~= Point(x, -margin);
-		points ~= Point(x, height + margin);
+		if (edge.corner2)
+			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="red" />`,
+				edge.corner1.x, edge.corner1.y,
+				edge.corner2.x, edge.corner2.y);
 	}
 
-	for(auto y = -margin; y < height + margin; y += res)
-	{
-		points ~= Point(-margin, y);
-		points ~= Point(height + margin, y);
-	}
+	lines ~= "</svg>";
 
-	auto triangulation = Triangulation(points);
-	auto graph = new Map(triangulation.edges);
-
-	return graph;
-}
-
-Map relaxGraph(Map g, int width, int height)
-{
-	Point[] points;
-
-	foreach (center; g.centers)
-	{
-		if (center.x < 0 || center.x > width || center.y < 0 || center.y > height)
-			points ~= Point(center.x, center.y);
-		else
-			points ~= center.corners.map!"a.p".fold!((a,b) => a + b) / center.corners.length;
-	}
-
-	auto triangulation = Triangulation(points);
-	auto graph = new Map(triangulation.edges);
-
-	return graph;
+	toFile(lines.join("\n"), "out.svg");
 }
 
 void main(string[] args)
@@ -110,20 +65,23 @@ void main(string[] args)
 	auto path = args[1];
 	auto resolution = 10;
 
-	writeln("Loading " ~ path);
-	auto outline = loadOutline(path);
-
-	writeln("Generating graph...");
-	auto graph = generateGraph(outline.width, outline.height, resolution);
-
-	writeln("Relaxing graph...");
-	graph = relaxGraph(graph, outline.width, outline.height);
-
-	foreach(center; graph.centers)
-	{
-		center.foo = 20;
-		writeln("WOOO ", center.neighbours.length);
-	}
+	Map map = new Map(path, resolution);
+	draw(map);
+	//
+	// writeln("Loading " ~ path);
+	// auto outline = loadOutline(path);
+	//
+	// writeln("Generating graph...");
+	// auto graph = generateGraph(outline.width, outline.height, resolution);
+	//
+	// writeln("Relaxing graph...");
+	// graph = relaxGraph(graph, outline.width, outline.height);
+	//
+	// foreach(center; graph.centers)
+	// {
+	// 	center.foo = 20;
+	// 	writeln("WOOO ", center.neighbours.length);
+	// }
 
 	// writeln("Assigning landmasses");
 	// assignCellTypes(graph, outline);
