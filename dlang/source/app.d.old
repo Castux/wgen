@@ -29,7 +29,7 @@ void draw(Point[] points, delaunator.Edge[] edges)
 	toFile(lines.join("\n"), "out1.svg");
 }
 
-void draw(Graph g)
+void draw(Graph!(int,int,int) g)
 {
 	import std.format;
 

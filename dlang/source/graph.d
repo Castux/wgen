@@ -2,7 +2,7 @@ import delaunator;
 
 alias HalfEdge = delaunator.Edge;
 
-class Center
+class CenterBase(Center, Edge, Corner)
 {
 	Point p;
 	alias p this;
@@ -17,7 +17,7 @@ class Center
 	}
 }
 
-class Edge
+class EdgeBase(Center, Edge, Corner)
 {
 	Center center1, center2;
 	Corner corner1, corner2;
@@ -39,7 +39,7 @@ class Edge
 	}
 }
 
-class Corner
+class CornerBase(Center, Edge, Corner)
 {
 	Point p;
 	alias p this;
@@ -54,7 +54,7 @@ class Corner
 	}
 }
 
-class Graph
+class Graph(Center, Edge, Corner)
 {
 	Center[] centers;
 	Corner[] corners;

@@ -8,5 +8,8 @@
 	},
 	"description": "A minimal D application.",
 	"license": "MIT",
-	"name": "wgen"
+	"name": "wgen",
+
+	"targetType": "executable",
+	"mainSourceFile": "source/o2h.d"
 }

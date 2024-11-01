@@ -6,6 +6,41 @@ import gamut;
 import delaunator;
 import graph;
 
+class Center : CenterBase!(Center, Edge, Corner)
+{
+	int foo;
+
+	this(Point p)
+	{
+		 super(p);
+	}
+}
+
+class Edge : EdgeBase!(Center, Edge, Corner)
+{
+	int meh;
+	this()
+	{
+	}
+}
+
+class Corner : CornerBase!(Center, Edge, Corner)
+{
+	int lol;
+	this(Point p)
+	{
+		super(p);
+	}
+}
+
+class Map : Graph!(Center, Edge, Corner)
+{
+	this(delaunator.Edge[] halfEdges)
+	{
+		super(halfEdges);
+	}
+}
+
 Image loadOutline(string path)
 {
 	Image image;
@@ -16,7 +51,7 @@ Image loadOutline(string path)
 	return image;
 }
 
-Graph generateGraph(int width, int height, int res)
+Map generateGraph(int width, int height, int res)
 {
 	Point[] points;
 	auto margin = 100;
@@ -41,12 +76,12 @@ Graph generateGraph(int width, int height, int res)
 	}
 
 	auto triangulation = Triangulation(points);
-	auto graph = new Graph(triangulation.edges);
+	auto graph = new Map(triangulation.edges);
 
 	return graph;
 }
 
-Graph relaxGraph(Graph g, int width, int height)
+Map relaxGraph(Map g, int width, int height)
 {
 	Point[] points;
 
@@ -55,11 +90,11 @@ Graph relaxGraph(Graph g, int width, int height)
 		if (center.x < 0 || center.x > width || center.y < 0 || center.y > height)
 			points ~= Point(center.x, center.y);
 		else
-			points ~= center.corners.fold!((a,b) => a + b) / center.corners.length;
+			points ~= center.corners.map!"a.p".fold!((a,b) => a + b) / center.corners.length;
 	}
 
 	auto triangulation = Triangulation(points);
-	auto graph = new Graph(triangulation.edges);
+	auto graph = new Map(triangulation.edges);
 
 	return graph;
 }
@@ -83,4 +118,14 @@ void main(string[] args)
 
 	writeln("Relaxing graph...");
 	graph = relaxGraph(graph, outline.width, outline.height);
+
+	foreach(center; graph.centers)
+	{
+		center.foo = 20;
+		writeln("WOOO ", center.neighbours.length);
+	}
+
+	// writeln("Assigning landmasses");
+	// assignCellTypes(graph, outline);
+
 }
