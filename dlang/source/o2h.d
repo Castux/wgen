@@ -1,6 +1,7 @@
 import std.stdio;
 import std.format;
 import std.array;
+import std.conv;
 
 import map;
 
@@ -68,6 +69,11 @@ void main(string[] args)
 	Map map = new Map(path, resolution);
 	map.relaxGraph();
 	draw(map, 0);
+
+	map.assignTerrainTypes();
+
+	foreach(c; map.centers)
+		writeln(c.p, c.terrain);
 
 	//
 	// writeln("Loading " ~ path);

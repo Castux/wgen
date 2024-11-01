@@ -2,14 +2,46 @@ import std.stdio;
 import std.random;
 import std.algorithm;
 import std.array;
+import std.math;
+import std.conv;
 
 import gamut;
 import delaunator;
 import graph;
 
+enum Terrain
+{
+	none,
+	sea,
+	plains,
+	hills,
+	mountains,
+	lake,
+	flat,
+	cliffs
+}
+
+struct Pixel
+{
+	ubyte r,g,b;
+}
+
+const Terrain[Pixel] colors =
+[
+	Pixel(66, 66, 125): Terrain.sea,
+
+	Pixel(135, 168, 81): Terrain.plains,
+	Pixel(209, 184, 134): Terrain.hills,
+	Pixel(101, 72, 31): Terrain.mountains,
+
+	Pixel(109, 148, 194): Terrain.lake,
+	Pixel(153, 153, 153): Terrain.flat,
+	Pixel(148, 10, 0): Terrain.cliffs
+];
+
 class Center : CenterBase!(Center, Edge, Corner)
 {
-	int foo;
+	Terrain terrain;
 
 	this(Point p)
 	{
@@ -43,7 +75,7 @@ class Map : Graph!(Center, Edge, Corner)
 
 	this(string path, int resolution)
 	{
-		outline.loadFromFile(path);
+		outline.loadFromFile(path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
 		if (outline.isError)
 			throw new Exception("Could not load " ~ path);
 
@@ -56,6 +88,24 @@ class Map : Graph!(Center, Edge, Corner)
 		super(triangulation.edges);
 	}
 
+	bool inBounds(int x, int y)
+	{
+		return x >= 0 && x < width && y >= 0 && y < height;
+	}
+
+	Pixel getPixel(int x, int y)
+	{
+		assert(outline.type == PixelType.rgb8);
+  		assert(outline.hasData());
+		auto scanline = cast(ubyte[]) outline.scanline(y);
+
+		return Pixel(
+			scanline[x * 3 + 0],
+			scanline[x * 3 + 1],
+			scanline[x * 3 + 2]
+		);
+	}
+
 	void relaxGraph()
 	{
 		auto points = centers.map!(c => c.corners.map!"a.p".fold!((a,b) => a + b) / c.corners.length).array;
@@ -66,6 +116,24 @@ class Map : Graph!(Center, Edge, Corner)
 		edges = tmp.edges;
 		centers = tmp.centers;
 		corners = tmp.corners;
+	}
+
+	void assignTerrainTypes()
+	{
+		foreach(center; centers)
+		{
+			int row = center.y.to!int;
+			int col = center.x.to!int;
+
+			if (!inBounds(col, row))
+			{
+				center.terrain = Terrain.none;
+				continue;
+			}
+
+			auto pixel = getPixel(row, col);
+			center.terrain = colors.get(pixel, Terrain.none);
+		}
 	}
 }
 
