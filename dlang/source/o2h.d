@@ -5,7 +5,7 @@ import std.conv;
 import std.algorithm;
 import std.random;
 
-import map;
+import heightmap;
 
 
 void draw(Map g, int i)
