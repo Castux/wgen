@@ -47,13 +47,13 @@ class Edge
 		return check1;
 	}
 
-	Tuple!(Edge, Edge, Edge) triangle()
+	Triangle triangle()
 	{
 		auto e1 = this;
 		auto e2 = e1.next;
 		auto e3 = e2.next;
 
-		return tuple(e1, e2, e3);
+		return Triangle(e1, e2, e3);
 	}
 
 	Edge[] orbit()
@@ -80,23 +80,24 @@ class Edge
 	}
 }
 
-private struct Triangle
+struct Triangle
 {
 	Edge e1, e2, e3;
+}
 
-	this(Point p1, Point p2, Point p3)
-	{
-		if (!clockwise(p1, p2, p3))
-			throw new Exception("Non clockwise triangle");
+private Triangle newTriangle(Point p1, Point p2, Point p3)
+{
+	assert (clockwise(p1, p2, p3));
 
-		e1 = new Edge(p1);
-		e2 = new Edge(p2);
-		e3 = new Edge(p3);
+	auto e1 = new Edge(p1);
+	auto e2 = new Edge(p2);
+	auto e3 = new Edge(p3);
 
-		e1.next = e2;
-		e2.next = e3;
-		e3.next = e1;
-	}
+	e1.next = e2;
+	e2.next = e3;
+	e3.next = e1;
+
+	return Triangle(e1, e2, e3);
 }
 
 private void setInitialHull(Triangle t)
@@ -182,7 +183,6 @@ private void checkDelaunayCondition(Edge e)
 struct Triangulation
 {
 	Edge[] edges;
-	Point[] ignored;
 
 	private const(Point) center;
 	private Edge[] hash;
@@ -221,7 +221,7 @@ struct Triangulation
 		if (!clockwise(p1, p2, p3))
 			throw new Exception("Cannot triangulate this input");
 
-		Triangle centerTri = Triangle(p1, p2, p3);
+		Triangle centerTri = newTriangle(p1, p2, p3);
 		edges = [centerTri.e1, centerTri.e2, centerTri.e3];
 
 		// Initialize the hull to be these three edges
@@ -282,7 +282,6 @@ struct Triangulation
 			if (current is startEdge)
 			{
 				// Likely a near-duplicate point; skip it
-				ignored ~= p;
 				return;
 			}
 		}
@@ -298,9 +297,10 @@ struct Triangulation
 
 	private Edge.Pair newTriOnEdge(Point p, Edge edge)
 	{
-		// e1 is against the existing edge, e2 and e3 are the new ones
-		with (Triangle(edge.to, edge.from, p))
+		with (newTriangle(edge.to, edge.from, p))
 		{
+			// e1 is against the existing edge, e2 and e3 are the new ones
+
 			e1.link(edge);
 
 			edges ~= e1;
@@ -333,9 +333,10 @@ struct Triangulation
 		if (!clockwise(p1, p2, p3))
 			return null;
 
-		// e1 and e2 rest against right and left, e3 is the new one
-		with (Triangle(p1, p2, p3))
+		with (newTriangle(p1, p2, p3))
 		{
+			// e1 and e2 rest against right and left, e3 is the new one
+
 			e1.link(right);
 			e2.link(left);
 

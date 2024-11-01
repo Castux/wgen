@@ -74,10 +74,10 @@ class Graph
 				continue;
 
 			auto tri = he.triangle;
-			Point c = circumcenter(tri[0].from, tri[1].from, tri[2].from);
+			Point c = circumcenter(tri.e1.from, tri.e2.from, tri.e3.from);
 			Corner corner = new Corner(c);
 
-			foreach(hedge; tri)
+			foreach(hedge; tri.tupleof)
 			{
 				cornerMap[hedge] = corner;
 
