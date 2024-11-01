@@ -12,6 +12,11 @@ void exportOBJ(Heightmap m, string path)
 	string[] lines;
 	ulong[Center] centerIDs;
 
+	auto baseName = path.split(".")[0..$-1].join(".");
+
+	lines ~= "mtllib %s.mtl".format(baseName);
+	lines ~= "usemtl material0";
+
 	foreach(i, center; m.centers)
 	{
 		auto z = center.z;
@@ -20,8 +25,8 @@ void exportOBJ(Heightmap m, string path)
 
 
 		centerIDs[center] = i + 1;
-		lines ~= "v %.2f %.2f %.2f".format(center.x, z, center.y);
-		lines ~= "vt %.2f %.2f".format(center.x / m.width, 1 - center.y / m.height);
+		lines ~= "v %.6f %.6f %.6f".format(center.x, z, center.y);
+		lines ~= "vt %.6f %.6f".format(center.x / m.width, 1 - center.y / m.height);
 	}
 
 	foreach(corner; m.corners)
@@ -35,4 +40,6 @@ void exportOBJ(Heightmap m, string path)
 	}
 
 	toFile(lines.join("\n"), path);
+
+	toFile("newmtl material0\nmap_Kd %s.png".format(baseName), baseName ~ ".mtl");
 }

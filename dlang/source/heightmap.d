@@ -4,6 +4,7 @@ import std.array;
 import std.math;
 import std.conv;
 import std.range;
+import std.typecons;
 
 import gamut;
 import delaunator;
@@ -88,12 +89,15 @@ class Corner : CornerBase!(Center, Edge, Corner)
 class Heightmap : Graph!(Center, Edge, Corner)
 {
 	Image outline;
-	int width;
-	int height;
-	double resolution;
+	const(int) width;
+	const(int) height;
+	const(double) resolution;
 
 	Center[] shores;
 	double lowest, highest;
+
+	Corner[][][] spatialIndex;
+	const(double) binSize;
 
 	this(string path, int resolution)
 	{
@@ -106,12 +110,15 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		this.width = outline.width;
 		this.height = outline.height;
 		this.resolution = resolution;
+		this.binSize = resolution * 4;
 
 		writeln("Triangulating");
 		auto triangulation = generateTriangulation();
 
 		writeln("Building graph");
 		super(triangulation.edges);
+
+
 
 		generate();
 	}
@@ -307,4 +314,107 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		shores.each!flow;
 	}
 
+	private void indexCorners()
+	{
+		auto numBinsH = ceil(height / binSize).to!int;
+		auto numBinsW = ceil(width / binSize).to!int;
+
+		auto index = new Corner[][][numBinsH];
+		foreach(ref row; index)
+			row = new Corner[][numBinsW];
+
+		foreach(corner; corners)
+		{
+			if (!inBounds(corner.p)) continue;
+
+			auto row = floor(corner.y / binSize).to!int;
+			auto col = floor(corner.x / binSize).to!int;
+
+			index[row][col] ~= corner;
+		}
+
+		spatialIndex = index;
+	}
+
+	alias BinResult = Tuple!(Corner,double[3]);
+
+	private static BinResult findTriangleInBin(Point p, Corner[] bin)
+	{
+		foreach(corner; bin)
+		{
+			auto bary = barycentricCoordinates(corner.centers[0].p, corner.centers[1].p, corner.centers[2].p, p);
+			if (bary[0] >= 0 && bary[1] >= 0 && bary[2] >= 0)
+			{
+				return tuple(corner, bary);
+			}
+		}
+
+		return BinResult.init;
+	}
+
+	private BinResult findTriangle(Point p)
+	{
+		if (!inBounds(p)) return BinResult.init;
+
+		auto row = floor(p.y / binSize).to!int;
+		auto col = floor(p.x / binSize).to!int;
+
+		// First check the bin itself
+
+		auto res = findTriangleInBin(p, spatialIndex[row][col]);
+		if (res[0])
+			return res;
+
+		// Then the ones around
+
+		auto numBinsH = spatialIndex.length;
+		auto numBinsW = spatialIndex[0].length;
+
+		for(int r = row - 1; r <= row + 1; r++)
+		for(int c = col - 1; c <= col + 1; c++)
+		{
+			if (r == row && c == col) continue;
+			if (c < 0 || c >= numBinsW) continue;
+			if (r < 0 || r >= numBinsH) continue;
+
+			res = findTriangleInBin(p, spatialIndex[r][c]);
+			if (res[0])
+				return res;
+		}
+
+		return BinResult.init;
+	}
+
+	private static double interpolateElevation(BinResult res)
+	{
+		auto c = res[0];
+		auto coords = res[1];
+
+		return
+			c.centers[0].z * coords[0] +
+			c.centers[1].z * coords[1] +
+			c.centers[2].z * coords[2];
+	}
+
+	double[][] rasterize()
+	{
+		import std.stdio;
+
+		indexCorners();
+
+		auto data = new double[][height];
+		foreach (ref row; data)
+			row = new double[width];
+
+		foreach(row; 0..height)
+		foreach(col; 0..width)
+		{
+			auto p = Point(col, row);
+			auto res = findTriangle(p);
+			if (res[0])
+				data[row][col] = interpolateElevation(res);
+		}
+
+		return data;
+	}
 }

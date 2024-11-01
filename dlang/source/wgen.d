@@ -6,10 +6,11 @@ import std.regex;
 import heightmap;
 import svg;
 import obj;
+import image;
 
 void main(string[] args)
 {
-	if (args.length < 2)
+	if (args.length < 3)
 	{
 		writeln("Usage: wgen <path> <resolution>");
 		return;
@@ -20,10 +21,11 @@ void main(string[] args)
 
 	Heightmap map = new Heightmap(path, resolution);
 
-	writeln("Low ", map.lowest);
-	writeln("High ", map.highest);
+	writeln("Exporting");
+	// exportSVG(map, path.replaceFirst(regex(`\....$`), ".svg"));
+	exportOBJ(map, path.replaceFirst(regex(`\....$`), "-h.obj"));
 
-	exportSVG(map, path.replaceFirst(regex(`\....$`), ".svg"));
-	exportOBJ(map, path.replaceFirst(regex(`\....$`), ".obj"));
-
+	writeln("Rasterizing");
+	auto elevations = map.rasterize();
+	exportHeightmap(elevations, path.replaceFirst(regex(`\....$`), "-h.png"));
 }

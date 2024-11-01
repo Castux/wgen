@@ -119,6 +119,21 @@ bool inCircle(Point a, Point b, Point c, Point p)
 		   ap * (ex * fy - ey * fx) > 0;
 }
 
+double[3] barycentricCoordinates(Point a, Point b, Point c, Point p)
+{
+	auto x = (b - p).cross(c - p);
+	auto y = (c - p).cross(a - p);
+	auto z = (a - p).cross(b - p);
+	auto s = x + y + z;
+	return [x / s, y / s, z / s];
+}
+
+bool inTriangle(Point a, Point b, Point c, Point p)
+{
+	auto coords = barycentricCoordinates(a, b, c, p);
+	return coords[0] > 0 && coords[1] > 0 && coords[2] > 0;
+}
+
 Point circumcenter(Point a, Point b, Point c)
 {
 	auto dx = b.x - a.x;
