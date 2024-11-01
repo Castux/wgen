@@ -85,7 +85,7 @@ class Corner : CornerBase!(Center, Edge, Corner)
 	}
 }
 
-class Map : Graph!(Center, Edge, Corner)
+class Heightmap : Graph!(Center, Edge, Corner)
 {
 	Image outline;
 	int width;
@@ -283,17 +283,15 @@ class Map : Graph!(Center, Edge, Corner)
 
 		foreach(center; centers)
 		{
-			if (center.terrain == Terrain.none) continue;
-
 			// It needs to be actually downhill (avoid rivers along shores)
 			auto lower = center.neighbours.filter!(n => n.z < center.z);
 
 			if (!lower.empty)
 			{
-				auto lowest = lower.minElement!(n => n.z);
+				//auto lowest = lower.minElement!(n => n.z);
+				auto lowest = lower.array.choice;
 				center.downhill = lowest;
 				lowest.uphill ~= center;
-
 			}
 		}
 
