@@ -139,7 +139,7 @@ class Graph
 			centers ~= center;
 		}
 
-		// Finally, connect centers to centers, and corners to corners,
+		// Connect centers to centers, and corners to corners,
 		// via the edges
 
 		foreach(edge; edges)
@@ -165,7 +165,17 @@ class Graph
 				co1.neighbours ~= co2;
 				co2.neighbours ~= co1;
 			}
+		}
 
+		// Finally, connect centers to corners and vice-versa
+
+		foreach(he; halfEdges)
+		{
+			auto corner = cornerMap[he];
+			auto center = centerMap[he];
+
+			corner.centers ~= center;
+			center.corners ~= corner;
 		}
 	}
 }
