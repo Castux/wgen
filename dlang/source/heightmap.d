@@ -295,8 +295,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 			if (!lower.empty)
 			{
-				//auto lowest = lower.minElement!(n => n.z);
-				auto lowest = lower.array.choice;
+				auto lowest = lower.minElement!(n => n.z);
 				center.downhill = lowest;
 				lowest.uphill ~= center;
 			}
