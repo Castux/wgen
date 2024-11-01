@@ -4,7 +4,7 @@
 	],
 	"copyright": "Copyright © 2024, Noé Falzon",
 	"dependencies": {
-
+		"gamut": "~>3.1.1"
 	},
 	"description": "A minimal D application.",
 	"license": "MIT",

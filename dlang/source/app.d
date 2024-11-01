@@ -74,7 +74,7 @@ void draw(Graph g)
 	toFile(lines.join("\n"), "out2.svg");
 }
 
-void main()
+void main2()
 {
 	import std.datetime.stopwatch;
 	Point[] points;
