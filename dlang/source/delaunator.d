@@ -205,19 +205,19 @@ struct Triangulation
 
 		// The two closest ones to the center
 		Point p1 = points.minElement!(a => a.sqdist(c));
-		Point p2 = points.minElement!(a => (a == p1) ? double.infinity : a.sqdist(c));
+		Point p2 = points.filter!(a => a != p1).minElement!(a => a.sqdist(c));
 
 		// And the one other that forms the smallest circumcircle with them
-		Point p3 = points.minElement!(a => (a == p1 || a == p2) ? double.infinity : circumradius(p1, p2, a));
+		Point p3 = points.filter!(a => a != p1 && a != p2)
+			.minElement!(a => circumradius(p1, p2, a));
 
 		if (!clockwise(p1, p2, p3))
 			swap(p2, p3);
 
 		if (!clockwise(p1, p2, p3))
-			throw new Exception("Cannot triangulate");
+			throw new Exception("Cannot triangulate this input");
 
 		Triangle centerTri = Triangle(p1, p2, p3);
-
 		edges = [centerTri.e1, centerTri.e2, centerTri.e3];
 
 		// Initialize the hull to be these three edges
