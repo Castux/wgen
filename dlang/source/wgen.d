@@ -5,6 +5,7 @@ import std.regex;
 
 import heightmap;
 import svg;
+import obj;
 
 void main(string[] args)
 {
@@ -18,8 +19,11 @@ void main(string[] args)
 	auto resolution = args[2].to!int;
 
 	Heightmap map = new Heightmap(path, resolution);
-	exportSVG(map, path.replaceFirst(regex(`\....$`), ".svg"));
 
 	writeln("Low ", map.lowest);
 	writeln("High ", map.highest);
+
+	exportSVG(map, path.replaceFirst(regex(`\....$`), ".svg"));
+	exportOBJ(map, path.replaceFirst(regex(`\....$`), ".obj"));
+
 }
