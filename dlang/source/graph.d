@@ -27,7 +27,10 @@ class EdgeBase(Center, Edge, Corner)
 		if (center1 is null)
 			center1 = c;
 		else
+		{
+			assert(center2 is null);
 			center2 = c;
+		}
 	}
 
 	void addCorner(Corner c)
@@ -35,7 +38,10 @@ class EdgeBase(Center, Edge, Corner)
 		if (corner1 is null)
 			corner1 = c;
 		else
+		{
+			assert(corner2 is null);
 			corner2 = c;
+		}
 	}
 }
 

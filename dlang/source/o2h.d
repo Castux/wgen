@@ -7,6 +7,10 @@ import std.random;
 
 import heightmap;
 
+double lerp(double a, double b, double x)
+{
+	return a * (1-x) + b * x;
+}
 
 void draw(Map g, int i)
 {
@@ -22,18 +26,26 @@ void draw(Map g, int i)
 
 	foreach(center; g.centers)
 	{
-		auto s = std.algorithm.map!(c => "%f,%f".format(c.x, c.y))(center.corners).join(" ");
+		auto s = center.corners.map!(c => "%f,%f".format(c.x, c.y))().join(" ");
 
-		auto col = "black";
-		foreach(pixel, terrain; colors)
-		{
-			if (center.terrain == terrain)
-				col = "rgb(%d,%d,%d)".format(pixel.r, pixel.g, pixel.b);
-		}
-		if (center.shore)
-			col = "yellow";
+		auto h = (center.z - g.lowest) / (g.highest - g.lowest) * 255;
+		auto col = "rgb(%.2f,%.2f,%.2f)".format(h, h, h);
 
-		lines ~= format(`<polygon points="%s" fill="%s" />`, s, col);
+		if (center.terrain == Terrain.none)
+			col = "pink";
+
+		// string col;
+		// switch (center.terrain)
+		// {
+		// 	case Terrain.none: col = "pink"; break;
+		// 	case Terrain.sea: col = "blue"; break;
+		// 	default: col = "brown"; break;
+		// }
+		//
+		// if (center.shore)
+		// 	col = "yellow";
+
+		lines ~= format(`<polygon points="%s" fill="%s" stroke="%s" />`, s, col, col);
 	}
 	//
 	// foreach(corner; g.corners)
@@ -48,9 +60,9 @@ void draw(Map g, int i)
 	//
 	// foreach(edge; g.edges)
 	// {
-	// 	// lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
- 	// 	// 	edge.center1.x, edge.center1.y,
- 	// 	// 	edge.center2.x, edge.center2.y);
+	// 	lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+ 	// 		edge.center1.x, edge.center1.y,
+ 	// 		edge.center2.x, edge.center2.y);
 	//
 	// 	if (edge.corner2)
 	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="red" />`,
@@ -76,6 +88,10 @@ void main(string[] args)
 
 	Map map = new Map(path, resolution);
 	draw(map, 0);
+
+	writeln("Low ", map.lowest);
+	writeln("High ", map.highest);
+
 	//
 	// writeln("Loading " ~ path);
 	// auto outline = loadOutline(path);
