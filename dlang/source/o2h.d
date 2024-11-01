@@ -27,7 +27,6 @@ void draw(Map g, int i)
 		auto col = "black";
 		foreach(pixel, terrain; colors)
 		{
-			writeln(center.terrain, terrain);
 			if (center.terrain == terrain)
 				col = "rgb(%d,%d,%d)".format(pixel.r, pixel.g, pixel.b);
 		}

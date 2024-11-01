@@ -88,15 +88,14 @@ class Map : Graph!(Center, Edge, Corner)
 		super(triangulation.edges);
 	}
 
-	bool inBounds(int row, int col)
-	{
-		return col >= 0 && col < width && row >= 0 && row < height;
-	}
-
 	Pixel getPixel(int row, int col)
 	{
+		row = clamp(row, 0, height - 1);
+		col = clamp(col, 0, width - 1);
+
 		assert(outline.type == PixelType.rgb8);
   		assert(outline.hasData());
+
 		auto scanline = cast(ubyte[]) outline.scanline(row);
 
 		return Pixel(
@@ -125,12 +124,6 @@ class Map : Graph!(Center, Edge, Corner)
 			int row = center.y.to!int;
 			int col = center.x.to!int;
 
-			if (!inBounds(col, row))
-			{
-				center.terrain = Terrain.none;
-				continue;
-			}
-
 			auto pixel = getPixel(row, col);
 			center.terrain = colors.get(pixel, Terrain.none);
 		}
@@ -145,8 +138,8 @@ private Triangulation generateTriangulation(int width, int height, int res)
 	for(auto x = -margin; x < width + margin; x += res)
 	for(auto y = -margin; y < height + margin; y += res)
 		points ~= Point(
-			x + uniform(-res / 2, res / 2),
-			y + uniform(-res / 2, res / 2)
+			x + uniform(-res, res),
+			y + uniform(-res, res)
 		);
 	//
 	// for(auto x = -margin; x < width + margin; x += res)
