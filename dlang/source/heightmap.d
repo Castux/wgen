@@ -263,7 +263,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 				assert(gradient > 0);
 
-				auto newZ = c.z + gradient * resolution;
+				auto newZ = c.z + gradient * n.p.dist(c.p);
 				if (newZ < n.z)
 				{
 					n.gradient = gradient;

@@ -22,7 +22,7 @@ void main(string[] args)
 	Heightmap map = new Heightmap(path, resolution);
 
 	writeln("Exporting");
-	// exportSVG(map, path.replaceFirst(regex(`\....$`), ".svg"));
+	exportSVG(map, path.replaceFirst(regex(`\....$`), ".svg"));
 	exportOBJ(map, path.replaceFirst(regex(`\....$`), "-h.obj"));
 
 	writeln("Rasterizing");
