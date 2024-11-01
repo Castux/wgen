@@ -19,8 +19,24 @@ class Center
 
 class Edge
 {
-	Center[] centers;
-	Corner[] corners;
+	Center center1, center2;
+	Corner corner1, corner2;
+
+	void addCenter(Center c)
+	{
+		if (center1 is null)
+			center1 = c;
+		else
+			center2 = c;
+	}
+
+	void addCorner(Corner c)
+	{
+		if (corner1 is null)
+			corner1 = c;
+		else
+			corner2 = c;
+	}
 }
 
 class Corner
@@ -42,11 +58,10 @@ class Graph
 {
 	Center[] centers;
 	Corner[] corners;
+	Edge[] edges;
 
 	this(HalfEdge[] halfEdges)
 	{
-		Edge[] edges;
-
 		// Create edges. Associate pairs of opposite half edges
 		// to the same full edge
 
@@ -83,7 +98,7 @@ class Graph
 
 				auto e = edgeMap[hedge];
 				corner.edges ~= e;
-				e.corners ~= corner;
+				e.addCorner(corner);
 			}
 
 			corners ~= corner;
@@ -106,7 +121,7 @@ class Graph
 				centerMap[orbitHedge] = center;
 
 				auto e = edgeMap[orbitHedge];
-				e.centers ~= center;
+				e.addCenter(center);
 				center.edges ~= e;
 
 				// On the hull, we need to also add the one edge comes into
@@ -116,7 +131,7 @@ class Graph
 				if (orbitHedge.onHull)
 				{
 					e = edgeMap[orbitHedge.hullPrev];
-					e.centers ~= center;
+					e.addCenter(center);
 					center.edges ~= e;
 				}
 			}
@@ -129,23 +144,23 @@ class Graph
 
 		foreach(edge; edges)
 		{
-			assert(edge.centers.length == 2);
+			assert(edge.center1 && edge.center2);
 
 			// Every edge must connect two centers (they're the original
 			// point we triangulated)
 
-			auto c1 = edge.centers[0];
-			auto c2 = edge.centers[1];
+			auto c1 = edge.center1;
+			auto c2 = edge.center2;
 
 			c1.neighbours ~= c2;
 			c2.neighbours ~= c1;
 
 			// but hull edges don't connect corners to anything
 
-			if (edge.corners.length == 2)
+			if (edge.corner2 !is null)
 			{
-				auto co1 = edge.corners[0];
-				auto co2 = edge.corners[1];
+				auto co1 = edge.corner1;
+				auto co2 = edge.corner2;
 
 				co1.neighbours ~= co2;
 				co2.neighbours ~= co1;

@@ -37,14 +37,36 @@ void draw(Graph g)
 
 	lines ~= `<svg width='1000' height='1000' viewBox='0 0 1000 1000' xmlns='http://www.w3.org/2000/svg' version='1.1' xmlns:xlink='http://www.w3.org/1999/xlink'>`;
 
-	foreach(center; g.centers)
-	{
-		lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="black" />`, center.x, center.y, 2);
+	// foreach(center; g.centers)
+	// {
+	// 	lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="black" />`, center.x, center.y, 2);
+	//
+	// 	foreach(n; center.neighbours)
+	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+	// 			center.x, center.y,
+	// 			n.x, n.y);
+	// }
+	//
+	// foreach(corner; g.corners)
+	// {
+	// 	lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="red" />`, corner.x, corner.y, 2);
+	//
+	// 	foreach(n; corner.neighbours)
+	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="pink" />`,
+	// 			corner.x, corner.y,
+	// 			n.x, n.y);
+	// }
 
-		foreach(n; center.neighbours)
-			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
-				center.x, center.y,
-				n.x, n.y);
+	foreach(edge; g.edges)
+	{
+		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+ 			edge.center1.x, edge.center1.y,
+ 			edge.center2.x, edge.center2.y);
+
+		if (edge.corner2)
+			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="red" />`,
+				edge.corner1.x, edge.corner1.y,
+				edge.corner2.x, edge.corner2.y);
 	}
 
 	lines ~= "</svg>";
@@ -54,20 +76,30 @@ void draw(Graph g)
 
 void main()
 {
+	import std.datetime.stopwatch;
 	Point[] points;
+	const margin = 100;
 
-	while(points.length < 1000)
+	while(points.length < 100000)
 	{
-		auto p = Point(uniform(10.0, 990.0), uniform(10.0, 990.0));
-		if (p.dist(Point(500, 500)) < 480)
+		auto p = Point(uniform(margin, 1000-margin), uniform(margin, 1000-margin));
+		//if (p.dist(Point(500, 500)) < 470)
 			points ~= p;
 	}
 
-	auto mesh = Triangulation(points);
-	writeln("Ignored ", mesh.ignored.length);
-	draw(points, mesh.edges);
 
-	writeln(mesh.edges.all!(e => e.triangle.length == 3));
+	// foreach(y; 0 .. 10)
+	// {
+	// 	points ~= Point(0.0, y * 100.0);
+	// 	points ~= Point(1000.0, y * 100.0);
+	// }
+	auto sw = StopWatch();
+	sw.start();
+	auto mesh = Triangulation(points);
+	sw.stop();
+
+	writeln(sw.peek);
+	draw(points, mesh.edges);
 
 	auto g = new Graph(mesh.edges);
 	writeln(g.corners.length);
