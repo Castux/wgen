@@ -47,6 +47,9 @@ class Graph
 	{
 		Edge[] edges;
 
+		// Create edges. Associate pairs of opposite half edges
+		// to the same full edge
+
 		Edge[HalfEdge] edgeMap;
 		foreach(he; halfEdges)
 		{
@@ -61,17 +64,20 @@ class Graph
 			edges ~= edge;
 		}
 
+		// Create corners at the circumcenter of each triangle
+		// Associate them with the three edges of the triangle
+
 		Corner[HalfEdge] cornerMap;
 		foreach(he; halfEdges)
 		{
 			if (he in cornerMap)
 				continue;
 
-			auto hedges = he.triangle;
-			Point c = circumcenter(hedges[0].from, hedges[1].from, hedges[2].from);
+			auto tri = he.triangle;
+			Point c = circumcenter(tri[0].from, tri[1].from, tri[2].from);
 			Corner corner = new Corner(c);
 
-			foreach(hedge; hedges)
+			foreach(hedge; tri)
 			{
 				cornerMap[hedge] = corner;
 
@@ -83,6 +89,9 @@ class Graph
 			corners ~= corner;
 		}
 
+		// Create centers for each original point given to triangulate
+		// Associate all the edges in their orbits
+
 		Center[HalfEdge] centerMap;
 		foreach(he; halfEdges)
 		{
@@ -90,41 +99,48 @@ class Graph
 				continue;
 
 			auto orbit = he.orbit;
-
-			// On the hull, we need to also add the one edge that doesn't come
-			// out of this node
-			foreach(h; orbit)
-			{
-				if (!h.rev)
-				{
-					orbit ~= h.hullPrev;
-					break;
-				}
-			}
-
 			Center center = new Center(he.from);
 
-			foreach(hedge; orbit)
+			foreach(orbitHedge; orbit)
 			{
-				centerMap[hedge] = center;
+				centerMap[orbitHedge] = center;
 
-				auto e = edgeMap[hedge];
+				auto e = edgeMap[orbitHedge];
 				e.centers ~= center;
 				center.edges ~= e;
+
+				// On the hull, we need to also add the one edge comes into
+				// this node (but don't put it in the map or it might
+				// get skipped for its own center)
+
+				if (orbitHedge.onHull)
+				{
+					e = edgeMap[orbitHedge.hullPrev];
+					e.centers ~= center;
+					center.edges ~= e;
+				}
 			}
 
 			centers ~= center;
 		}
 
+		// Finally, connect centers to centers, and corners to corners,
+		// via the edges
+
 		foreach(edge; edges)
 		{
 			assert(edge.centers.length == 2);
+
+			// Every edge must connect two centers (they're the original
+			// point we triangulated)
 
 			auto c1 = edge.centers[0];
 			auto c2 = edge.centers[1];
 
 			c1.neighbours ~= c2;
 			c2.neighbours ~= c1;
+
+			// but hull edges don't connect corners to anything
 
 			if (edge.corners.length == 2)
 			{

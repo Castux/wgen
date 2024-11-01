@@ -37,17 +37,23 @@ class Edge
 		other.rev = this;
 	}
 
-	Edge[] triangle()
+	bool onHull()
 	{
-		Edge[] edges;
-		Edge current = this;
-		do
-		{
-			edges ~= current;
-			current = current.next;
-		} while (current !is this);
+		auto check1 = rev is null;
+		auto check2 = hullPrev !is null;
+		auto check3 = hullNext !is null;
 
-		return edges;
+		assert(check1 == check2 && check1 == check3);
+		return check1;
+	}
+
+	Tuple!(Edge, Edge, Edge) triangle()
+	{
+		auto e1 = this;
+		auto e2 = e1.next;
+		auto e3 = e2.next;
+
+		return tuple(e1, e2, e3);
 	}
 
 	Edge[] orbit()
@@ -59,9 +65,10 @@ class Edge
 		{
 			orbit ~= current;
 
-			current = current.rev ?
-				current.rev.next :		// Normal case
-				current.hullPrev.next;	// Hull case
+			current = current.onHull ?
+				current.hullPrev.next :	// Hull case
+				current.rev.next;		// Normal case
+
 		} while (current !is this);
 
 		return orbit;
@@ -119,9 +126,6 @@ private Edge.Pair hullRemove(Edge e)
 
 private void hullInsert(Edge e, Edge left, Edge right)
 {
-	if (left.hullNext !is right || right.hullPrev !is left)
-		throw new Exception("Bad hull insert");
-
 	e.hullNext = right;
 	e.hullPrev = left;
 
@@ -143,7 +147,7 @@ private void hullInsert(Edge e, Edge left, Edge right)
 
 private void checkDelaunayCondition(Edge e)
 {
-	if (!e.rev) return;
+	if (e.onHull) return;
 
 	auto i1 = e;
 	auto i2 = e.rev;
@@ -260,14 +264,14 @@ struct Triangulation
 		foreach(i; 0 .. hashSize)
 		{
 			auto e = hash[(hashKey(p) + i) % hashSize];
-			if (e !is null && e.rev is null)
+			if (e && e.onHull)
 			{
 				startEdge = e;
 				break;
 			}
 		}
 
-		assert(startEdge.hullNext && startEdge.hullPrev);
+		assert(startEdge && startEdge.onHull);
 		startEdge = startEdge.hullPrev;
 
 		Edge current = startEdge;
@@ -356,6 +360,8 @@ struct Triangulation
 
 	private void fixHull(string direction)(Edge edge)
 	{
+		assert(edge.onHull);
+
 		Edge current = edge;
 
 		while (current)
