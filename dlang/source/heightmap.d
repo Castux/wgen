@@ -60,6 +60,10 @@ class Center : CenterBase!(Center, Edge, Corner)
 	double z = double.infinity;
 	double gradient;
 
+	Center downhill;
+	Center[] uphill;
+	int flow;
+
 	this(Point p)
 	{
 		 super(p);
@@ -86,7 +90,7 @@ class Map : Graph!(Center, Edge, Corner)
 	Image outline;
 	int width;
 	int height;
-	int resolution;
+	double resolution;
 
 	Center[] shores;
 	double lowest, highest;
@@ -112,7 +116,7 @@ class Map : Graph!(Center, Edge, Corner)
 		generate();
 	}
 
-	int margin() const
+	double margin() const
 	{
 		return resolution * 4;
 	}
@@ -140,6 +144,9 @@ class Map : Graph!(Center, Edge, Corner)
 
 		writeln("Computing elevation");
 		computeElevation();
+
+		writeln("Computing river flow");
+		computeRiverFlow();
 	}
 
 	private Triangulation generateTriangulation()
@@ -268,6 +275,38 @@ class Map : Graph!(Center, Edge, Corner)
 			.tee!((c) { lowest = min(lowest, c.z); highest = max(highest, c.z); })
 			.filter!(a => a.terrain == Terrain.sea)
 			.each!(c => c.z = -c.z);
+	}
+
+	private void computeRiverFlow()
+	{
+		// Find the steepest downhill from every point
+
+		foreach(center; centers)
+		{
+			if (center.terrain == Terrain.none) continue;
+
+			// It needs to be actually downhill (avoid rivers along shores)
+			auto lower = center.neighbours.filter!(n => n.z < center.z);
+
+			if (!lower.empty)
+			{
+				auto lowest = lower.minElement!(n => n.z);
+				center.downhill = lowest;
+				lowest.uphill ~= center;
+
+			}
+		}
+
+		// Go up from the shores to compute flows: each rivers
+		// gets the sum of the uphill ones, plus 1 for itself
+
+		int flow(Center center)
+		{
+			center.flow = center.uphill.map!flow.sum + 1;
+			return center.flow;
+		}
+
+		shores.each!flow;
 	}
 
 }
