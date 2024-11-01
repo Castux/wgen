@@ -89,6 +89,11 @@ struct Point
 	{
 		return Point(-y,x).unit;
 	}
+
+	double angle() const
+	{
+		return atan2(y,x);
+	}
 }
 
 bool clockwise(Point a, Point b, Point c)

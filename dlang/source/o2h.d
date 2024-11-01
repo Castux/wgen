@@ -2,6 +2,8 @@ import std.stdio;
 import std.format;
 import std.array;
 import std.conv;
+import std.algorithm;
+import std.random;
 
 import map;
 
@@ -18,15 +20,20 @@ void draw(Map g, int i)
 		xmlns:xlink='http://www.w3.org/1999/xlink'>`
 			.format(g.width, g.height, g.width, g.height);
 
-	// foreach(center; g.centers)
-	// {
-	// 	lines ~= format(`<circle cx='%f' cy='%f' r='%f' fill="black" />`, center.x, center.y, 2);
-	//
-	// 	foreach(n; center.neighbours)
-	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
-	// 			center.x, center.y,
-	// 			n.x, n.y);
-	// }
+	foreach(center; g.centers)
+	{
+		auto s = std.algorithm.map!(c => "%f,%f".format(c.x, c.y))(center.corners).join(" ");
+
+		auto col = "black";
+		foreach(pixel, terrain; colors)
+		{
+			writeln(center.terrain, terrain);
+			if (center.terrain == terrain)
+				col = "rgb(%d,%d,%d)".format(pixel.r, pixel.g, pixel.b);
+		}
+
+		lines ~= format(`<polygon points="%s" fill="%s" />`, s, col);
+	}
 	//
 	// foreach(corner; g.corners)
 	// {
@@ -37,18 +44,18 @@ void draw(Map g, int i)
 	// 			corner.x, corner.y,
 	// 			n.x, n.y);
 	// }
-
-	foreach(edge; g.edges)
-	{
-		// lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
- 		// 	edge.center1.x, edge.center1.y,
- 		// 	edge.center2.x, edge.center2.y);
-
-		if (edge.corner2)
-			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="red" />`,
-				edge.corner1.x, edge.corner1.y,
-				edge.corner2.x, edge.corner2.y);
-	}
+	//
+	// foreach(edge; g.edges)
+	// {
+	// 	// lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+ 	// 	// 	edge.center1.x, edge.center1.y,
+ 	// 	// 	edge.center2.x, edge.center2.y);
+	//
+	// 	if (edge.corner2)
+	// 		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="red" />`,
+	// 			edge.corner1.x, edge.corner1.y,
+	// 			edge.corner2.x, edge.corner2.y);
+	// }
 
 	lines ~= "</svg>";
 
@@ -68,13 +75,11 @@ void main(string[] args)
 
 	Map map = new Map(path, resolution);
 	map.relaxGraph();
-	draw(map, 0);
 
 	map.assignTerrainTypes();
 
-	foreach(c; map.centers)
-		writeln(c.p, c.terrain);
 
+	draw(map, 0);
 	//
 	// writeln("Loading " ~ path);
 	// auto outline = loadOutline(path);

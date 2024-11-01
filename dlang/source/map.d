@@ -88,21 +88,21 @@ class Map : Graph!(Center, Edge, Corner)
 		super(triangulation.edges);
 	}
 
-	bool inBounds(int x, int y)
+	bool inBounds(int row, int col)
 	{
-		return x >= 0 && x < width && y >= 0 && y < height;
+		return col >= 0 && col < width && row >= 0 && row < height;
 	}
 
-	Pixel getPixel(int x, int y)
+	Pixel getPixel(int row, int col)
 	{
 		assert(outline.type == PixelType.rgb8);
   		assert(outline.hasData());
-		auto scanline = cast(ubyte[]) outline.scanline(y);
+		auto scanline = cast(ubyte[]) outline.scanline(row);
 
 		return Pixel(
-			scanline[x * 3 + 0],
-			scanline[x * 3 + 1],
-			scanline[x * 3 + 2]
+			scanline[col * 3 + 0],
+			scanline[col * 3 + 1],
+			scanline[col * 3 + 2]
 		);
 	}
 

@@ -177,5 +177,15 @@ class Graph(Center, Edge, Corner)
 			corner.centers ~= center;
 			center.corners ~= corner;
 		}
+
+		// Order clockwise
+
+		import std.algorithm;
+
+		foreach(corner; corners)
+			corner.centers.sort!((a,b) => (a.p - corner.p).angle < (b.p - corner.p).angle);
+
+		foreach(center; centers)
+			center.corners.sort!((a,b) => (a.p - center.p).angle < (b.p - center.p).angle);
 	}
 }
