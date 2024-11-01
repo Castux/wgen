@@ -5,7 +5,7 @@ import std.array;
 import map;
 
 
-void draw(Map g)
+void draw(Map g, int i)
 {
 	string[] lines;
 
@@ -39,9 +39,9 @@ void draw(Map g)
 
 	foreach(edge; g.edges)
 	{
-		lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
- 			edge.center1.x, edge.center1.y,
- 			edge.center2.x, edge.center2.y);
+		// lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="blue" />`,
+ 		// 	edge.center1.x, edge.center1.y,
+ 		// 	edge.center2.x, edge.center2.y);
 
 		if (edge.corner2)
 			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="red" />`,
@@ -51,7 +51,7 @@ void draw(Map g)
 
 	lines ~= "</svg>";
 
-	toFile(lines.join("\n"), "out.svg");
+	toFile(lines.join("\n"), "out%d.svg".format(i));
 }
 
 void main(string[] args)
@@ -63,10 +63,12 @@ void main(string[] args)
 	}
 
 	auto path = args[1];
-	auto resolution = 10;
+	auto resolution = args[2].to!int;
 
 	Map map = new Map(path, resolution);
-	draw(map);
+	map.relaxGraph();
+	draw(map, 0);
+
 	//
 	// writeln("Loading " ~ path);
 	// auto outline = loadOutline(path);

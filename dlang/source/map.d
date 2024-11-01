@@ -1,6 +1,7 @@
 import std.stdio;
 import std.random;
 import std.algorithm;
+import std.array;
 
 import gamut;
 import delaunator;
@@ -53,6 +54,18 @@ class Map : Graph!(Center, Edge, Corner)
 		auto triangulation = generateTriangulation(width, height, resolution);
 
 		super(triangulation.edges);
+	}
+
+	void relaxGraph()
+	{
+		auto points = centers.map!(c => c.corners.map!"a.p".fold!((a,b) => a + b) / c.corners.length).array;
+
+		auto triangulation = Triangulation(points);
+		auto tmp = new Graph!(Center, Edge, Corner)(triangulation.edges);
+
+		edges = tmp.edges;
+		centers = tmp.centers;
+		corners = tmp.corners;
 	}
 }
 
