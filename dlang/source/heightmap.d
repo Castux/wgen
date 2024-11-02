@@ -80,6 +80,8 @@ class Edge : EdgeBase!(Center, Edge, Corner)
 
 class Corner : CornerBase!(Center, Edge, Corner)
 {
+	double z;
+
 	this(Point p)
 	{
 		super(p);
@@ -241,6 +243,11 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		assert(shores.length > 0);
 		Center[] queue;
 
+		import fast_noise;
+		FNLState noise = fnlCreateState();
+		noise.noise_type = FNLNoiseType.FNL_NOISE_CELLULAR;
+		noise.frequency = 1.0/20.0;
+
 		foreach(shore; shores)
 		{
 			shore.z = 0;
@@ -259,7 +266,10 @@ class Heightmap : Graph!(Center, Edge, Corner)
 				double gradient = gradients[n.terrain];
 
 				if (n.terrain != Terrain.lake)
-					gradient = gradient * (1 - smoothing) + c.gradient * smoothing;
+				{
+					gradient = (fnlGetNoise2D(&noise, n.x, n.y) + 1) / 2.0 * 3;
+					//gradient = gradient * (1 - smoothing) + c.gradient * smoothing;
+				}
 
 				assert(gradient > 0);
 
@@ -282,6 +292,8 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			.tee!((c) { lowest = min(lowest, c.z); highest = max(highest, c.z); })
 			.filter!(a => a.terrain == Terrain.sea)
 			.each!(c => c.z = -c.z);
+
+		corners.each!(c => c.z = c.centers.map!(ce => ce.z).sum / c.centers.length);
 	}
 
 	private void computeRiverFlow()
