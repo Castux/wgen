@@ -18,7 +18,7 @@ void exportHeightmap(double[][] data, string path)
 
 	foreach(int r; 0..height)
 	{
-		auto scanline = cast(uint[]) image.scanline(r);
+		auto scanline = cast(ubyte[]) image.scanline(r);
 		foreach(c, value; data[r])
 		{
 			if (value.isNaN)
@@ -26,7 +26,10 @@ void exportHeightmap(double[][] data, string path)
 
 			value = (value - low) / (high - low) * 255;
 			ubyte grey = value.to!ubyte;
-			scanline[c] = (0xFF << 24) | (grey << 16) | (grey << 8) | grey;
+			scanline[c * 4 + 0] = grey;
+			scanline[c * 4 + 1] = grey;
+			scanline[c * 4 + 2] = grey;
+			scanline[c * 4 + 3] = 0xFF;
 		}
 	}
 
