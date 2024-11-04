@@ -1,7 +1,6 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"fast_noise": "1.0.5",
 		"gamut": "3.1.1",
 		"intel-intrinsics": "1.11.21"
 	}
