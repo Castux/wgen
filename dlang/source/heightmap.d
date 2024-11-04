@@ -42,7 +42,7 @@ const Terrain[Pixel] colors =
 
 const double[Terrain] gradients =
 [
-	Terrain.sea: 0.5/3,
+	Terrain.sea: 0.05/3,
 	Terrain.plains: 1.0/3,
 	Terrain.hills: 2.0/3,
 	Terrain.mountains: 4.0/3,
@@ -118,8 +118,6 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		writeln("Building graph");
 		super(triangulation.edges);
 
-
-
 		generate();
 	}
 
@@ -150,10 +148,15 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		assignTerrainTypes();
 
 		writeln("Computing elevation");
-		computeElevation();
+		double[Center] grads;
+		centers.each!(c => grads[c] = gradients.get(c.terrain, 0.0));
+		computeElevation(grads, smoothing);
 
 		writeln("Computing river flow");
 		computeRiverFlow();
+
+		writeln("Eroding");
+		erode();
 	}
 
 	private Triangulation generateTriangulation()
@@ -236,7 +239,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 	}
 
-	private void computeElevation()
+	private void computeElevation(double[Center] gradients, double smoothing)
 	{
 		assert(shores.length > 0);
 		Center[] queue;
@@ -244,7 +247,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		foreach(shore; shores)
 		{
 			shore.z = 0;
-			shore.gradient = gradients[shore.terrain];
+			shore.gradient = gradients[shore];
 			queue ~= shore;
 		}
 
@@ -256,7 +259,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			{
 				if (n.terrain == Terrain.none) continue;
 
-				double gradient = gradients[n.terrain];
+				double gradient = gradients[n];
 
 				if (n.terrain != Terrain.lake)
 					gradient = gradient * (1 - smoothing) + c.gradient * smoothing;
@@ -311,6 +314,34 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 
 		shores.each!flow;
+	}
+
+	static double linearMap(double a, double b, double u, double v, double x)
+	{
+		return (x - a) / (b - a) * (v - u) + u;
+	}
+
+	void erode()
+	{
+		double[Center] eroded;
+
+		foreach(center; centers)
+		{
+			center.z = double.infinity;
+
+			if (center.terrain == Terrain.none) continue;
+
+			double gradient = center.gradient;
+
+			if (center.terrain != Terrain.sea && center.terrain != Terrain.lake)
+			{
+				if (center.flow > 50)
+					gradient *= 0.5;
+			}
+			eroded[center] = gradient;
+		}
+
+		computeElevation(eroded, smoothing: 0.0);
 	}
 
 	private void indexCorners()

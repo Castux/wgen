@@ -22,7 +22,7 @@ void exportHeightmap(double[][] data, string path)
 		foreach(c, value; data[r])
 		{
 			if (value.isNaN)
-				value = 0;
+				value = low;
 
 			value = (value - low) / (high - low) * 255;
 			ubyte grey = value.to!ubyte;
