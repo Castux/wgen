@@ -1,20 +1,24 @@
 {
 	"path": "Chasers.tga",
-	"resolution": 2,
-	"smoothingRadius": 30,
-	"erosionMinFlow": 50,
+	"resolution": 4,
+	"smoothingRadius": 20,
+	"erosionMinFlow": 40,
 	"erosionFactor": 0.5,
 
 	"terrains": {
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": 0.2, "erosion": false},
-		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.4 },
+		"sea": { "r": 66, "g": 66, "b": 125, "gradient": 0.1 , "erosion": false},
+		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2 },
 		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8 },
 		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.5 },
 
-		"lake": { "r": 109, "g": 148, "b": 194, "gradient": 0.0001, "smoothing": false, "erosion": false },
-		"flat": { "r": 153, "g": 153, "b": 153, "gradient": 0.6 },
+		"lake": { "r": 109, "g": 148, "b": 194, "gradient": 0.0001, "smoothing": false, "erosion": false},
+		"flat": { "r": 153, "g": 153, "b": 153, "gradient": 0.01 },
 
 		"cliffs": { "r": 148, "g": 10, "b": 0, "gradient": 4.0, "smoothing": false, "erosion": false}
 
-	}
+	},
+
+	"exportOBJ": true,
+	"exportSVG": false,
+	"exportHeightmap": false
 }

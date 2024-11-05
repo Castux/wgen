@@ -37,6 +37,10 @@ class Config
 	int erosionMinFlow;
 	double erosionFactor;
 
+	bool exportOBJ;
+	bool exportSVG;
+	bool exportHeightmap;
+
 	this(string jsonPath)
 	{
 		auto txt = readText(jsonPath);
@@ -49,6 +53,15 @@ class Config
 		smoothingRadius = json["smoothingRadius"].get!double;
 		erosionMinFlow = json["erosionMinFlow"].get!int;
 		erosionFactor = json["erosionFactor"].get!double;
+
+		if ("exportOBJ" in json)
+			exportOBJ = json["exportOBJ"].get!bool;
+
+		if ("exportSVG" in json)
+			exportSVG = json["exportSVG"].get!bool;
+
+		if ("exportHeightmap" in json)
+			exportHeightmap = json["exportHeightmap"].get!bool;
 
 		foreach(string name, t; json["terrains"])
 		{

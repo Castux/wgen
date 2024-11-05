@@ -95,18 +95,19 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 		generate();
 	}
-	
-	void updateConfig(Config newConfig)
+
+	bool updateConfig(Config newConfig)
 	{
 		if (newConfig.path != conf.path || newConfig.resolution != conf.resolution)
 		{
 			writeln("Cannot update path or resolution");
-			return;
+			return false;
 		}
 
-		if (newConfig.terrains != conf.terrains)
+		if (newConfig.terrains != conf.terrains || newConfig.smoothingRadius != conf.smoothingRadius)
 		{
 			centers.each!(c => c.reset);
+			conf = newConfig;
 
 			writeln("Assigning terrain types");
 			assignTerrainTypes();
@@ -120,9 +121,20 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			writeln("Eroding");
 			erode();
 
-			conf = newConfig;
-			return;
+			return true;
 		}
+
+		if (newConfig.erosionMinFlow != conf.erosionMinFlow || newConfig.erosionFactor != conf.erosionFactor)
+		{
+			conf = newConfig;
+
+			writeln("Eroding");
+			erode();
+
+			return true;
+		}
+
+		return false;
 	}
 
 	double margin() const
