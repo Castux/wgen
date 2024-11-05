@@ -23,11 +23,6 @@ enum Terrain
 	cliffs
 }
 
-struct Pixel
-{
-	ubyte r,g,b;
-}
-
 const Terrain[Pixel] colors =
 [
 	Pixel(66, 66, 125): Terrain.sea,
