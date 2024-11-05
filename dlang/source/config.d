@@ -13,6 +13,7 @@ class Terrain
 	Pixel color;
 	double gradient;
 	bool smoothing = true;
+	bool erosion = true;
 }
 
 class Config
@@ -22,6 +23,7 @@ class Config
 	Terrain[Pixel] terrains;
 	double smoothingRadius;
 	int erosionMinFlow;
+	double erosionFactor;
 
 	this(string jsonPath)
 	{
@@ -31,6 +33,7 @@ class Config
 		resolution = json["resolution"].get!int;
 		smoothingRadius = json["smoothingRadius"].get!double;
 		erosionMinFlow = json["erosionMinFlow"].get!int;
+		erosionFactor = json["erosionFactor"].get!double;
 
 		foreach(string name, t; json["terrains"])
 		{
@@ -41,6 +44,9 @@ class Config
 
 			if ("smoothing" in t)
 				terrain.smoothing = t["smoothing"].get!bool;
+
+			if ("erosion" in t)
+				terrain.smoothing = t["erosion"].get!bool;
 
 			terrains[terrain.color] = terrain;
 		}

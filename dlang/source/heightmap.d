@@ -145,7 +145,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			if (!inBoundsPlusHalfMargin(center.p))
 				points ~= center.p;
 			else
-				points ~= center.neighbours.map!"a.p".fold!((a,b) => a + b) / center.neighbours.length;
+				points ~= center.corners.map!"a.p".fold!((a,b) => a + b) / center.corners.length;
 		}
 
 		auto triangulation = Triangulation(points);
@@ -337,12 +337,10 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 	void erode()
 	{
-		auto minFlow = conf.erosionMinFlow;
-
 		centers.each!(c => c.z = double.infinity);
 		computeElevation((Center c) {
-			return c.terrain.name != "sea" && c.terrain.name != "lake" && c.flow >= minFlow ?
-				c.gradient * 0.5 :
+			return c.terrain.erosion && c.flow >= conf.erosionMinFlow ?
+				c.gradient * conf.erosionFactor :
 				c.gradient;
 		});
 	}
