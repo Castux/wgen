@@ -25,7 +25,7 @@ void exportOBJ(Heightmap m, string path)
 
 	foreach(corner; m.corners)
 	{
-		if (corner.centers.any!(c => c.terrain == Terrain.none))
+		if (corner.centers.any!(c => c.terrain is null))
 			continue;
 
 		auto ids = corner.centers.map!(c => centerIDs[c]).array.reverse;

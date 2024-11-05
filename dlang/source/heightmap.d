@@ -11,42 +11,6 @@ import delaunator;
 import graph;
 import config;
 
-enum Terrain
-{
-	none,
-	sea,
-	plains,
-	hills,
-	mountains,
-	lake,
-	flat,
-	cliffs
-}
-
-const Terrain[Pixel] colors =
-[
-	Pixel(66, 66, 125): Terrain.sea,
-
-	Pixel(135, 168, 81): Terrain.plains,
-	Pixel(209, 184, 134): Terrain.hills,
-	Pixel(101, 72, 31): Terrain.mountains,
-
-	Pixel(109, 148, 194): Terrain.lake,
-	Pixel(153, 153, 153): Terrain.flat,
-	Pixel(148, 10, 0): Terrain.cliffs
-];
-
-const double[Terrain] gradients =
-[
-	Terrain.sea: 0.5/3,
-	Terrain.plains: 1.0/3,
-	Terrain.hills: 2.0/3,
-	Terrain.mountains: 4.0/3,
-	Terrain.lake: 0.001/3,
-	Terrain.flat: 0.2/3,
-	Terrain.cliffs: 8.0/3
-];
-
 class Center : CenterBase!(Center, Edge, Corner)
 {
 	Terrain terrain;
@@ -215,7 +179,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		{
 			if (!inBoundsPlusHalfMargin(center.p))
 			{
-				center.terrain = Terrain.none;
+				center.terrain = null;
 				continue;
 			}
 
@@ -223,14 +187,14 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			int col = center.x.to!int;
 
 			auto pixel = getPixel(row, col);
-			center.terrain = colors.get(pixel, Terrain.none);
+			center.terrain = conf.terrains.get(pixel, null);
 		}
 
 		foreach(center; centers)
 		{
-			if (center.terrain != Terrain.sea
-				&& center.terrain != Terrain.none
-				&& center.neighbours.any!(n => n.terrain == Terrain.sea))
+			if (center.terrain !is null
+				&& center.terrain.name != "sea"
+				&& center.neighbours.any!(n => n.terrain && n.terrain.name == "sea"))
 			{
 				center.shore = true;
 				shores ~= center;
@@ -243,15 +207,17 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		auto radius = conf.smoothingRadius;
 		if (radius == 0.0)
 		{
-			centers.each!(c => c.gradient = gradients.get(c.terrain, 0.0));
+			centers.each!(c => c.gradient = c.terrain ? c.terrain.gradient : 0.0);
 			return;
 		}
 
 		foreach(center; centers)
 		{
-			if (center.terrain == Terrain.lake)
+			if (center.terrain is null) continue;
+
+			if (!center.terrain.smoothing)
 			{
-				center.gradient = gradients[Terrain.lake];
+				center.gradient = center.terrain.gradient;
 				continue;
 			}
 
@@ -268,22 +234,24 @@ class Heightmap : Graph!(Center, Edge, Corner)
 				auto current = queue[0];
 				visited[current] = true;
 
-				auto dist = (current.p - center.p).len;
-				auto coeff = exp(-1.0 * dist * dist / (radius * radius));
-
-				sum += coeff * gradients.get(current.terrain, 0.0);
-				coeffSum += coeff;
-
-				if (dist < 2 * radius)
+				if (current.terrain)
 				{
-					foreach(n; current.neighbours)
+					auto dist = (current.p - center.p).len;
+					auto coeff = exp(-1.0 * dist * dist / (radius * radius));
+
+					sum += coeff * current.terrain.gradient;
+					coeffSum += coeff;
+
+					if (dist < 2 * radius)
 					{
-						if (n !in visited)
+						foreach(n; current.neighbours)
 						{
-							queue ~= n;
+							if (n !in visited)
+							{
+								queue ~= n;
+							}
 						}
 					}
-
 				}
 
 				queue = queue[1..$];
@@ -310,7 +278,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 			foreach (n; c.neighbours)
 			{
-				if (n.terrain == Terrain.none) continue;
+				if (n.terrain is null) continue;
 
 				auto gradient = gradFunc(c);
 				auto newZ = c.z + gradient * n.p.dist(c.p);
@@ -327,9 +295,9 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		lowest = double.infinity;
 		highest = -double.infinity;
 		centers
-			.filter!(a => a.terrain != Terrain.none)
+			.filter!(a => a.terrain !is null)
 			.tee!((c) { lowest = min(lowest, c.z); highest = max(highest, c.z); })
-			.filter!(a => a.terrain == Terrain.sea)
+			.filter!(a => a.terrain.name == "sea")
 			.each!(c => c.z = -c.z);
 	}
 
@@ -373,7 +341,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 		centers.each!(c => c.z = double.infinity);
 		computeElevation((Center c) {
-			return c.terrain != Terrain.sea && c.terrain != Terrain.lake && c.flow >= minFlow ?
+			return c.terrain.name != "sea" && c.terrain.name != "lake" && c.flow >= minFlow ?
 				c.gradient * 0.5 :
 				c.gradient;
 		});

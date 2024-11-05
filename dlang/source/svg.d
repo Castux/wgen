@@ -29,13 +29,16 @@ void exportSVG(Heightmap m, string path)
 		auto s = center.corners.map!(c => "%f,%f".format(c.x, c.y)).join(" ");
 
 		string col;
-		switch (center.terrain)
+
+		if (!center.terrain)
+			col = "pink";
+		else
+		switch (center.terrain.name)
 		{
-			case Terrain.none: col = "pink"; break;
-			case Terrain.lake:
+			case "lake":
 				col = "#0E443D";
 				break;
-			case Terrain.sea:
+			case "sea":
 				auto f = center.z / m.lowest;
 				col = "rgb(%.2f,%.2f,%.2f)".format(
 					lerp(95, 0, f),
