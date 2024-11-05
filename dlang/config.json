@@ -14,7 +14,7 @@
 		"lake": { "r": 109, "g": 148, "b": 194, "gradient": 0.0001, "smoothing": false, "erosion": false },
 		"flat": { "r": 153, "g": 153, "b": 153, "gradient": 0.6 },
 
-		"cliffs": { "r": 148, "g": 10, "b": 0, "gradient": 4.0 }
+		"cliffs": { "r": 148, "g": 10, "b": 0, "gradient": 4.0, "smoothing": false, "erosion": false}
 
 	}
 }

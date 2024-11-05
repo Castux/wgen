@@ -110,7 +110,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		assignTerrainTypes();
 
 		writeln("Computing elevation");
-		computeElevation((Center c) {return c.gradient;});
+		computeElevation((Center c, Center n) {return c.gradient;});
 
 		writeln("Computing river flow");
 		computeRiverFlow();
@@ -228,7 +228,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 	}
 
-	private void computeElevation(double delegate(Center) gradFunc)
+	private void computeElevation(double delegate(Center, Center) gradFunc)
 	{
 		assert(shores.length > 0);
 		Center[] queue;
@@ -247,7 +247,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			{
 				if (n.terrain is null) continue;
 
-				auto gradient = gradFunc(c);
+				auto gradient = gradFunc(c, n);
 				auto newZ = c.z + gradient * n.p.dist(c.p);
 				if (newZ < n.z)
 				{
@@ -305,8 +305,8 @@ class Heightmap : Graph!(Center, Edge, Corner)
 	void erode()
 	{
 		centers.each!(c => c.z = double.infinity);
-		computeElevation((Center c) {
-			return c.terrain.erosion && c.flow >= conf.erosionMinFlow ?
+		computeElevation((Center c, Center n) {
+			return c.terrain.erosion && n.downhill is c && c.flow > conf.erosionMinFlow ?
 				c.gradient * conf.erosionFactor :
 				c.gradient;
 		});
