@@ -1,9 +1,9 @@
 {
 	"path": "Chasers.tga",
-	"resolution": 5,
-	"smoothingRadius": 10,
-	"erosionMinFlow": 10,
-	"erosionFactor": 0.4,
+	"resolution": 2,
+	"smoothingRadius": 30,
+	"erosionMinFlow": 50,
+	"erosionFactor": 0.5,
 
 	"terrains": {
 		"sea": { "r": 66, "g": 66, "b": 125, "gradient": 0.2, "erosion": false},

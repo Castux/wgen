@@ -109,9 +109,6 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		writeln("Assigning terrain types");
 		assignTerrainTypes();
 
-		writeln("Smoothing gradients");
-		applySmoothing();
-
 		writeln("Computing elevation");
 		computeElevation((Center c) {return c.gradient;});
 
@@ -188,6 +185,35 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 			auto pixel = getPixel(row, col);
 			center.terrain = conf.terrains.get(pixel, null);
+
+			auto r = conf.smoothingRadius;
+			if (center.terrain.smoothing && r > 0.0)
+			{
+				auto sum = 0.0;
+				auto count = 0;
+
+				auto numSamples = pow(conf.smoothingRadius / conf.resolution, 2).to!int;
+
+				while (count < numSamples)
+				{
+					Point p = Point(uniform(center.x - r, center.x + r), uniform(center.y - r, center.y + r));
+
+					if (inBounds(p))
+					{
+						pixel = getPixel(p.y.to!int, p.x.to!int);
+						auto terrain = conf.terrains.get(pixel, null);
+						if (terrain)
+						{
+							sum += terrain.gradient;
+							count++;
+						}
+					}
+				}
+
+				center.gradient = sum/count;
+			}
+			else
+				center.gradient = center.terrain.gradient;
 		}
 
 		foreach(center; centers)
@@ -199,65 +225,6 @@ class Heightmap : Graph!(Center, Edge, Corner)
 				center.shore = true;
 				shores ~= center;
 			}
-		}
-	}
-
-	private void applySmoothing()
-	{
-		auto radius = conf.smoothingRadius;
-		if (radius == 0.0)
-		{
-			centers.each!(c => c.gradient = c.terrain ? c.terrain.gradient : 0.0);
-			return;
-		}
-
-		foreach(center; centers)
-		{
-			if (center.terrain is null) continue;
-
-			if (!center.terrain.smoothing)
-			{
-				center.gradient = center.terrain.gradient;
-				continue;
-			}
-
-			double sum = 0;
-			double coeffSum = 0;
-
-			bool[Center] visited;
-			Center[] queue;
-
-			queue ~= center;
-
-			while (queue.length > 0)
-			{
-				auto current = queue[0];
-				visited[current] = true;
-
-				if (current.terrain)
-				{
-					auto dist = (current.p - center.p).len;
-					auto coeff = exp(-1.0 * dist * dist / (radius * radius));
-
-					sum += coeff * current.terrain.gradient;
-					coeffSum += coeff;
-
-					if (dist < 2 * radius)
-					{
-						foreach(n; current.neighbours)
-						{
-							if (n !in visited)
-							{
-								queue ~= n;
-							}
-						}
-					}
-				}
-
-				queue = queue[1..$];
-			}
-
-			center.gradient = sum / coeffSum;
 		}
 	}
 
