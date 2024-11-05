@@ -9,6 +9,7 @@ import std.typecons;
 import gamut;
 import delaunator;
 import graph;
+import config;
 
 enum Terrain
 {
@@ -88,6 +89,8 @@ class Corner : CornerBase!(Center, Edge, Corner)
 
 class Heightmap : Graph!(Center, Edge, Corner)
 {
+	Config conf;
+
 	Image outline;
 	const(int) width;
 	const(int) height;
@@ -99,18 +102,20 @@ class Heightmap : Graph!(Center, Edge, Corner)
 	Corner[][][] spatialIndex;
 	const(double) binSize;
 
-	this(string path, int resolution)
+	this(Config conf)
 	{
 		import std.stdio;
 
-		outline.loadFromFile(path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
+		this.conf = conf;
+
+		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
 		if (outline.isError)
-			throw new Exception("Could not load " ~ path);
+			throw new Exception("Could not load " ~ conf.path);
 
 		this.width = outline.width;
 		this.height = outline.height;
-		this.resolution = resolution;
-		this.binSize = resolution * 4;
+		this.resolution = conf.resolution;
+		this.binSize = conf.resolution * 4;
 
 		writeln("Triangulating");
 		auto triangulation = generateTriangulation();
@@ -148,10 +153,10 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		assignTerrainTypes();
 
 		writeln("Smoothing gradients");
-		applySmoothing(0.0);
+		applySmoothing();
 
 		writeln("Computing elevation");
-		computeElevation!((Center c) {return c.gradient;});
+		computeElevation((Center c) {return c.gradient;});
 
 		writeln("Computing river flow");
 		computeRiverFlow();
@@ -240,8 +245,9 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 	}
 
-	private void applySmoothing(double radius)
+	private void applySmoothing()
 	{
+		auto radius = conf.smoothingRadius;
 		if (radius == 0.0)
 		{
 			centers.each!(c => c.gradient = gradients.get(c.terrain, 0.0));
@@ -294,7 +300,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 	}
 
-	private void computeElevation(alias gradFunc)()
+	private void computeElevation(double delegate(Center) gradFunc)
 	{
 		assert(shores.length > 0);
 		Center[] queue;
@@ -370,9 +376,11 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 	void erode()
 	{
+		auto minFlow = conf.erosionMinFlow;
+
 		centers.each!(c => c.z = double.infinity);
-		computeElevation!((Center c) {
-			return c.terrain != Terrain.sea && c.terrain != Terrain.lake && c.flow > 50 ?
+		computeElevation((Center c) {
+			return c.terrain != Terrain.sea && c.terrain != Terrain.lake && c.flow >= minFlow ?
 				c.gradient * 0.5 :
 				c.gradient;
 		});
