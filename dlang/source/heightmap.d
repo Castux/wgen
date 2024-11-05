@@ -147,16 +147,17 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		writeln("Assigning terrain types");
 		assignTerrainTypes();
 
+		writeln("Smoothing gradients");
+		applySmoothing(10.0);
+
 		writeln("Computing elevation");
-		double[Center] grads;
-		centers.each!(c => grads[c] = gradients.get(c.terrain, 0.0));
-		computeElevation(grads, smoothing);
+		computeElevation();
 
 		writeln("Computing river flow");
 		computeRiverFlow();
-
-		writeln("Eroding");
-		erode();
+		//
+		// writeln("Eroding");
+		// erode();
 	}
 
 	private Triangulation generateTriangulation()
@@ -239,7 +240,61 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 	}
 
-	private void computeElevation(double[Center] gradients, double smoothing)
+	private void applySmoothing(double radius)
+	{
+		if (radius == 0.0)
+		{
+			centers.each!(c => c.gradient = gradients.get(c.terrain, 0.0));
+			return;
+		}
+
+		foreach(center; centers)
+		{
+			if (center.terrain == Terrain.lake)
+			{
+				center.gradient = gradients[Terrain.lake];
+				continue;
+			}
+
+			double sum = 0;
+			double coeffSum = 0;
+
+			bool[Center] visited;
+			Center[] queue;
+
+			queue ~= center;
+
+			while (queue.length > 0)
+			{
+				auto current = queue[0];
+				visited[current] = true;
+
+				auto dist = (current.p - center.p).len;
+				auto coeff = exp(-1.0 * dist * dist / (radius * radius));
+
+				sum += coeff * gradients.get(current.terrain, 0.0);
+				coeffSum += coeff;
+
+				if (dist < 2 * radius)
+				{
+					foreach(n; current.neighbours)
+					{
+						if (n !in visited)
+						{
+							queue ~= n;
+						}
+					}
+
+				}
+
+				queue = queue[1..$];
+			}
+
+			center.gradient = sum / coeffSum;
+		}
+	}
+
+	private void computeElevation()
 	{
 		assert(shores.length > 0);
 		Center[] queue;
@@ -247,7 +302,6 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		foreach(shore; shores)
 		{
 			shore.z = 0;
-			shore.gradient = gradients[shore];
 			queue ~= shore;
 		}
 
@@ -259,17 +313,9 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			{
 				if (n.terrain == Terrain.none) continue;
 
-				double gradient = gradients[n];
-
-				if (n.terrain != Terrain.lake)
-					gradient = gradient * (1 - smoothing) + c.gradient * smoothing;
-
-				assert(gradient > 0);
-
-				auto newZ = c.z + gradient * n.p.dist(c.p);
+				auto newZ = c.z + c.gradient * n.p.dist(c.p);
 				if (newZ < n.z)
 				{
-					n.gradient = gradient;
 					n.z = newZ;
 					queue ~= n;
 				}
@@ -321,28 +367,28 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		return (x - a) / (b - a) * (v - u) + u;
 	}
 
-	void erode()
-	{
-		double[Center] eroded;
-
-		foreach(center; centers)
-		{
-			center.z = double.infinity;
-
-			if (center.terrain == Terrain.none) continue;
-
-			double gradient = center.gradient;
-
-			if (center.terrain != Terrain.sea && center.terrain != Terrain.lake)
-			{
-				if (center.flow > 50)
-					gradient *= 0.5;
-			}
-			eroded[center] = gradient;
-		}
-
-		computeElevation(eroded, smoothing: 0.0);
-	}
+	// void erode()
+	// {
+	// 	double[Center] eroded;
+	//
+	// 	foreach(center; centers)
+	// 	{
+	// 		center.z = double.infinity;
+	//
+	// 		if (center.terrain == Terrain.none) continue;
+	//
+	// 		double gradient = center.gradient;
+	//
+	// 		if (center.terrain != Terrain.sea && center.terrain != Terrain.lake)
+	// 		{
+	// 			if (center.flow > 50)
+	// 				gradient *= 0.5;
+	// 		}
+	// 		eroded[center] = gradient;
+	// 	}
+	//
+	// 	computeElevation(eroded, smoothing: 0.0);
+	// }
 
 	private void indexCorners()
 	{
