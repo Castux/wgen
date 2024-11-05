@@ -5,6 +5,7 @@ import std.math;
 import std.conv;
 import std.range;
 import std.typecons;
+import std.stdio;
 
 import gamut;
 import delaunator;
@@ -26,6 +27,17 @@ class Center : CenterBase!(Center, Edge, Corner)
 	this(Point p)
 	{
 		 super(p);
+	}
+
+	void reset()
+	{
+		terrain = null;
+		shore = false;
+		z = double.infinity;
+		gradient = 0;
+		downhill = null;
+		uphill = [];
+		flow = 0;
 	}
 }
 
@@ -49,20 +61,18 @@ class Heightmap : Graph!(Center, Edge, Corner)
 	Config conf;
 
 	Image outline;
-	const(int) width;
-	const(int) height;
-	const(double) resolution;
+	int width;
+	int height;
+	double resolution;
 
 	Center[] shores;
 	double lowest, highest;
 
 	Corner[][][] spatialIndex;
-	const(double) binSize;
+	double binSize;
 
 	this(Config conf)
 	{
-		import std.stdio;
-
 		this.conf = conf;
 
 		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
@@ -80,13 +90,39 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		writeln("Building graph");
 		super(triangulation.edges);
 
+		writeln("Relaxing");
+		relaxGraph();
+
 		generate();
 	}
-
+	
 	void updateConfig(Config newConfig)
 	{
-		import std.stdio;
-		writeln("Pretending to update");
+		if (newConfig.path != conf.path || newConfig.resolution != conf.resolution)
+		{
+			writeln("Cannot update path or resolution");
+			return;
+		}
+
+		if (newConfig.terrains != conf.terrains)
+		{
+			centers.each!(c => c.reset);
+
+			writeln("Assigning terrain types");
+			assignTerrainTypes();
+
+			writeln("Computing elevation");
+			computeElevation((Center c, Center n) {return c.gradient;});
+
+			writeln("Computing river flow");
+			computeRiverFlow();
+
+			writeln("Eroding");
+			erode();
+
+			conf = newConfig;
+			return;
+		}
 	}
 
 	double margin() const
@@ -108,9 +144,6 @@ class Heightmap : Graph!(Center, Edge, Corner)
 	private void generate()
 	{
 		import std.stdio;
-
-		writeln("Relaxing");
-		relaxGraph();
 
 		writeln("Assigning terrain types");
 		assignTerrainTypes();

@@ -14,6 +14,18 @@ class Terrain
 	double gradient;
 	bool smoothing = true;
 	bool erosion = true;
+
+	override bool opEquals(Object other)
+	{
+		if (typeid(this) != typeid(other)) return false;
+		auto o = cast(Terrain) other;
+
+		return name == o.name &&
+			color == o.color &&
+			gradient == o.gradient &&
+			smoothing == o.smoothing &&
+			erosion == o.erosion;
+	}
 }
 
 class Config
@@ -27,8 +39,11 @@ class Config
 
 	this(string jsonPath)
 	{
-		auto json = parseJSON(readText(jsonPath));
+		auto txt = readText(jsonPath);
+		auto json = parseJSON(txt);
 
+		try
+		{
 		path = json["path"].get!string;
 		resolution = json["resolution"].get!double;
 		smoothingRadius = json["smoothingRadius"].get!double;
@@ -49,6 +64,15 @@ class Config
 				terrain.smoothing = t["erosion"].get!bool;
 
 			terrains[terrain.color] = terrain;
+		}
+
+		}
+
+		catch(Exception e)
+		{
+			writeln(jsonPath);
+			writeln(txt);
+			writeln(e);
 		}
 	}
 }
