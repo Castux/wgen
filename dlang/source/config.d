@@ -19,7 +19,7 @@ class Terrain
 class Config
 {
 	string path;
-	int resolution;
+	double resolution;
 	Terrain[Pixel] terrains;
 	double smoothingRadius;
 	int erosionMinFlow;
@@ -30,7 +30,7 @@ class Config
 		auto json = parseJSON(readText(jsonPath));
 
 		path = json["path"].get!string;
-		resolution = json["resolution"].get!int;
+		resolution = json["resolution"].get!double;
 		smoothingRadius = json["smoothingRadius"].get!double;
 		erosionMinFlow = json["erosionMinFlow"].get!int;
 		erosionFactor = json["erosionFactor"].get!double;

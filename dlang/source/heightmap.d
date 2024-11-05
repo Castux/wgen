@@ -83,6 +83,12 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		generate();
 	}
 
+	void updateConfig(Config newConfig)
+	{
+		import std.stdio;
+		writeln("Pretending to update");
+	}
+
 	double margin() const
 	{
 		return resolution * 4;
@@ -189,12 +195,12 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			auto r = conf.smoothingRadius;
 			if (center.terrain.smoothing && r > 0.0)
 			{
-				auto sum = 0.0;
-				auto count = 0;
+				auto sum = center.terrain.gradient;
+				auto count = 1;
 
-				auto numSamples = pow(conf.smoothingRadius / conf.resolution, 2).to!int;
+				auto numSamples = ceil(pow(conf.smoothingRadius / conf.resolution, 2)).to!int;
 
-				while (count < numSamples)
+				foreach(i; 0..numSamples)
 				{
 					Point p = Point(uniform(center.x - r, center.x + r), uniform(center.y - r, center.y + r));
 
