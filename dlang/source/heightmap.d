@@ -42,7 +42,7 @@ const Terrain[Pixel] colors =
 
 const double[Terrain] gradients =
 [
-	Terrain.sea: 0.05/3,
+	Terrain.sea: 0.5/3,
 	Terrain.plains: 1.0/3,
 	Terrain.hills: 2.0/3,
 	Terrain.mountains: 4.0/3,
@@ -148,16 +148,16 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		assignTerrainTypes();
 
 		writeln("Smoothing gradients");
-		applySmoothing(10.0);
+		applySmoothing(0.0);
 
 		writeln("Computing elevation");
-		computeElevation();
+		computeElevation!((Center c) {return c.gradient;});
 
 		writeln("Computing river flow");
 		computeRiverFlow();
-		//
-		// writeln("Eroding");
-		// erode();
+
+		writeln("Eroding");
+		erode();
 	}
 
 	private Triangulation generateTriangulation()
@@ -294,7 +294,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 	}
 
-	private void computeElevation()
+	private void computeElevation(alias gradFunc)()
 	{
 		assert(shores.length > 0);
 		Center[] queue;
@@ -313,7 +313,8 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			{
 				if (n.terrain == Terrain.none) continue;
 
-				auto newZ = c.z + c.gradient * n.p.dist(c.p);
+				auto gradient = gradFunc(c);
+				auto newZ = c.z + gradient * n.p.dist(c.p);
 				if (newZ < n.z)
 				{
 					n.z = newZ;
@@ -367,28 +368,15 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		return (x - a) / (b - a) * (v - u) + u;
 	}
 
-	// void erode()
-	// {
-	// 	double[Center] eroded;
-	//
-	// 	foreach(center; centers)
-	// 	{
-	// 		center.z = double.infinity;
-	//
-	// 		if (center.terrain == Terrain.none) continue;
-	//
-	// 		double gradient = center.gradient;
-	//
-	// 		if (center.terrain != Terrain.sea && center.terrain != Terrain.lake)
-	// 		{
-	// 			if (center.flow > 50)
-	// 				gradient *= 0.5;
-	// 		}
-	// 		eroded[center] = gradient;
-	// 	}
-	//
-	// 	computeElevation(eroded, smoothing: 0.0);
-	// }
+	void erode()
+	{
+		centers.each!(c => c.z = double.infinity);
+		computeElevation!((Center c) {
+			return c.terrain != Terrain.sea && c.terrain != Terrain.lake && c.flow > 50 ?
+				c.gradient * 0.5 :
+				c.gradient;
+		});
+	}
 
 	private void indexCorners()
 	{
