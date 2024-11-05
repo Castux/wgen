@@ -1,0 +1,19 @@
+{
+	"path": "Chasers.tga",
+	"resolution": 20,
+	"smoothingRadius": 10,
+	"erosionMinFlow": 10,
+
+	"terrains": {
+		"sea": { "r": 66, "g": 66, "b": 125, "gradient": 0.5 },
+		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 1.0 },
+		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 2.0 },
+		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 4.0 },
+
+		"lake": { "r": 109, "g": 148, "b": 194, "gradient": 0.001 },
+		"flat": { "r": 153, "g": 153, "b": 153, "gradient": 0.2 },
+
+		"cliffs": { "r": 148, "g": 10, "b": 0, "gradient": 8.0 }
+
+	}
+}

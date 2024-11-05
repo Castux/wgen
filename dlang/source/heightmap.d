@@ -52,8 +52,6 @@ const double[Terrain] gradients =
 	Terrain.cliffs: 8.0/3
 ];
 
-const smoothing = 0.5;
-
 class Center : CenterBase!(Center, Edge, Corner)
 {
 	Terrain terrain;
