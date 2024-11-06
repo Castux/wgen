@@ -12,22 +12,31 @@ import obj;
 import image;
 import viewer;
 
-vec3 fromCenter(Center c)
-{
-	return vec3(c.x, c.y, c.z);
-}
-
 void updateVertices(Model model, Heightmap map)
 {
-	model.vertices.length = 3 * map.corners.length;
-	foreach(i, corner; map.corners)
+	model.vertices.length = 0;
+	foreach_reverse(i, corner; map.corners)
 	{
-		model.vertices[i * 3 + 0].pos = corner.centers[0].fromCenter;
-		model.vertices[i * 3 + 1].pos = corner.centers[1].fromCenter;
-		model.vertices[i * 3 + 2].pos = corner.centers[2].fromCenter;
-		model.vertices[i * 3 + 0].col = vec3(1.0, 0.0, 0.0);
-		model.vertices[i * 3 + 1].col = vec3(0.0, 1.0, 0.0);
-		model.vertices[i * 3 + 2].col = vec3(0.0, 0.0, 1.0);
+		if (!map.inBounds(corner.p)) continue;
+
+		foreach (center; corner.centers)
+		{
+			double ratio = (center.z - map.lowest) / (map.highest - map.lowest);
+			vec3 col;
+			if (center.z > 0)
+			{
+				col = vec3(ratio, ratio, ratio);
+			}
+			else
+			{
+				col = vec3(0.0, 0.0, 0.8) * ratio;
+			}
+
+			model.vertices ~= Vertex(
+				vec3(center.x, -center.y, center.z),
+				col
+			);
+		}
 	}
 
 	model.updateData();
@@ -47,6 +56,8 @@ int main(string[] args)
 	Config conf = new Config(path);
 	Heightmap map = new Heightmap(conf);
 
+	writefln("Range %f %f", map.lowest, map.highest);
+
 	void exports()
 	{
 		writeln("Exporting");
@@ -61,7 +72,7 @@ int main(string[] args)
 
 	if (updateMode)
 	{
-		auto viewer = new Viewer(1024, 768, "wgen");
+		auto viewer = new Viewer(1024, 1024, "wgen");
 		auto model = viewer.newModel();
 
 		updateVertices(model, map);

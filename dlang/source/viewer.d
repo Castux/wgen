@@ -32,11 +32,11 @@ static const char* vertex_shader_text = `
 #version 330
 uniform mat4 MVP;
 in vec3 vCol;
-in vec2 vPos;
+in vec3 vPos;
 out vec3 color;
 void main()
 {
-	gl_Position = MVP * vec4(vPos, 0.0, 1.0);
+	gl_Position = MVP * vec4(vPos, 1.0);
 	color = vCol;
 }`;
 // `
@@ -89,6 +89,8 @@ class Viewer
 		if (singleton)
 			throw new Exception("Multiple viewer instances");
 
+		glEnable(GL_DEPTH_TEST);
+
 		singleton = this;
 
 		setupShaders();
@@ -127,14 +129,18 @@ class Viewer
 			float ratio = width / cast(float) height;
 
 			glViewport(0, 0, width, height);
-			glClear(GL_COLOR_BUFFER_BIT);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			auto m = mat4x4.identity;
-			m = m.rotateZ(cast(float) glfwGetTime() / 5.0);
+			auto mod =
+				mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
+				mat4x4.translation(vec3(-1000, 1000, 0));
 
 			auto s = 2000.0;
-			auto p = mat4x4.orthographic(-ratio * s, ratio * s, -1.0 * s, 1.0 * s, 1.0, -1.0);
-			auto mvp = p * m;
+
+			auto view = mat4x4.lookAt(vec3(1000, -1000, 1000), vec3(0, 0, 0), vec3(0.0, 0.0, 1.0));
+			auto proj = mat4x4.orthographic(-1000, 1000, -1000, 1000, 4000.0, -4000.0);
+
+			auto mvp = proj * view * mod;
 			mvp = mvp.transposed;
 
 			glUseProgram(program);
@@ -191,7 +197,7 @@ class Model
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
 		glEnableVertexAttribArray(vposLocation);
-		glVertexAttribPointer(vposLocation, 2, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
+		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
 		glEnableVertexAttribArray(vcolLocation);
 		glVertexAttribPointer(vcolLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.col.offsetof);
 	}
