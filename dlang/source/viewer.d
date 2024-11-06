@@ -154,6 +154,13 @@ class Viewer
 	{
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
+
+		else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
+		{
+			auto model = models[0];
+			model.vertices[1].pos.x += 0.1;
+			model.updateData();
+		}
 	}
 
 	Model newModel(Vertex[] vertices)
@@ -180,10 +187,8 @@ class Model
 		this.vertices = vertices;
 
 		glGenBuffers(1, &vertexBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
+		updateData();
 
-		GLint mvpLocation = glGetUniformLocation(program, "MVP");
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vcolLocation = glGetAttribLocation(program, "vCol");
 
@@ -199,6 +204,12 @@ class Model
 	{
 		glDeleteBuffers(1, &vertexBuffer);
 		glDeleteVertexArrays(1, &vertexArray);
+	}
+
+	void updateData()
+	{
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
 	}
 
 	void draw()
