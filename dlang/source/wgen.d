@@ -12,7 +12,12 @@ import obj;
 import image;
 import viewer;
 
-int main2(string[] args)
+vec3 fromCenter(Center c)
+{
+	return vec3(c.x, c.y, c.z);
+}
+
+int main(string[] args)
 {
 	if (args.length < 2)
 	{
@@ -38,45 +43,55 @@ int main2(string[] args)
 		}
 	}
 
-	exports();
-
 	if (updateMode)
 	{
-		writeln("Waiting for update");
+		auto viewer = new Viewer(1024, 768, "wgen");
 
-		auto watcher = FileWatch(path);
-		while (true)
+		Vertex[] vertices;
+
+		void updateVertices()
 		{
-			foreach (event; watcher.getEvents())
+			vertices.length = 3 * map.corners.length;
+			foreach(i, corner; map.corners)
 			{
-				if (event.path == path && event.type == FileChangeEventType.modify)
-				{
-					Config newConfig = new Config(path);
-					auto changed = map.updateConfig(newConfig);
-
-					if (changed)
-					{
-						exports();
-						writeln("Waiting for update");
-					}
-				}
+				vertices[i * 3 + 0].pos = corner.centers[0].fromCenter;
+				vertices[i * 3 + 1].pos = corner.centers[1].fromCenter;
+				vertices[i * 3 + 2].pos = corner.centers[2].fromCenter;
+				vertices[i * 3 + 0].col = vec3(1.0, 0.0, 0.0);
+				vertices[i * 3 + 1].col = vec3(0.0, 1.0, 0.0);
+				vertices[i * 3 + 2].col = vec3(0.0, 0.0, 1.0);
 			}
 		}
+
+		updateVertices();
+
+		auto model = viewer.newModel(vertices);
+		viewer.run();
+
+		//
+		// writeln("Waiting for update");
+		//
+		// auto watcher = FileWatch(path);
+		// while (true)
+		// {
+		// 	foreach (event; watcher.getEvents())
+		// 	{
+		// 		if (event.path == path && event.type == FileChangeEventType.modify)
+		// 		{
+		// 			Config newConfig = new Config(path);
+		// 			auto changed = map.updateConfig(newConfig);
+		//
+		// 			if (changed)
+		// 			{
+		// 				exports();
+		// 				writeln("Waiting for update");
+		// 			}
+		// 		}
+		// 	}
+		// }
 	}
+	else
+		exports();
 
 	return 0;
-}
-
-void main()
-{
-	auto viewer = new Viewer(1024, 768, "wgen");
-	Vertex[] vertices =
-	[
-		Vertex( vec2(-0.6, -0.4), vec3(1.0, 0.0, 0.0) ),
-		Vertex( vec2( 0.6, -0.4), vec3(0.0, 1.0, 0.0) ),
-		Vertex( vec2( 0.0,  0.6), vec3(0.0, 0.0, 1.0) )
-	];
-
-	viewer.newModel(vertices);
-	viewer.run();
 }

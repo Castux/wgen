@@ -12,7 +12,7 @@ alias mat4x4 = mat4x4f;
 
 struct Vertex
 {
-	vec2 pos;
+	vec3 pos;
 	vec3 col;
 }
 
@@ -130,9 +130,10 @@ class Viewer
 			glClear(GL_COLOR_BUFFER_BIT);
 
 			auto m = mat4x4.identity;
-			m = m.rotateZ(cast(float) glfwGetTime());
+			m = m.rotateZ(cast(float) glfwGetTime() / 5.0);
 
-			auto p = mat4x4.orthographic(-ratio, ratio, -1.0, 1.0, 1.0, -1.0);
+			auto s = 2000.0;
+			auto p = mat4x4.orthographic(-ratio * s, ratio * s, -1.0 * s, 1.0 * s, 1.0, -1.0);
 			auto mvp = p * m;
 			mvp = mvp.transposed;
 
@@ -202,8 +203,8 @@ class Model
 
 	~this()
 	{
-		glDeleteBuffers(1, &vertexBuffer);
 		glDeleteVertexArrays(1, &vertexArray);
+		glDeleteBuffers(1, &vertexBuffer);
 	}
 
 	void updateData()
