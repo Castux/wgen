@@ -86,32 +86,28 @@ int main(string[] args)
 	{
 		auto viewer = new Viewer(1024, 768, "wgen");
 		auto model = viewer.newModel();
-
 		updateVertices(model, map);
 
-		viewer.run();
+		auto watcher = FileWatch(path);
 
-		//
-		// writeln("Waiting for update");
-		//
-		// auto watcher = FileWatch(path);
-		// while (true)
-		// {
-		// 	foreach (event; watcher.getEvents())
-		// 	{
-		// 		if (event.path == path && event.type == FileChangeEventType.modify)
-		// 		{
-		// 			Config newConfig = new Config(path);
-		// 			auto changed = map.updateConfig(newConfig);
-		//
-		// 			if (changed)
-		// 			{
-		// 				exports();
-		// 				writeln("Waiting for update");
-		// 			}
-		// 		}
-		// 	}
-		// }
+		void onUpdate()
+		{
+			foreach (event; watcher.getEvents())
+			{
+				if (event.path == path && event.type == FileChangeEventType.modify)
+				{
+					Config newConfig = new Config(path);
+					auto changed = map.updateConfig(newConfig);
+
+					if (changed)
+						updateVertices(model, map);
+
+					break;
+				}
+			}
+		}
+
+		viewer.run(&onUpdate);
 	}
 	else
 		exports();

@@ -168,10 +168,12 @@ class Viewer
 		checkProgram(program);
 	}
 
-	bool run()
+	bool run(void delegate() onUpdate)
 	{
 		while (!glfwWindowShouldClose(window))
 		{
+			onUpdate();
+
 			int width, height;
 			glfwGetFramebufferSize(window, &width, &height);
 			float ratio = width / cast(float) height;
