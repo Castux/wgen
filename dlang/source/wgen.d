@@ -11,7 +11,7 @@ import svg;
 import obj;
 import image;
 
-int main(string[] args)
+int main2(string[] args)
 {
 	if (args.length < 2)
 	{
@@ -64,4 +64,11 @@ int main(string[] args)
 	}
 
 	return 0;
+}
+
+void main()
+{
+	import viewer;
+
+	run();
 }
