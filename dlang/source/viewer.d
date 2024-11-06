@@ -164,9 +164,9 @@ class Viewer
 		}
 	}
 
-	Model newModel(Vertex[] vertices)
+	Model newModel()
 	{
-		Model model = new Model(vertices, program);
+		Model model = new Model(program);
 		models ~= model;
 
 		return model;
@@ -180,15 +180,10 @@ class Model
 	GLuint vertexBuffer;
 	GLuint vertexArray;
 
-	this(Vertex[] vertices, GLuint program)
+	this(GLuint program)
 	{
-		if (vertices.length % 3 != 0)
-			throw new Exception("Vertices not a multiple of three");
-
-		this.vertices = vertices;
-
 		glGenBuffers(1, &vertexBuffer);
-		updateData();
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vcolLocation = glGetAttribLocation(program, "vCol");
@@ -210,7 +205,7 @@ class Model
 	void updateData()
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_DYNAMIC_DRAW);
 	}
 
 	void draw()

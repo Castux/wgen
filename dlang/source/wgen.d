@@ -17,6 +17,22 @@ vec3 fromCenter(Center c)
 	return vec3(c.x, c.y, c.z);
 }
 
+void updateVertices(Model model, Heightmap map)
+{
+	model.vertices.length = 3 * map.corners.length;
+	foreach(i, corner; map.corners)
+	{
+		model.vertices[i * 3 + 0].pos = corner.centers[0].fromCenter;
+		model.vertices[i * 3 + 1].pos = corner.centers[1].fromCenter;
+		model.vertices[i * 3 + 2].pos = corner.centers[2].fromCenter;
+		model.vertices[i * 3 + 0].col = vec3(1.0, 0.0, 0.0);
+		model.vertices[i * 3 + 1].col = vec3(0.0, 1.0, 0.0);
+		model.vertices[i * 3 + 2].col = vec3(0.0, 0.0, 1.0);
+	}
+
+	model.updateData();
+}
+
 int main(string[] args)
 {
 	if (args.length < 2)
@@ -46,26 +62,10 @@ int main(string[] args)
 	if (updateMode)
 	{
 		auto viewer = new Viewer(1024, 768, "wgen");
+		auto model = viewer.newModel();
 
-		Vertex[] vertices;
+		updateVertices(model, map);
 
-		void updateVertices()
-		{
-			vertices.length = 3 * map.corners.length;
-			foreach(i, corner; map.corners)
-			{
-				vertices[i * 3 + 0].pos = corner.centers[0].fromCenter;
-				vertices[i * 3 + 1].pos = corner.centers[1].fromCenter;
-				vertices[i * 3 + 2].pos = corner.centers[2].fromCenter;
-				vertices[i * 3 + 0].col = vec3(1.0, 0.0, 0.0);
-				vertices[i * 3 + 1].col = vec3(0.0, 1.0, 0.0);
-				vertices[i * 3 + 2].col = vec3(0.0, 0.0, 1.0);
-			}
-		}
-
-		updateVertices();
-
-		auto model = viewer.newModel(vertices);
 		viewer.run();
 
 		//
