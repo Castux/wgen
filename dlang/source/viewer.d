@@ -64,8 +64,8 @@ out vec4 fragment;
 void main()
 {
 	float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
-	sunAngle = (sunAngle + 1.0) / 2.0;
-	vec3 shaded = color * sunAngle;
+	sunAngle = (sunAngle + 1.0) / 2.0 + 0.3;
+	vec3 shaded = vec3(1.0, 1.0, 1.0) * sunAngle;
 	fragment = vec4(shaded, 1.0);
 }`;
 // `
@@ -92,6 +92,7 @@ class Viewer
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		glfwWindowHint(GLFW_SAMPLES, 4);
 
 		window = glfwCreateWindow(w, h, title.toStringz, null, null);
 		if (!window)
@@ -122,44 +123,49 @@ class Viewer
 		glfwTerminate();
 	}
 
-	void setupShaders()
+	private static void checkShader(GLint shader)
+	{
+		GLint compiled;
+		glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+		if (compiled != GL_TRUE)
+		{
+			GLsizei logLength = 0;
+			GLchar[1024] message;
+			glGetShaderInfoLog(shader, 1024, &logLength, message.ptr);
+			throw new Exception("Shader error: %s".format(message[0 .. logLength]));
+		}
+	}
+
+	private static void checkProgram(GLint program)
+	{
+		GLint programLinked;
+		glGetProgramiv(program, GL_LINK_STATUS, &programLinked);
+		if (programLinked != GL_TRUE)
+		{
+		    GLsizei logLength = 0;
+		    GLchar[1024] message;
+		    glGetProgramInfoLog(program, 1024, &logLength, message.ptr);
+		   throw new Exception("Program error: %s".format(message[0 .. logLength]));
+		}
+	}
+
+	private void setupShaders()
 	{
 		GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
 		glShaderSource(vertex_shader, 1, &vertex_shader_text, null);
 		glCompileShader(vertex_shader);
-		checkError("Could not compile vertex shader");
-
-		GLint vertex_compiled;
-		glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &vertex_compiled);
-		if (vertex_compiled != GL_TRUE)
-		{
-			GLsizei log_length = 0;
-			GLchar[1024] message;
-			glGetShaderInfoLog(vertex_shader, 1024, &log_length, &message[0]);
-			throw new Exception(cast(string) message);
-		}
-
+		checkShader(vertex_shader);
 
 		GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
 		glShaderSource(fragment_shader, 1, &fragment_shader_text, null);
 		glCompileShader(fragment_shader);
-		checkError("Could not compile fragment shader");
-
-		GLint fragment_compiled;
-		glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &fragment_compiled);
-		if (fragment_compiled != GL_TRUE)
-		{
-			GLsizei log_length = 0;
-			GLchar[1024] message;
-			glGetShaderInfoLog(fragment_shader, 1024, &log_length, &message[0]);
-			throw new Exception(cast(string) message);
-		}
+		checkShader(fragment_shader);
 
 		program = glCreateProgram();
 		glAttachShader(program, vertex_shader);
 		glAttachShader(program, fragment_shader);
 		glLinkProgram(program);
-		checkError("Could not link program");
+		checkProgram(program);
 	}
 
 	bool run()
