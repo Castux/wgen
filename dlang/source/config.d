@@ -74,7 +74,7 @@ class Config
 				terrain.smoothing = t["smoothing"].get!bool;
 
 			if ("erosion" in t)
-				terrain.smoothing = t["erosion"].get!bool;
+				terrain.erosion = t["erosion"].get!bool;
 
 			terrains[terrain.color] = terrain;
 		}
