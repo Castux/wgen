@@ -6,8 +6,6 @@ import bindbc.glfw;
 import bindbc.opengl;
 import dplug.math;
 
-private Viewer singleton;
-
 extern(C) nothrow void errorCallback(int error, const(char)* description)
 {
 	import core.stdc.stdio;
@@ -16,8 +14,8 @@ extern(C) nothrow void errorCallback(int error, const(char)* description)
 
 extern(C) nothrow void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
-	if (singleton && singleton.window == window)
-		assumeWontThrow(singleton.onKeyEvent(key, scancode, action, mods));
+	if (Viewer.singleton && Viewer.singleton.window == window)
+		assumeWontThrow(Viewer.singleton.onKeyEvent(key, scancode, action, mods));
 }
 
 alias vec2 = vec2f;
@@ -63,6 +61,8 @@ void main()
 
 class Viewer
 {
+	static Viewer singleton;
+
 	GLFWwindow* window;
 
 	this(int w, int h, string title)
@@ -90,6 +90,9 @@ class Viewer
 		if(loadOpenGL() != GLSupport.gl33)
 			throw new Exception("Could not load OpenGL library");
 
+		if (singleton)
+			throw new Exception("Multiple viewer instances");
+		
 		singleton = this;
 	}
 
