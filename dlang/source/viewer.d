@@ -5,7 +5,7 @@ import std.math;
 
 import bindbc.glfw;
 import bindbc.opengl;
-import dplug.math;
+public import dplug.math;
 
 alias vec2 = vec2f;
 alias vec3 = vec3f;
@@ -14,6 +14,7 @@ alias mat4x4 = mat4x4f;
 struct Vertex
 {
 	vec3 pos;
+	vec3 norm;
 	vec3 col;
 }
 
@@ -29,15 +30,27 @@ extern(C) nothrow void keyCallback(GLFWwindow* window, int key, int scancode, in
 		assumeWontThrow(Viewer.singleton.onKeyEvent(key, scancode, action, mods));
 }
 
+void checkError(string error)
+{
+    GLint r = glGetError();
+    if (r != GL_NO_ERROR)
+    {
+        throw new Exception(error);
+    }
+}
+
 static const char* vertex_shader_text = `
 #version 330
 uniform mat4 MVP;
 in vec3 vCol;
+in vec3 vNorm;
 in vec3 vPos;
+out vec3 normal;
 out vec3 color;
 void main()
 {
 	gl_Position = MVP * vec4(vPos, 1.0);
+	normal = vNorm;
 	color = vCol;
 }`;
 // `
@@ -45,11 +58,15 @@ void main()
 
 static const char* fragment_shader_text = `
 #version 330
+in vec3 normal;
 in vec3 color;
 out vec4 fragment;
 void main()
 {
-	fragment = vec4(color, 1.0);
+	float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
+	sunAngle = (sunAngle + 1.0) / 2.0;
+	vec3 shaded = color * sunAngle;
+	fragment = vec4(shaded, 1.0);
 }`;
 // `
 
@@ -110,15 +127,39 @@ class Viewer
 		GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
 		glShaderSource(vertex_shader, 1, &vertex_shader_text, null);
 		glCompileShader(vertex_shader);
+		checkError("Could not compile vertex shader");
+
+		GLint vertex_compiled;
+		glGetShaderiv(vertex_shader, GL_COMPILE_STATUS, &vertex_compiled);
+		if (vertex_compiled != GL_TRUE)
+		{
+			GLsizei log_length = 0;
+			GLchar[1024] message;
+			glGetShaderInfoLog(vertex_shader, 1024, &log_length, &message[0]);
+			throw new Exception(cast(string) message);
+		}
+
 
 		GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
 		glShaderSource(fragment_shader, 1, &fragment_shader_text, null);
 		glCompileShader(fragment_shader);
+		checkError("Could not compile fragment shader");
+
+		GLint fragment_compiled;
+		glGetShaderiv(fragment_shader, GL_COMPILE_STATUS, &fragment_compiled);
+		if (fragment_compiled != GL_TRUE)
+		{
+			GLsizei log_length = 0;
+			GLchar[1024] message;
+			glGetShaderInfoLog(fragment_shader, 1024, &log_length, &message[0]);
+			throw new Exception(cast(string) message);
+		}
 
 		program = glCreateProgram();
 		glAttachShader(program, vertex_shader);
 		glAttachShader(program, fragment_shader);
 		glLinkProgram(program);
+		checkError("Could not link program");
 	}
 
 	bool run()
@@ -194,12 +235,15 @@ class Model
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
+		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
 		GLint vcolLocation = glGetAttribLocation(program, "vCol");
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
 		glEnableVertexAttribArray(vposLocation);
 		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
+		glEnableVertexAttribArray(vnormLocation);
+		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
 		glEnableVertexAttribArray(vcolLocation);
 		glVertexAttribPointer(vcolLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.col.offsetof);
 	}

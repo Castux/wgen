@@ -19,6 +19,17 @@ void updateVertices(Model model, Heightmap map)
 	{
 		if (!map.inBounds(corner.p)) continue;
 
+		auto p0 = corner.centers[0].p;
+		auto p1 = corner.centers[1].p;
+		auto p2 = corner.centers[2].p;
+
+		auto v0 = vec3(p0.x, -p0.y, corner.centers[0].z);
+		auto v1 = vec3(p1.x, -p1.y, corner.centers[1].z);
+		auto v2 = vec3(p2.x, -p2.y, corner.centers[2].z);
+
+		auto normal = cross(v1 - v0, v2 - v0);
+		normal.normalize();
+
 		foreach (center; corner.centers)
 		{
 			double ratio = (center.z - map.lowest) / (map.highest - map.lowest);
@@ -34,6 +45,7 @@ void updateVertices(Model model, Heightmap map)
 
 			model.vertices ~= Vertex(
 				vec3(center.x, -center.y, center.z),
+				normal,
 				col
 			);
 		}
