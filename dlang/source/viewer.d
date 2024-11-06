@@ -1,6 +1,7 @@
 import std.stdio;
 import std.string;
 import std.exception;
+import std.math;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -138,7 +139,8 @@ class Viewer
 			auto s = 2000.0;
 
 			auto view = mat4x4.lookAt(vec3(1000, -1000, 1000), vec3(0, 0, 0), vec3(0.0, 0.0, 1.0));
-			auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
+			//auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
+			auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, 4000.0);
 
 			auto mvp = proj * view * mod;
 			mvp = mvp.transposed;
