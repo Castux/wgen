@@ -10,6 +10,7 @@ import heightmap;
 import svg;
 import obj;
 import image;
+import viewer;
 
 int main2(string[] args)
 {
@@ -68,7 +69,6 @@ int main2(string[] args)
 
 void main()
 {
-	import viewer;
-
-	run();
+	auto viewer = new Viewer(1024, 768, "wgen");
+	viewer.run();
 }
