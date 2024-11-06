@@ -70,5 +70,13 @@ int main2(string[] args)
 void main()
 {
 	auto viewer = new Viewer(1024, 768, "wgen");
+	Vertex[] vertices =
+	[
+		Vertex( vec2(-0.6, -0.4), vec3(1.0, 0.0, 0.0) ),
+		Vertex( vec2( 0.6, -0.4), vec3(0.0, 1.0, 0.0) ),
+		Vertex( vec2( 0.0,  0.6), vec3(0.0, 0.0, 1.0) )
+	];
+
+	viewer.newModel(vertices);
 	viewer.run();
 }

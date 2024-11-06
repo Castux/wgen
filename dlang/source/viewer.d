@@ -6,6 +6,16 @@ import bindbc.glfw;
 import bindbc.opengl;
 import dplug.math;
 
+alias vec2 = vec2f;
+alias vec3 = vec3f;
+alias mat4x4 = mat4x4f;
+
+struct Vertex
+{
+	vec2 pos;
+	vec3 col;
+}
+
 extern(C) nothrow void errorCallback(int error, const(char)* description)
 {
 	import core.stdc.stdio;
@@ -17,23 +27,6 @@ extern(C) nothrow void keyCallback(GLFWwindow* window, int key, int scancode, in
 	if (Viewer.singleton && Viewer.singleton.window == window)
 		assumeWontThrow(Viewer.singleton.onKeyEvent(key, scancode, action, mods));
 }
-
-alias vec2 = vec2f;
-alias vec3 = vec3f;
-alias mat4x4 = mat4x4f;
-
-struct Vertex
-{
-	vec2 pos;
-	vec3 col;
-}
-
-static const Vertex[] vertices =
-[
-	Vertex( vec2(-0.6, -0.4), vec3(1.0, 0.0, 0.0) ),
-	Vertex( vec2( 0.6, -0.4), vec3(0.0, 1.0, 0.0) ),
-	Vertex( vec2( 0.0,  0.6), vec3(0.0, 0.0, 1.0) )
-];
 
 static const char* vertex_shader_text = `
 #version 330
@@ -64,6 +57,9 @@ class Viewer
 	static Viewer singleton;
 
 	GLFWwindow* window;
+	GLuint program;
+
+	Model[] models;
 
 	this(int w, int h, string title)
 	{
@@ -92,8 +88,10 @@ class Viewer
 
 		if (singleton)
 			throw new Exception("Multiple viewer instances");
-		
+
 		singleton = this;
+
+		setupShaders();
 	}
 
 	~this()
@@ -104,13 +102,8 @@ class Viewer
 		glfwTerminate();
 	}
 
-	bool run()
+	void setupShaders()
 	{
-		GLuint vertex_buffer;
-		glGenBuffers(1, &vertex_buffer);
-		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
-		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
-
 		GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
 		glShaderSource(vertex_shader, 1, &vertex_shader_text, null);
 		glCompileShader(vertex_shader);
@@ -119,23 +112,14 @@ class Viewer
 		glShaderSource(fragment_shader, 1, &fragment_shader_text, null);
 		glCompileShader(fragment_shader);
 
-		GLuint program = glCreateProgram();
+		program = glCreateProgram();
 		glAttachShader(program, vertex_shader);
 		glAttachShader(program, fragment_shader);
 		glLinkProgram(program);
+	}
 
-		GLint mvp_location = glGetUniformLocation(program, "MVP");
-		GLint vpos_location = glGetAttribLocation(program, "vPos");
-		GLint vcol_location = glGetAttribLocation(program, "vCol");
-
-		GLuint vertex_array;
-		glGenVertexArrays(1, &vertex_array);
-		glBindVertexArray(vertex_array);
-		glEnableVertexAttribArray(vpos_location);
-		glVertexAttribPointer(vpos_location, 2, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
-		glEnableVertexAttribArray(vcol_location);
-		glVertexAttribPointer(vcol_location, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.col.offsetof);
-
+	bool run()
+	{
 		while (!glfwWindowShouldClose(window))
 		{
 			int width, height;
@@ -153,9 +137,11 @@ class Viewer
 			mvp = mvp.transposed;
 
 			glUseProgram(program);
-			glUniformMatrix4fv(mvp_location, 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
-			glBindVertexArray(vertex_array);
-			glDrawArrays(GL_TRIANGLES, 0, 3);
+			GLint mvpLocation = glGetUniformLocation(program, "MVP");
+			glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
+
+			foreach(model; models)
+				model.draw();
 
 			glfwSwapBuffers(window);
 			glfwPollEvents();
@@ -168,5 +154,56 @@ class Viewer
 	{
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
+	}
+
+	Model newModel(Vertex[] vertices)
+	{
+		Model model = new Model(vertices, program);
+		models ~= model;
+
+		return model;
+	}
+}
+
+class Model
+{
+	Vertex[] vertices;
+
+	GLuint vertexBuffer;
+	GLuint vertexArray;
+
+	this(Vertex[] vertices, GLuint program)
+	{
+		if (vertices.length % 3 != 0)
+			throw new Exception("Vertices not a multiple of three");
+
+		this.vertices = vertices;
+
+		glGenBuffers(1, &vertexBuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
+
+		GLint mvpLocation = glGetUniformLocation(program, "MVP");
+		GLint vposLocation = glGetAttribLocation(program, "vPos");
+		GLint vcolLocation = glGetAttribLocation(program, "vCol");
+
+		glGenVertexArrays(1, &vertexArray);
+		glBindVertexArray(vertexArray);
+		glEnableVertexAttribArray(vposLocation);
+		glVertexAttribPointer(vposLocation, 2, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
+		glEnableVertexAttribArray(vcolLocation);
+		glVertexAttribPointer(vcolLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.col.offsetof);
+	}
+
+	~this()
+	{
+		glDeleteBuffers(1, &vertexBuffer);
+		glDeleteVertexArrays(1, &vertexArray);
+	}
+
+	void draw()
+	{
+		glBindVertexArray(vertexArray);
+		glDrawArrays(GL_TRIANGLES, 0, cast(int) vertices.length);
 	}
 }
