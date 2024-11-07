@@ -1,0 +1,11 @@
+- Move all to dplug:math
+- Camera modes in the viewer (ortho/persp, heightmap/ligthed/colored)
+	- Remove software interpolation, replace with GL render to texture
+- normalizeToMaxHeight in config
+- loading fast_noise parameters from JSON (one per biome or with defs)
+	- with mapToRange
+	- optional power applied
+- Architecture swap to be able to live update resolution and/or size
+- Add source image to watched files
+- Rivers in GL render??
+- FPS mode in viewer
