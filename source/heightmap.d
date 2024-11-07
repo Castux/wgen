@@ -311,7 +311,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 				if (n.terrain is null) continue;
 
 				auto gradient = gradFunc(c, n);
-				auto newZ = c.z + gradient * n.p.dist(c.p);
+				auto newZ = c.z + gradient * n.p.distanceTo(c.p);
 				if (newZ < n.z)
 				{
 					n.z = newZ;

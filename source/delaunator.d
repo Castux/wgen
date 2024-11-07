@@ -2,11 +2,90 @@ import std.math;
 import std.typecons;
 import std.algorithm;
 
-public import geom;
+import dplug.math;
+
+alias Point = vec2d;
 
 const EPSILON = pow(2, -52);
 
-private double pseudoAngle(const(Point) p) pure
+double cross(Point a, Point b)
+{
+	return dplug.math.cross(vec3d(a, 0.0), dplug.math.vec3d(b, 0.0)).z;
+}
+
+bool clockwise(Point a, Point b, Point c)
+{
+	return cross(b - a, c - a) > 0;
+}
+
+bool inCircle(Point a, Point b, Point c, Point p)
+{
+	auto dx = a.x - p.x;
+	auto dy = a.y - p.y;
+	auto ex = b.x - p.x;
+	auto ey = b.y - p.y;
+	auto fx = c.x - p.x;
+	auto fy = c.y - p.y;
+
+	auto ap = dx * dx + dy * dy;
+	auto bp = ex * ex + ey * ey;
+	auto cp = fx * fx + fy * fy;
+
+	return dx * (ey * cp - bp * fy) -
+		   dy * (ex * cp - bp * fx) +
+		   ap * (ex * fy - ey * fx) > 0;
+}
+
+double[3] barycentricCoordinates(Point a, Point b, Point c, Point p)
+{
+	auto x = cross(b - p, c - p);
+	auto y = cross(c - p, a - p);
+	auto z = cross(a - p, b - p);
+	auto s = x + y + z;
+	return [x / s, y / s, z / s];
+}
+
+bool inTriangle(Point a, Point b, Point c, Point p)
+{
+	auto coords = barycentricCoordinates(a, b, c, p);
+	return coords[0] > 0 && coords[1] > 0 && coords[2] > 0;
+}
+
+Point circumcenter(Point a, Point b, Point c)
+{
+	auto dx = b.x - a.x;
+	auto dy = b.y - a.y;
+	auto ex = c.x - a.x;
+	auto ey = c.y - a.y;
+
+	auto bl = dx * dx + dy * dy;
+	auto cl = ex * ex + ey * ey;
+	auto d = 0.5 / (dx * ey - dy * ex);
+
+	auto x = a.x + (ey * bl - dy * cl) * d;
+	auto y = a.y + (dx * cl - ex * bl) * d;
+
+	return Point(x, y);
+}
+
+double circumradius(Point a, Point b, Point c)
+{
+	auto dx = b.x - a.x;
+	auto dy = b.y - a.y;
+	auto ex = c.x - a.x;
+	auto ey = c.y - a.y;
+
+	auto bl = dx * dx + dy * dy;
+	auto cl = ex * ex + ey * ey;
+	auto d = 0.5 / (dx * ey - dy * ex);
+
+	auto x = (ey * bl - dy * cl) * d;
+	auto y = (dx * cl - ex * bl) * d;
+
+	return x * x + y * y;
+}
+
+double pseudoAngle(const(Point) p) pure
 {
 	auto a = p.x / (abs(p.x) + abs(p.y));
 	return (p.y > 0 ? 3 - a : 1 + a) / 4;
@@ -208,8 +287,8 @@ struct Triangulation
 		Point c = points.fold!((a,b) => a + b) / points.length;
 
 		// The two closest ones to the center
-		Point p1 = points.minElement!(a => a.sqdist(c));
-		Point p2 = points.filter!(a => a != p1).minElement!(a => a.sqdist(c));
+		Point p1 = points.minElement!(a => a.squaredDistanceTo(c));
+		Point p2 = points.filter!(a => a != p1).minElement!(a => a.squaredDistanceTo(c));
 
 		// And the one other that forms the smallest circumcircle with them
 		Point p3 = points.filter!(a => a != p1 && a != p2)
@@ -237,7 +316,7 @@ struct Triangulation
 		// Sort the points by distance to the center triangle's circumcenter
 
 		center = circumcenter(p1, p2, p3);
-		points.sort!((a,b) => a.sqdist(center) < b.sqdist(center));
+		points.sort!((a,b) => a.squaredDistanceTo(center) < b.squaredDistanceTo(center));
 
 		// Add points one by one from the center out
 

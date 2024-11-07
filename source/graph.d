@@ -189,9 +189,9 @@ class Graph(Center, Edge, Corner)
 		import std.algorithm;
 
 		foreach(corner; corners)
-			corner.centers.sort!((a,b) => (a.p - corner.p).angle < (b.p - corner.p).angle);
+			corner.centers.sort!((a,b) => pseudoAngle(a.p - corner.p) < pseudoAngle(b.p - corner.p));
 
 		foreach(center; centers)
-			center.corners.sort!((a,b) => (a.p - center.p).angle < (b.p - center.p).angle);
+			center.corners.sort!((a,b) => pseudoAngle(a.p - center.p) < pseudoAngle(b.p - center.p));
 	}
 }

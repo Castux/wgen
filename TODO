@@ -1,4 +1,3 @@
-- Move all to dplug:math
 - Camera modes in the viewer (ortho/persp, heightmap/ligthed/colored)
 	- Remove software interpolation, replace with GL render to texture
 - normalizeToMaxHeight in config
