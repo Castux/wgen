@@ -88,7 +88,7 @@ double circumradius(Point a, Point b, Point c)
 double pseudoAngle(const(Point) p) pure
 {
 	auto a = p.x / (abs(p.x) + abs(p.y));
-	return (p.y > 0 ? 3 - a : 1 + a) / 4;
+	return (p.y > 0.0 ? 3.0 - a : 1.0 + a) / 4.0;
 }
 
 class Edge
@@ -265,11 +265,11 @@ struct Triangulation
 
 	private const(Point) center;
 	private Edge[] hash;
-	private const(int) hashSize;
+	private const(long) hashSize;
 
-	int hashKey(const(Point) p) const pure
+	long hashKey(const(Point) p) const pure
 	{
-		return cast(int) floor(pseudoAngle(p - center) * (hashSize - 1)) % hashSize;
+		return (pseudoAngle(p - center) * hashSize).floor.lrint % hashSize;
 	}
 
 	void hashAdd(Edge e)
@@ -283,7 +283,6 @@ struct Triangulation
 			throw new Exception("Cannot triangulate fewer than 3 points");
 
 		// Build the first triangle somewhere close to the center of the points
-
 		Point c = points.fold!((a,b) => a + b) / points.length;
 
 		// The two closest ones to the center
@@ -300,23 +299,21 @@ struct Triangulation
 		if (!clockwise(p1, p2, p3))
 			throw new Exception("Cannot triangulate this input");
 
+		// Sort the points by distance to the center triangle's circumcenter
+		center = circumcenter(p1, p2, p3);
+		points.sort!((a,b) => a.squaredDistanceTo(center) < b.squaredDistanceTo(center));
+
+		// Initialize the hull to be these three edges
 		Triangle centerTri = newTriangle(p1, p2, p3);
 		edges = [centerTri.e1, centerTri.e2, centerTri.e3];
 
-		// Initialize the hull to be these three edges
-
-		hashSize = cast(int) ceil(sqrt(cast(double) points.length));
+		hashSize = (cast(double) points.length).sqrt.ceil.lrint;
 		hash = new Edge[hashSize];
-
+		
 		setInitialHull(centerTri);
 		hashAdd(centerTri.e1);
 		hashAdd(centerTri.e2);
 		hashAdd(centerTri.e3);
-
-		// Sort the points by distance to the center triangle's circumcenter
-
-		center = circumcenter(p1, p2, p3);
-		points.sort!((a,b) => a.squaredDistanceTo(center) < b.squaredDistanceTo(center));
 
 		// Add points one by one from the center out
 
