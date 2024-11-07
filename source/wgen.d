@@ -95,7 +95,7 @@ int main(string[] args)
 		{
 			foreach (event; watcher.getEvents())
 			{
-				if (event.path == path && event.type == FileChangeEventType.modify)
+				if (event.type == FileChangeEventType.modify)
 				{
 					Config newConfig = new Config(path);
 					auto changed = map.updateConfig(newConfig);
