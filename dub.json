@@ -7,6 +7,7 @@
 		"bindbc-glfw": "~>1.1.0",
 		"bindbc-opengl": "~>1.1.1",
 		"dplug:math": "~>14.5.0",
+		"fast_noise": "~>1.0.5",
 		"fswatch": "~>0.6.1",
 		"gamut": "~>3.1.1"
 	},

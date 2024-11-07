@@ -223,6 +223,15 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 	private void assignTerrainTypes()
 	{
+		import fast_noise;
+		FNLState noise = fnlCreateState();
+		noise.noise_type = FNLNoiseType.FNL_NOISE_PERLIN;
+		noise.frequency = 1.0/100.0;
+		noise.fractal_type = FNLFractalType.FNL_FRACTAL_FBM;
+		noise.octaves = 3;
+		noise.lacunarity = 2;
+		noise.gain = 0.85;
+
 		foreach(center; centers)
 		{
 			if (!inBoundsPlusHalfMargin(center.p))
@@ -265,6 +274,9 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			}
 			else
 				center.gradient = center.terrain.gradient;
+
+			if (center.terrain.name != "sea")
+				center.gradient = pow((fnlGetNoise2D(&noise, center.x, center.y) + 1.0) / 2.0, 3.0);
 		}
 
 		foreach(center; centers)

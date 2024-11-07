@@ -1,2 +1,16 @@
-.DS_Store
+.dub
+docs.json
+__dummy.html
+docs/
+wgen
+*.exe
+*.pdb
+*.o
+*.lst
+*.obj
+*.mtl
+*.dylib
+*.svg
+*.png
 *.tga
+.DS_Store

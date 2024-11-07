@@ -65,7 +65,7 @@ void main()
 {
 	float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
 	sunAngle = (sunAngle + 1.0) / 2.0 + 0.3;
-	vec3 shaded = vec3(1.0, 1.0, 1.0) * sunAngle;
+	vec3 shaded = color * sunAngle;
 	fragment = vec4(shaded, 1.0);
 }`;
 // `

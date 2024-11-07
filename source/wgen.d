@@ -33,15 +33,16 @@ void updateVertices(Model model, Heightmap map)
 		foreach (center; corner.centers)
 		{
 			double ratio = (center.z - map.lowest) / (map.highest - map.lowest);
-			vec3 col;
-			if (center.z > 0)
-			{
-				col = vec3(ratio, ratio, ratio);
-			}
-			else
-			{
-				col = vec3(0.0, 0.0, 0.8) * ratio;
-			}
+			double upratio = center.z / map.highest;
+			vec3 col = vec3(1,1,1);
+			// if (center.z > 0)
+			// {
+			// 	col = vec3(upratio, upratio, upratio);
+			// }
+			// else
+			// {
+			// 	col = vec3(0.0, 0.0, 0.8) * ratio;
+			// }
 
 			model.vertices ~= Vertex(
 				vec3(center.x, -center.y, center.z),
