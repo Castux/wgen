@@ -9,7 +9,6 @@ wgen
 *.lst
 *.obj
 *.mtl
-*.dylib
 *.svg
 *.png
 *.tga
