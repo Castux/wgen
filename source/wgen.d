@@ -94,7 +94,7 @@ int main(string[] args)
 				}
 			}
 
-			auto shouldClose = viewer.draw(map.lowest, map.highest);
+			auto shouldClose = viewer.draw(map);
 			if (shouldClose)
 				break;
 		}

@@ -2,10 +2,13 @@ import std.stdio;
 import std.string;
 import std.exception;
 import std.math;
+import std.algorithm;
 
 import bindbc.glfw;
 import bindbc.opengl;
 public import dplug.math;
+
+import heightmap;
 
 alias vec2 = vec2f;
 alias vec3 = vec3f;
@@ -112,6 +115,7 @@ class Viewer
 
 	int colorMode;
 	int lightMode;
+	int viewMode;
 
 	Model[] models;
 
@@ -204,7 +208,7 @@ class Viewer
 		checkProgram(program);
 	}
 
-	bool draw(double lowest, double highest)
+	bool draw(Heightmap map)
 	{
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
@@ -213,24 +217,36 @@ class Viewer
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		auto mod =
-			mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
-			mat4x4.translation(vec3(-1000, 1000, 0));
+		mat4x4 mvp;
 
-		auto s = 2000.0;
+		if (viewMode == 0)
+		{
+			auto model =
+				mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
+				mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
 
-		auto view = mat4x4.lookAt(vec3(1000, -1000, 1000), vec3(0, 0, 0), vec3(0.0, 0.0, 1.0));
-		//auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
-		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, 4000.0);
+			auto s = 2000.0;
 
-		auto mvp = proj * view * mod;
-		mvp = mvp.transposed;
+			auto view = mat4x4.lookAt(
+				vec3(map.width / 2.0, -map.height / 2.0, max(map.width, map.height) / 2.0),
+				vec3(0, 0, 0),
+				vec3(0.0, 0.0, 1.0)
+			);
+
+			//auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
+			auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
+
+			mvp = proj * view * model;
+			mvp = mvp.transposed;
+		}
+
+
 
 		glUseProgram(program);
 
 		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
-		glUniform1f(glGetUniformLocation(program, "lowest"), lowest);
-		glUniform1f(glGetUniformLocation(program, "highest"), highest);
+		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
+		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "colorMode"), colorMode);
 		glUniform1i(glGetUniformLocation(program, "lightMode"), lightMode);
 
