@@ -8,6 +8,8 @@ import bindbc.glfw;
 import bindbc.opengl;
 public import dplug.math;
 
+import gamut;
+
 import heightmap;
 
 alias vec2 = vec2f;
@@ -118,13 +120,18 @@ class Viewer
 	GLFWwindow* window;
 	GLuint program;
 
+	Heightmap map;
+
 	int shadingMode;
 	int viewMode;
 
 	Model[] models;
+	RenderTexture texture;
 
-	this(int w, int h, string title)
+	this(Heightmap map, string title)
 	{
+		this.map = map;
+
 		if(loadGLFW() != glfwSupport)
 			throw new Exception("Could not load GLFW library");
 
@@ -138,7 +145,7 @@ class Viewer
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		glfwWindowHint(GLFW_SAMPLES, 4);
 
-		window = glfwCreateWindow(w, h, title.toStringz, null, null);
+		window = glfwCreateWindow(map.width, map.height, title.toStringz, null, null);
 		if (!window)
 			throw new Exception("Could not create window");
 
@@ -157,6 +164,8 @@ class Viewer
 		singleton = this;
 
 		setupShaders();
+
+		texture = new RenderTexture(map.width, map.height);
 	}
 
 	~this()
@@ -212,10 +221,20 @@ class Viewer
 		checkProgram(program);
 	}
 
-	bool draw(Heightmap map)
+	bool draw(bool toTexture = false)
 	{
 		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
+
+		if (toTexture)
+		{
+			width = texture.width;
+			height = texture.height;
+			texture.bind();
+		}
+		else
+		{
+			glfwGetFramebufferSize(window, &width, &height);
+		}
 		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
@@ -263,8 +282,15 @@ class Viewer
 		foreach(model; models)
 			model.draw();
 
-		glfwSwapBuffers(window);
-		glfwPollEvents();
+		if (toTexture)
+		{
+			texture.unbind();
+		}
+		else
+		{
+			glfwSwapBuffers(window);
+			glfwPollEvents();
+		}
 
 		return glfwWindowShouldClose(window) == GLFW_TRUE;
 	}
@@ -286,6 +312,11 @@ class Viewer
 
 			case GLFW_KEY_V:
 				viewMode = (viewMode + 1) % 2;
+				break;
+
+			case GLFW_KEY_ENTER:
+				draw(toTexture: true);
+				texture.save();
 				break;
 
 			default:
@@ -341,5 +372,72 @@ class Model
 	{
 		glBindVertexArray(vertexArray);
 		glDrawArrays(GL_TRIANGLES, 0, cast(int) vertices.length);
+	}
+}
+
+class RenderTexture
+{
+	int width;
+	int height;
+	GLuint framebuffer;
+	GLuint renderedTexture;
+	GLuint depthrenderbuffer;
+
+	this(int width, int height)
+	{
+		this.width = width;
+		this.height = height;
+
+		glGenFramebuffers(1, &framebuffer);
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+		glGenTextures(1, &renderedTexture);
+		glBindTexture(GL_TEXTURE_2D, renderedTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, null);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+		glGenRenderbuffers(1, &depthrenderbuffer);
+		glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
+
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTexture, 0);
+
+		GLenum[] drawBuffers = [GL_COLOR_ATTACHMENT0];
+		glDrawBuffers(1, drawBuffers.ptr);
+
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			throw new Exception("Couldn't set up render to texture");
+
+		glBindRenderbuffer(GL_RENDERBUFFER, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+
+	void bind()
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+	}
+
+	void unbind()
+	{
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+
+	void save()
+	{
+		writeln("Saving image");
+
+		auto image = Image(width, height, PixelType.rgba8, LAYOUT_GAPLESS);
+
+		bind();
+		glReadBuffer(GL_FRONT);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, image.allPixelsAtOnce.ptr);
+		unbind();
+
+		image.flipVertical();
+		image.saveToFile("output.png");
 	}
 }

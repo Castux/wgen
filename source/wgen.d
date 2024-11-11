@@ -53,55 +53,64 @@ int main(string[] args)
 	auto path = args[1];
 	auto updateMode = args.length == 3 && args[2] == "--update";
 
-	Config conf = new Config(path);
-	Heightmap map = new Heightmap(conf);
-
-	writefln("Range %f %f", map.lowest, map.highest);
-
-	void exports()
+	try
 	{
-		writeln("Exporting");
-		if (conf.exportSVG) exportSVG(map, path ~ ".svg");
-		if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
-		if (conf.exportHeightmap)
+
+		Config conf = new Config(path);
+		Heightmap map = new Heightmap(conf);
+
+		writefln("Range %f %f", map.lowest, map.highest);
+
+		void exports()
 		{
-			auto elevations = map.rasterize();
-			exportHeightmap(elevations, path ~ "-h.png");
-		}
-	}
-
-	if (updateMode)
-	{
-		auto viewer = new Viewer(map.width, map.height, "wgen");
-		auto model = viewer.newModel();
-		updateVertices(model, map);
-
-		auto watcher = FileWatch(path);
-
-		while (true)
-		{
-			foreach (event; watcher.getEvents())
+			writeln("Exporting");
+			if (conf.exportSVG) exportSVG(map, path ~ ".svg");
+			if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
+			if (conf.exportHeightmap)
 			{
-				if (event.type == FileChangeEventType.modify)
+				auto elevations = map.rasterize();
+				exportHeightmap(elevations, path ~ "-h.png");
+			}
+		}
+
+		if (updateMode)
+		{
+			auto viewer = new Viewer(map, "wgen");
+			auto model = viewer.newModel();
+			updateVertices(model, map);
+
+			auto watcher = FileWatch(path);
+
+			while (true)
+			{
+				foreach (event; watcher.getEvents())
 				{
-					Config newConfig = new Config(path);
-					auto changed = map.updateConfig(newConfig);
+					if (event.type == FileChangeEventType.modify)
+					{
+						Config newConfig = new Config(path);
+						auto changed = map.updateConfig(newConfig);
 
-					if (changed)
-						updateVertices(model, map);
+						if (changed)
+							updateVertices(model, map);
 
-					break;
+						break;
+					}
 				}
+
+				auto shouldClose = viewer.draw();
+				if (shouldClose)
+					break;
 			}
 
-			auto shouldClose = viewer.draw(map);
-			if (shouldClose)
-				break;
 		}
+		else
+			exports();
 
 	}
-	else
-		exports();
+	catch (Exception e)
+	{
+		writeln(e);
+	}
 
 	return 0;
 }
