@@ -15,7 +15,6 @@ struct Vertex
 {
 	vec3 pos;
 	vec3 norm;
-	vec3 col;
 }
 
 extern(C) nothrow void errorCallback(int error, const(char)* description)
@@ -42,7 +41,6 @@ void checkError(string error)
 static const char* vertex_shader_text = `
 #version 330
 uniform mat4 MVP;
-in vec3 vCol;
 in vec3 vNorm;
 in vec3 vPos;
 out vec3 normal;
@@ -51,7 +49,7 @@ void main()
 {
 	gl_Position = MVP * vec4(vPos, 1.0);
 	normal = vNorm;
-	color = vCol;
+	color = vec3(1.0, 1.0, 1.0);
 }`;
 // `
 
@@ -168,57 +166,45 @@ class Viewer
 		checkProgram(program);
 	}
 
-	bool run(void delegate() onUpdate)
+	bool draw()
 	{
-		while (!glfwWindowShouldClose(window))
-		{
-			onUpdate();
+		int width, height;
+		glfwGetFramebufferSize(window, &width, &height);
+		float ratio = width / cast(float) height;
 
-			int width, height;
-			glfwGetFramebufferSize(window, &width, &height);
-			float ratio = width / cast(float) height;
+		glViewport(0, 0, width, height);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-			glViewport(0, 0, width, height);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		auto mod =
+			mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
+			mat4x4.translation(vec3(-1000, 1000, 0));
 
-			auto mod =
-				mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
-				mat4x4.translation(vec3(-1000, 1000, 0));
+		auto s = 2000.0;
 
-			auto s = 2000.0;
+		auto view = mat4x4.lookAt(vec3(1000, -1000, 1000), vec3(0, 0, 0), vec3(0.0, 0.0, 1.0));
+		//auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
+		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, 4000.0);
 
-			auto view = mat4x4.lookAt(vec3(1000, -1000, 1000), vec3(0, 0, 0), vec3(0.0, 0.0, 1.0));
-			//auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
-			auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, 4000.0);
+		auto mvp = proj * view * mod;
+		mvp = mvp.transposed;
 
-			auto mvp = proj * view * mod;
-			mvp = mvp.transposed;
+		glUseProgram(program);
+		GLint mvpLocation = glGetUniformLocation(program, "MVP");
+		glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
 
-			glUseProgram(program);
-			GLint mvpLocation = glGetUniformLocation(program, "MVP");
-			glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
+		foreach(model; models)
+			model.draw();
 
-			foreach(model; models)
-				model.draw();
+		glfwSwapBuffers(window);
+		glfwPollEvents();
 
-			glfwSwapBuffers(window);
-			glfwPollEvents();
-		}
-
-		return true;
+		return glfwWindowShouldClose(window) == GLFW_TRUE;
 	}
 
 	void onKeyEvent(int key, int scancode, int action, int mods)
 	{
 		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 			glfwSetWindowShouldClose(window, GLFW_TRUE);
-
-		else if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-		{
-			auto model = models[0];
-			model.vertices[1].pos.x += 0.1;
-			model.updateData();
-		}
 	}
 
 	Model newModel()
@@ -244,7 +230,6 @@ class Model
 
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
-		GLint vcolLocation = glGetAttribLocation(program, "vCol");
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
@@ -252,8 +237,6 @@ class Model
 		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
 		glEnableVertexAttribArray(vnormLocation);
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
-		glEnableVertexAttribArray(vcolLocation);
-		glVertexAttribPointer(vcolLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.col.offsetof);
 	}
 
 	~this()

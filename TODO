@@ -1,4 +1,4 @@
-- Camera modes in the viewer (ortho/persp, heightmap/ligthed/colored)
+- Camera modes in the viewer (ortho/persp, gradient/heightmap/lighted/colored)
 	- Remove software interpolation, replace with GL render to texture
 - normalizeToMaxHeight in config
 - loading fast_noise parameters from JSON (one per biome or with defs)

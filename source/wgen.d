@@ -32,22 +32,9 @@ void updateVertices(Model model, Heightmap map)
 
 		foreach (center; corner.centers)
 		{
-			double ratio = (center.z - map.lowest) / (map.highest - map.lowest);
-			double upratio = center.z / map.highest;
-			vec3 col = vec3(1,1,1);
-			// if (center.z > 0)
-			// {
-			// 	col = vec3(upratio, upratio, upratio);
-			// }
-			// else
-			// {
-			// 	col = vec3(0.0, 0.0, 0.8) * ratio;
-			// }
-
 			model.vertices ~= Vertex(
 				vec3(center.x, -center.y, center.z),
-				normal,
-				col
+				normal
 			);
 		}
 	}
@@ -91,7 +78,7 @@ int main(string[] args)
 
 		auto watcher = FileWatch(path);
 
-		void onUpdate()
+		while(true)
 		{
 			foreach (event; watcher.getEvents())
 			{
@@ -106,9 +93,12 @@ int main(string[] args)
 					break;
 				}
 			}
+
+			auto shouldClose = viewer.draw();
+			if (shouldClose)
+				break;
 		}
 
-		viewer.run(&onUpdate);
 	}
 	else
 		exports();
