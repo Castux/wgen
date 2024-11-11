@@ -39,7 +39,6 @@ class Config
 
 	bool exportOBJ;
 	bool exportSVG;
-	bool exportHeightmap;
 
 	this(string jsonPath)
 	{
@@ -59,9 +58,6 @@ class Config
 
 		if ("exportSVG" in json)
 			exportSVG = json["exportSVG"].get!bool;
-
-		if ("exportHeightmap" in json)
-			exportHeightmap = json["exportHeightmap"].get!bool;
 
 		foreach(string name, t; json["terrains"])
 		{

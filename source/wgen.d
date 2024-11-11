@@ -46,71 +46,50 @@ int main(string[] args)
 {
 	if (args.length < 2)
 	{
-		writeln("Usage: wgen <path> [--update]");
+		writeln("Usage: wgen <path>");
 		return 1;
 	}
 
 	auto path = args[1];
-	auto updateMode = args.length == 3 && args[2] == "--update";
 
-	try
+	Config conf = new Config(path);
+	Heightmap map = new Heightmap(conf);
+
+	writefln("Range %f %f", map.lowest, map.highest);
+
+	auto viewer = new Viewer(map, "wgen");
+	auto model = viewer.newModel();
+	updateVertices(model, map);
+
+	auto watcher = FileWatch(path);
+
+	while (true)
 	{
-
-		Config conf = new Config(path);
-		Heightmap map = new Heightmap(conf);
-
-		writefln("Range %f %f", map.lowest, map.highest);
-
-		void exports()
+		foreach (event; watcher.getEvents())
 		{
-			writeln("Exporting");
-			if (conf.exportSVG) exportSVG(map, path ~ ".svg");
-			if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
-			if (conf.exportHeightmap)
+			if (event.type == FileChangeEventType.modify)
 			{
-				auto elevations = map.rasterize();
-				exportHeightmap(elevations, path ~ "-h.png");
-			}
-		}
+				Config newConfig = new Config(path);
+				auto changed = map.updateConfig(newConfig);
 
-		if (updateMode)
-		{
-			auto viewer = new Viewer(map, "wgen");
-			auto model = viewer.newModel();
-			updateVertices(model, map);
-
-			auto watcher = FileWatch(path);
-
-			while (true)
-			{
-				foreach (event; watcher.getEvents())
+				if (changed)
 				{
-					if (event.type == FileChangeEventType.modify)
-					{
-						Config newConfig = new Config(path);
-						auto changed = map.updateConfig(newConfig);
-
-						if (changed)
-							updateVertices(model, map);
-
-						break;
-					}
+					writefln("Range %f %f", map.lowest, map.highest);
+					updateVertices(model, map);
 				}
 
-				auto shouldClose = viewer.draw();
-				if (shouldClose)
-					break;
+				break;
 			}
-
 		}
-		else
-			exports();
 
+		auto shouldClose = viewer.draw();
+		if (shouldClose)
+			break;
 	}
-	catch (Exception e)
-	{
-		writeln(e);
-	}
+
+	writeln("Exporting");
+	if (conf.exportSVG) exportSVG(map, path ~ ".svg");
+	if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
 
 	return 0;
 }
