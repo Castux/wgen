@@ -61,8 +61,7 @@ static const char* fragment_shader_text = `
 #version 330
 uniform float lowest;
 uniform float highest;
-uniform int colorMode;
-uniform int lightMode;
+uniform int mode;
 in vec3 position;
 in vec3 normal;
 out vec4 fragment;
@@ -71,16 +70,16 @@ void main()
 	float z = position.z;
 
 	vec3 color;
-	if (colorMode == 0)
-	{
-		color = vec3(1.0, 1.0, 1.0);
-	}
-	else if (colorMode == 1)
+	if (mode == 0)
 	{
 		float f = (z - lowest) / (highest - lowest);
 		color = vec3(f, f, f);
 	}
-	else if (colorMode == 2)
+	else if (mode == 1)
+	{
+		color = vec3(1.0, 1.0, 1.0);
+	}
+	else if (mode == 2)
 	{
 		if (z >= 0)
 		{
@@ -95,7 +94,7 @@ void main()
 	}
 
 	float shading = 1.0;
-	if (lightMode == 1)
+	if (mode != 0)
 	{
 		float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
 		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
@@ -113,8 +112,7 @@ class Viewer
 	GLFWwindow* window;
 	GLuint program;
 
-	int colorMode;
-	int lightMode;
+	int shadingMode;
 	int viewMode;
 
 	Model[] models;
@@ -254,8 +252,7 @@ class Viewer
 		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
-		glUniform1i(glGetUniformLocation(program, "colorMode"), colorMode);
-		glUniform1i(glGetUniformLocation(program, "lightMode"), lightMode);
+		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 
 		foreach(model; models)
 			model.draw();
@@ -277,12 +274,8 @@ class Viewer
 				glfwSetWindowShouldClose(window, GLFW_TRUE);
 				break;
 
-			case GLFW_KEY_C:
-				colorMode = (colorMode + 1) % 3;
-				break;
-
-			case GLFW_KEY_L:
-				lightMode = (lightMode + 1) % 2;
+			case GLFW_KEY_TAB:
+				shadingMode = (shadingMode + 1) % 3;
 				break;
 
 			case GLFW_KEY_V:
