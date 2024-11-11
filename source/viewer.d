@@ -21,6 +21,7 @@ struct Vertex
 {
 	vec3 pos;
 	vec3 norm;
+	vec3 coord;
 }
 
 extern(C) nothrow void errorCallback(int error, const(char)* description)
@@ -37,11 +38,11 @@ extern(C) nothrow void keyCallback(GLFWwindow* window, int key, int scancode, in
 
 void checkError(string error)
 {
-    GLint r = glGetError();
-    if (r != GL_NO_ERROR)
-    {
-        throw new Exception(error);
-    }
+	GLint r = glGetError();
+	if (r != GL_NO_ERROR)
+	{
+		throw new Exception(error);
+	}
 }
 
 static const char* vertex_shader_text = `
@@ -49,13 +50,16 @@ static const char* vertex_shader_text = `
 uniform mat4 MVP;
 in vec3 vNorm;
 in vec3 vPos;
+in vec3 vCoord;
 out vec3 position;
 out vec3 normal;
+out vec3 coord;
 void main()
 {
 	gl_Position = MVP * vec4(vPos, 1.0);
 	position = vPos;
 	normal = vNorm;
+	coord = vCoord;
 }`;
 // `
 
@@ -67,6 +71,7 @@ uniform float highest;
 uniform int mode;
 in vec3 position;
 in vec3 normal;
+in vec3 coord;
 out vec4 fragment;
 void main()
 {
@@ -108,6 +113,9 @@ void main()
 
 	// if (mod(position.x, 10) <= 0.2 || mod(position.y, 10) <= 0.2)
 	// 	shading = 0.0;
+
+	float closest = min(coord.x, min(coord.y, coord.z));
+	shading = shading * smoothstep(0.01, fwidth(closest) + 0.01, closest);
 
 	vec3 shaded = color * shading;
 	fragment = vec4(shaded, 1.0);
@@ -348,6 +356,7 @@ class Model
 
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
+		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
@@ -355,6 +364,8 @@ class Model
 		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
 		glEnableVertexAttribArray(vnormLocation);
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
+		glEnableVertexAttribArray(vcoordLocation);
+		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
 	}
 
 	~this()

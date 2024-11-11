@@ -14,7 +14,7 @@ import viewer;
 
 void updateVertices(Model model, Heightmap map)
 {
-	model.vertices.length = 0;
+	model.vertices.length = map.corners.length * 3;
 	foreach_reverse(i, corner; map.corners)
 	{
 		if (!map.inBounds(corner.p)) continue;
@@ -30,11 +30,18 @@ void updateVertices(Model model, Heightmap map)
 		auto normal = cross(v1 - v0, v2 - v0);
 		normal.normalize();
 
-		foreach (center; corner.centers)
+		const vec3[3] coords = [
+			vec3(1,0,0),
+			vec3(0,1,0),
+			vec3(0,0,1)
+		];
+
+		foreach (j, center; corner.centers)
 		{
-			model.vertices ~= Vertex(
+			model.vertices[i * 3 + j] = Vertex(
 				vec3(center.x, -center.y, center.z),
-				normal
+				normal,
+				coords[j]
 			);
 		}
 	}
