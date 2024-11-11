@@ -78,7 +78,7 @@ int main(string[] args)
 
 		auto watcher = FileWatch(path);
 
-		while(true)
+		while (true)
 		{
 			foreach (event; watcher.getEvents())
 			{
@@ -94,7 +94,7 @@ int main(string[] args)
 				}
 			}
 
-			auto shouldClose = viewer.draw();
+			auto shouldClose = viewer.draw(map.lowest, map.highest);
 			if (shouldClose)
 				break;
 		}

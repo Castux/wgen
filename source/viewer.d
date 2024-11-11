@@ -43,27 +43,62 @@ static const char* vertex_shader_text = `
 uniform mat4 MVP;
 in vec3 vNorm;
 in vec3 vPos;
+out vec3 position;
 out vec3 normal;
-out vec3 color;
 void main()
 {
 	gl_Position = MVP * vec4(vPos, 1.0);
+	position = vPos;
 	normal = vNorm;
-	color = vec3(1.0, 1.0, 1.0);
 }`;
 // `
 
 
 static const char* fragment_shader_text = `
 #version 330
+uniform float lowest;
+uniform float highest;
+uniform int colorMode;
+uniform int lightMode;
+in vec3 position;
 in vec3 normal;
-in vec3 color;
 out vec4 fragment;
 void main()
 {
-	float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
-	sunAngle = (sunAngle + 1.0) / 2.0 + 0.3;
-	vec3 shaded = color * sunAngle;
+	float z = position.z;
+
+	vec3 color;
+	if (colorMode == 0)
+	{
+		color = vec3(1.0, 1.0, 1.0);
+	}
+	else if (colorMode == 1)
+	{
+		float f = (z - lowest) / (highest - lowest);
+		color = vec3(f, f, f);
+	}
+	else if (colorMode == 2)
+	{
+		if (z >= 0)
+		{
+			float f = z / highest;
+			color = mix(vec3(84, 169, 50), vec3(255, 255, 255), f) / 255.0;
+		}
+		else
+		{
+			float f = z / lowest;
+			color = mix(vec3(95, 132, 255), vec3(0, 10, 100), f) / 255.0;
+		}
+	}
+
+	float shading = 1.0;
+	if (lightMode == 1)
+	{
+		float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
+		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
+	}
+
+	vec3 shaded = color * shading;
 	fragment = vec4(shaded, 1.0);
 }`;
 // `
@@ -74,6 +109,9 @@ class Viewer
 
 	GLFWwindow* window;
 	GLuint program;
+
+	int colorMode;
+	int lightMode;
 
 	Model[] models;
 
@@ -166,7 +204,7 @@ class Viewer
 		checkProgram(program);
 	}
 
-	bool draw()
+	bool draw(double lowest, double highest)
 	{
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
@@ -189,8 +227,12 @@ class Viewer
 		mvp = mvp.transposed;
 
 		glUseProgram(program);
-		GLint mvpLocation = glGetUniformLocation(program, "MVP");
-		glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
+
+		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
+		glUniform1f(glGetUniformLocation(program, "lowest"), lowest);
+		glUniform1f(glGetUniformLocation(program, "highest"), highest);
+		glUniform1i(glGetUniformLocation(program, "colorMode"), colorMode);
+		glUniform1i(glGetUniformLocation(program, "lightMode"), lightMode);
 
 		foreach(model; models)
 			model.draw();
@@ -203,8 +245,26 @@ class Viewer
 
 	void onKeyEvent(int key, int scancode, int action, int mods)
 	{
-		if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
-			glfwSetWindowShouldClose(window, GLFW_TRUE);
+		if (action != GLFW_PRESS)
+			return;
+
+		switch (key)
+		{
+			case GLFW_KEY_ESCAPE:
+				glfwSetWindowShouldClose(window, GLFW_TRUE);
+				break;
+
+			case GLFW_KEY_C:
+				colorMode = (colorMode + 1) % 3;
+				break;
+
+			case GLFW_KEY_L:
+				lightMode = (lightMode + 1) % 2;
+				break;
+
+			default:
+				break;
+		}
 	}
 
 	Model newModel()
