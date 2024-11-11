@@ -100,6 +100,12 @@ void main()
 		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
 	}
 
+	// if (mod(z, 10) <= 0.2)
+	// 	shading = 0.0;
+
+	// if (mod(position.x, 10) <= 0.2 || mod(position.y, 10) <= 0.2)
+	// 	shading = 0.0;
+
 	vec3 shaded = color * shading;
 	fragment = vec4(shaded, 1.0);
 }`;

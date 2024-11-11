@@ -72,7 +72,7 @@ int main(string[] args)
 
 	if (updateMode)
 	{
-		auto viewer = new Viewer(1024, 1024, "wgen");
+		auto viewer = new Viewer(map.width, map.height, "wgen");
 		auto model = viewer.newModel();
 		updateVertices(model, map);
 
