@@ -381,38 +381,35 @@ class RenderTexture
 	int height;
 	GLuint framebuffer;
 	GLuint renderedTexture;
+	GLuint renderbuffer;
 	GLuint depthrenderbuffer;
+
+	ubyte[] data;
 
 	this(int width, int height)
 	{
 		this.width = width;
 		this.height = height;
 
+		data = new ubyte[width * height * 4];
+
 		glGenFramebuffers(1, &framebuffer);
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-		glGenTextures(1, &renderedTexture);
-		glBindTexture(GL_TEXTURE_2D, renderedTexture);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, null);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glGenRenderbuffers(1, &renderbuffer);
+		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 
 		glGenRenderbuffers(1, &depthrenderbuffer);
 		glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
 
-		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTexture, 0);
-
-		GLenum[] drawBuffers = [GL_COLOR_ATTACHMENT0];
-		glDrawBuffers(1, drawBuffers.ptr);
-
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 			throw new Exception("Couldn't set up render to texture");
 
 		glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		glBindTexture(GL_TEXTURE_2D, 0);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 
@@ -430,13 +427,12 @@ class RenderTexture
 	{
 		writeln("Saving image");
 
-		auto image = Image(width, height, PixelType.rgba8, LAYOUT_GAPLESS);
-
 		bind();
-		glReadBuffer(GL_FRONT);
-		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, image.allPixelsAtOnce.ptr);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data.ptr);
 		unbind();
 
+		Image image;
+		image.createViewFromData(data.ptr, width, height, PixelType.rgba8, width * 4);
 		image.flipVertical();
 		image.saveToFile("output.png");
 	}
