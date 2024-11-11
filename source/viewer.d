@@ -3,6 +3,7 @@ import std.string;
 import std.exception;
 import std.math;
 import std.algorithm;
+import std.conv;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -380,25 +381,25 @@ class RenderTexture
 	int width;
 	int height;
 	GLuint framebuffer;
-	GLuint renderedTexture;
-	GLuint renderbuffer;
-	GLuint depthrenderbuffer;
 
-	ubyte[] data;
+	ushort[] data;
 
 	this(int width, int height)
 	{
 		this.width = width;
 		this.height = height;
 
-		data = new ubyte[width * height * 4];
+		data = new ushort[width * height * 4];
 
 		glGenFramebuffers(1, &framebuffer);
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
+		GLuint renderbuffer;
+		GLuint depthrenderbuffer;
+
 		glGenRenderbuffers(1, &renderbuffer);
 		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA16, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 
 		glGenRenderbuffers(1, &depthrenderbuffer);
@@ -428,11 +429,11 @@ class RenderTexture
 		writeln("Saving image");
 
 		bind();
-		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data.ptr);
+		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_SHORT, data.ptr);
 		unbind();
 
 		Image image;
-		image.createViewFromData(data.ptr, width, height, PixelType.rgba8, width * 4);
+		image.createViewFromData(data.ptr, width, height, PixelType.rgba16, width * 4 * ushort.sizeof.to!int);
 		image.flipVertical();
 		image.saveToFile("output.png");
 	}
