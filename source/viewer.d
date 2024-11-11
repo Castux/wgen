@@ -237,7 +237,7 @@ class Viewer
 		else if (viewMode == 1)
 		{
 			auto proj = mat4x4.orthographic(
-				0.0, map.height * ratio,
+				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
 				-map.height, 0.0,
 				map.highest * 10.0,
 				map.lowest * 10.0
