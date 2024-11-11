@@ -212,7 +212,7 @@ class Viewer
 	{
 		int width, height;
 		glfwGetFramebufferSize(window, &width, &height);
-		float ratio = width / cast(float) height;
+		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -225,22 +225,29 @@ class Viewer
 				mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
 				mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
 
-			auto s = 2000.0;
-
 			auto view = mat4x4.lookAt(
 				vec3(map.width / 2.0, -map.height / 2.0, max(map.width, map.height) / 2.0),
 				vec3(0, 0, 0),
 				vec3(0.0, 0.0, 1.0)
 			);
 
-			//auto proj = mat4x4.orthographic(-1000 * ratio, 1000 * ratio, -1000, 1000, 4000.0, -4000.0);
 			auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
 
 			mvp = proj * view * model;
 			mvp = mvp.transposed;
 		}
+		else if (viewMode == 1)
+		{
+			auto proj = mat4x4.orthographic(
+				0.0, map.height * ratio,
+				-map.height, 0.0,
+				map.highest * 10.0,
+				map.lowest * 10.0
+			);
 
-
+			mvp = proj;
+			mvp = mvp.transposed;
+		}
 
 		glUseProgram(program);
 
@@ -276,6 +283,10 @@ class Viewer
 
 			case GLFW_KEY_L:
 				lightMode = (lightMode + 1) % 2;
+				break;
+
+			case GLFW_KEY_V:
+				viewMode = (viewMode + 1) % 2;
 				break;
 
 			default:
