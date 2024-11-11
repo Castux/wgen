@@ -90,8 +90,11 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		writeln("Building graph");
 		super(triangulation.edges);
 
-		writeln("Relaxing");
-		relaxGraph();
+		if (conf.relax)
+		{
+			writeln("Relaxing");
+			relaxGraph();
+		}
 
 		generate();
 	}
@@ -174,12 +177,30 @@ class Heightmap : Graph!(Center, Edge, Corner)
 	{
 		Point[] points;
 
-		for(auto x = -margin; x < width + margin; x += resolution)
-		for(auto y = -margin; y < height + margin; y += resolution)
-			points ~= Point(
-				x + uniform(-resolution, resolution),
-				y + uniform(-resolution, resolution)
-			);
+		if (conf.grid == "square")
+		{
+			for(auto x = -margin; x < width + margin; x += resolution)
+			for(auto y = -margin; y < height + margin; y += resolution)
+				points ~= Point(
+					x + uniform(-resolution, resolution) * conf.jitter,
+					y + uniform(-resolution, resolution) * conf.jitter
+				);
+		}
+		else if(conf.grid == "hex")
+		{
+			for(auto x = -margin; x < width + margin; x += resolution)
+			{
+				auto row = 0;
+				for(auto y = -margin; y < height + margin; y += resolution * sqrt(3.0) / 2.0)
+				{
+					row++;
+					points ~= Point(
+						x + ((row % 2) * 0.5 * resolution) + uniform(-resolution, resolution) * conf.jitter,
+						y + uniform(-resolution, resolution) * conf.jitter
+					);
+				}
+			}
+		}
 
 		return Triangulation(points);
 	}

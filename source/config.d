@@ -32,6 +32,9 @@ class Config
 {
 	string path;
 	double resolution;
+	string grid;
+	double jitter;
+	bool relax;
 	Terrain[Pixel] terrains;
 	double smoothingRadius;
 	int erosionMinFlow;
@@ -49,6 +52,9 @@ class Config
 		{
 		path = json["path"].get!string;
 		resolution = json["resolution"].get!double;
+		grid = json["grid"].get!string;
+		jitter = json["jitter"].get!double;
+		relax = json["relax"].get!bool;
 		smoothingRadius = json["smoothingRadius"].get!double;
 		erosionMinFlow = json["erosionMinFlow"].get!int;
 		erosionFactor = json["erosionFactor"].get!double;
