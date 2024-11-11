@@ -226,11 +226,11 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		import fast_noise;
 		FNLState noise = fnlCreateState();
 		noise.noise_type = FNLNoiseType.FNL_NOISE_PERLIN;
-		noise.frequency = 1.0/100.0;
+		noise.frequency = 1.0/200.0;
 		noise.fractal_type = FNLFractalType.FNL_FRACTAL_FBM;
 		noise.octaves = 3;
 		noise.lacunarity = 2;
-		noise.gain = 0.85;
+		noise.gain = 0.5;
 
 		foreach(center; centers)
 		{
@@ -245,6 +245,13 @@ class Heightmap : Graph!(Center, Edge, Corner)
 
 			auto pixel = getPixel(row, col);
 			center.terrain = conf.terrains.get(pixel, null);
+
+			if (center.terrain is null)
+			{
+				writefln("Bad pixel %s at %d,%d", pixel, col, row);
+				center.gradient = 0;
+				continue;
+			}
 
 			auto r = conf.smoothingRadius;
 			if (center.terrain.smoothing && r > 0.0)
@@ -275,8 +282,8 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			else
 				center.gradient = center.terrain.gradient;
 
-			if (center.terrain.name != "sea")
-				center.gradient = pow((fnlGetNoise2D(&noise, center.x, center.y) + 1.0) / 2.0, 3.0);
+			// if (center.terrain.name != "sea")
+			// 	center.gradient = pow((fnlGetNoise2D(&noise, center.x, center.y) + 1.0) / 2.0, 1.0);
 		}
 
 		foreach(center; centers)
