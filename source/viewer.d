@@ -69,6 +69,7 @@ static const char* fragment_shader_text = `
 uniform float lowest;
 uniform float highest;
 uniform int mode;
+uniform int lineMode;
 in vec3 position;
 in vec3 normal;
 in vec3 coord;
@@ -108,14 +109,21 @@ void main()
 		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
 	}
 
-	// if (mod(z, 10) <= 0.2)
-	// 	shading = 0.0;
-
-	// if (mod(position.x, 10) <= 0.2 || mod(position.y, 10) <= 0.2)
-	// 	shading = 0.0;
-
-	float closest = min(coord.x, min(coord.y, coord.z));
-	shading = shading * smoothstep(0.01, fwidth(closest) + 0.01, closest);
+	if (lineMode == 1)
+	{
+		shading = shading * smoothstep(0.3, 0.4, mod(z, 10));
+	}
+	else if (lineMode == 2)
+	{
+		shading = shading * smoothstep(0.3, 0.4, min(mod(position.x, 10), mod(position.y, 10)));
+	}
+	else if (lineMode == 3)
+	{
+		float edgeDist = min(coord.x, min(coord.y, coord.z));
+		float fw = fwidth(edgeDist);
+		float thickness = 0.5;
+		shading = shading * smoothstep(thickness * fw, (thickness + 1) * fw, edgeDist);
+	}
 
 	vec3 shaded = color * shading;
 	fragment = vec4(shaded, 1.0);
@@ -133,6 +141,7 @@ class Viewer
 
 	int shadingMode;
 	int viewMode;
+	int lineMode;
 
 	Model[] models;
 	RenderTexture texture;
@@ -287,6 +296,7 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
+		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
 
 		foreach(model; models)
 			model.draw();
@@ -321,6 +331,10 @@ class Viewer
 
 			case GLFW_KEY_V:
 				viewMode = (viewMode + 1) % 2;
+				break;
+
+			case GLFW_KEY_L:
+				lineMode = (lineMode + 1) % 4;
 				break;
 
 			case GLFW_KEY_ENTER:
