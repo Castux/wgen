@@ -107,7 +107,8 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			return false;
 		}
 
-		if (newConfig.terrains != conf.terrains || newConfig.smoothingRadius != conf.smoothingRadius)
+		if (newConfig.terrains != conf.terrains || newConfig.smoothingRadius != conf.smoothingRadius
+			|| newConfig.maxHeight != conf.maxHeight)
 		{
 			centers.each!(c => c.reset);
 			conf = newConfig;
@@ -357,6 +358,13 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			.tee!((c) { lowest = min(lowest, c.z); highest = max(highest, c.z); })
 			.filter!(a => a.terrain.name == "sea")
 			.each!(c => c.z = -c.z);
+
+		if (conf.maxHeight != 0.0)
+		{
+			centers.each!(c => c.z = c.z / highest * conf.maxHeight);
+			lowest = lowest / highest * conf.maxHeight;
+			highest = conf.maxHeight;
+		}
 	}
 
 	private void computeRiverFlow()

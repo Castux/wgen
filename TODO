@@ -1,4 +1,3 @@
-- normalizeToMaxHeight in config
 - loading fast_noise parameters from JSON (one per biome or with defs)
 	- with mapToRange
 	- optional power applied

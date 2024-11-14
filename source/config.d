@@ -39,6 +39,7 @@ class Config
 	double smoothingRadius;
 	int erosionMinFlow;
 	double erosionFactor;
+	double maxHeight = 0;
 
 	bool exportOBJ;
 	bool exportSVG;
@@ -48,8 +49,6 @@ class Config
 		auto txt = readText(jsonPath);
 		auto json = parseJSON(txt);
 
-		try
-		{
 		path = json["path"].get!string;
 		resolution = json["resolution"].get!double;
 		grid = json["grid"].get!string;
@@ -65,6 +64,9 @@ class Config
 		if ("exportSVG" in json)
 			exportSVG = json["exportSVG"].get!bool;
 
+		if ("maxHeight" in json)
+			maxHeight = json["maxHeight"].get!double;
+
 		foreach(string name, t; json["terrains"])
 		{
 			auto terrain = new Terrain();
@@ -79,15 +81,6 @@ class Config
 				terrain.erosion = t["erosion"].get!bool;
 
 			terrains[terrain.color] = terrain;
-		}
-
-		}
-
-		catch(Exception e)
-		{
-			writeln(jsonPath);
-			writeln(txt);
-			writeln(e);
 		}
 	}
 }
