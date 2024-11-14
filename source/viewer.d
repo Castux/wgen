@@ -243,6 +243,34 @@ class Viewer
 		checkProgram(program);
 	}
 
+	mat4x4 getTurntableView(double ratio)
+	{
+		auto model =
+			mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
+			mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
+
+		auto view = mat4x4.lookAt(
+			vec3(map.width / 2.0, -map.height / 2.0, max(map.width, map.height) / 2.0),
+			vec3(0, 0, 0),
+			vec3(0.0, 0.0, 1.0)
+		);
+
+		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
+		return (proj * view * model).transposed;
+	}
+
+	mat4x4 getTopView(double ratio)
+	{
+		auto proj = mat4x4.orthographic(
+				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
+				-map.height, 0.0,
+				-(map.highest + 10.0),
+				(map.highest - map.lowest) + 20.0
+			);
+
+		return proj.transposed;
+	}
+
 	bool draw()
 	{
 		int width, height;
@@ -255,34 +283,9 @@ class Viewer
 		mat4x4 mvp;
 
 		if (viewMode == 0)
-		{
-			auto model =
-				mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
-				mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
-
-			auto view = mat4x4.lookAt(
-				vec3(map.width / 2.0, -map.height / 2.0, max(map.width, map.height) / 2.0),
-				vec3(0, 0, 0),
-				vec3(0.0, 0.0, 1.0)
-			);
-
-			auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
-
-			mvp = proj * view * model;
-			mvp = mvp.transposed;
-		}
+			mvp = getTurntableView(ratio);
 		else if (viewMode == 1)
-		{
-			auto proj = mat4x4.orthographic(
-				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
-				-map.height, 0.0,
-				map.highest * 10.0,
-				map.lowest * 10.0
-			);
-
-			mvp = proj;
-			mvp = mvp.transposed;
-		}
+			mvp = getTopView(ratio);
 
 		glUseProgram(program);
 
