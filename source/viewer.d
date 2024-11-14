@@ -149,6 +149,9 @@ class Viewer
 	RenderBuffer renderBuffer;
 
 	float[] interpolatedHeightmap;
+	vec3 firstPersonPos;
+	double firstPersonDir;
+	double lastUpdate;
 
 	this(Heightmap map, string title)
 	{
@@ -188,6 +191,10 @@ class Viewer
 		setupShaders();
 
 		renderBuffer = new RenderBuffer(map.width, map.height);
+
+		firstPersonPos.x = map.width / 2.0;
+		firstPersonPos.y = -map.height / 2.0;
+		firstPersonDir = 0.0;
 	}
 
 	~this()
@@ -271,6 +278,41 @@ class Viewer
 		return proj.transposed;
 	}
 
+	mat4x4 getFirstPersonView(double ratio)
+	{
+		const speed = 40.0;
+		const rot = 0.75;
+
+		auto now = glfwGetTime();
+		auto dt = now - lastUpdate;
+		lastUpdate = now;
+
+		if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+			firstPersonDir -= rot * dt;
+		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+			firstPersonDir += rot * dt;
+
+		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+
+		if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+			firstPersonPos += forward * speed * dt;
+		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+			firstPersonPos -= forward * speed * dt;
+
+		auto x = firstPersonPos.x.floor.lrint;
+		auto y = firstPersonPos.y.floor.lrint;
+		firstPersonPos.z = interpolatedHeightmap[(map.height + y) * map.width + x] + 1.75;
+
+		auto view = mat4x4.lookAt(
+			firstPersonPos,
+			firstPersonPos + forward,
+			vec3(0.0, 0.0, 1.0)
+		);
+
+		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
+		return (proj * view).transposed;
+	}
+
 	bool draw()
 	{
 		int width, height;
@@ -286,6 +328,8 @@ class Viewer
 			mvp = getTurntableView(ratio);
 		else if (viewMode == 1)
 			mvp = getTopView(ratio);
+		else if (viewMode == 2)
+			mvp = getFirstPersonView(ratio);
 
 		glUseProgram(program);
 
@@ -354,7 +398,7 @@ class Viewer
 				break;
 
 			case GLFW_KEY_V:
-				viewMode = (viewMode + 1) % 2;
+				viewMode = (viewMode + 1) % 3;
 				break;
 
 			case GLFW_KEY_L:
