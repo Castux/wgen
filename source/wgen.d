@@ -17,7 +17,7 @@ void updateVertices(Model model, Heightmap map)
 	model.vertices.length = map.corners.length * 3;
 	foreach_reverse(i, corner; map.corners)
 	{
-		if (!map.inBounds(corner.p)) continue;
+		if (!map.inBoundsPlusHalfMargin(corner.p)) continue;
 
 		auto p0 = corner.centers[0].p;
 		auto p1 = corner.centers[1].p;
@@ -49,6 +49,21 @@ void updateVertices(Model model, Heightmap map)
 	model.updateData();
 }
 
+void outputHeightmap(float[] map, int width, int height, double lowest, double highest)
+{
+	import gamut;
+	writeln("Exporting heightmap");
+
+	float[] normalized = new float[map.length];
+	normalized[] = (map[] - lowest) / (highest - lowest);
+
+	Image image;
+	image.createViewFromData(normalized.ptr, width, height, PixelType.lf32, width * float.sizeof.to!int);
+	image.flipVertical();
+	image.convertTo(PixelType.l16);
+	image.saveToFile("output.png");
+}
+
 int main(string[] args)
 {
 	if (args.length < 2)
@@ -61,12 +76,14 @@ int main(string[] args)
 
 	Config conf = new Config(path);
 	Heightmap map = new Heightmap(conf);
+	float[] heightmap;
 
 	writefln("Range %f %f", map.lowest, map.highest);
 
 	auto viewer = new Viewer(map, "wgen");
 	auto model = viewer.newModel();
 	updateVertices(model, map);
+	heightmap = viewer.generateInterpolatedHeightmap();
 
 	auto watcher = FileWatch(path);
 
@@ -83,6 +100,7 @@ int main(string[] args)
 				{
 					writefln("Range %f %f", map.lowest, map.highest);
 					updateVertices(model, map);
+					heightmap = viewer.generateInterpolatedHeightmap();
 				}
 
 				break;
@@ -97,6 +115,7 @@ int main(string[] args)
 	writeln("Exporting");
 	if (conf.exportSVG) exportSVG(map, path ~ ".svg");
 	if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
+	outputHeightmap(heightmap, map.width, map.height, map.lowest, map.highest);
 
 	return 0;
 }

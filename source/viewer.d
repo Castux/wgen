@@ -9,8 +9,6 @@ import bindbc.glfw;
 import bindbc.opengl;
 public import dplug.math;
 
-import gamut;
-
 import heightmap;
 
 alias vec2 = vec2f;
@@ -79,7 +77,11 @@ void main()
 	float z = position.z;
 
 	vec3 color;
-	if (mode == 0)
+	if (mode == -1)
+	{
+		color = vec3(z, z, z);
+	}
+	else if (mode == 0)
 	{
 		float f = (z - lowest) / (highest - lowest);
 		color = vec3(f, f, f);
@@ -103,7 +105,7 @@ void main()
 	}
 
 	float shading = 1.0;
-	if (mode != 0)
+	if (mode > 0)
 	{
 		float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
 		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
@@ -144,7 +146,9 @@ class Viewer
 	int lineMode;
 
 	Model[] models;
-	RenderTexture texture;
+	RenderBuffer renderBuffer;
+
+	float[] interpolatedHeightmap;
 
 	this(Heightmap map, string title)
 	{
@@ -183,7 +187,7 @@ class Viewer
 
 		setupShaders();
 
-		texture = new RenderTexture(map.width, map.height);
+		renderBuffer = new RenderBuffer(map.width, map.height);
 	}
 
 	~this()
@@ -239,20 +243,10 @@ class Viewer
 		checkProgram(program);
 	}
 
-	bool draw(bool toTexture = false)
+	bool draw()
 	{
 		int width, height;
-
-		if (toTexture)
-		{
-			width = texture.width;
-			height = texture.height;
-			texture.bind();
-		}
-		else
-		{
-			glfwGetFramebufferSize(window, &width, &height);
-		}
+		glfwGetFramebufferSize(window, &width, &height);
 		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
@@ -301,17 +295,44 @@ class Viewer
 		foreach(model; models)
 			model.draw();
 
-		if (toTexture)
-		{
-			texture.unbind();
-		}
-		else
-		{
-			glfwSwapBuffers(window);
-			glfwPollEvents();
-		}
+		glfwSwapBuffers(window);
+		glfwPollEvents();
 
 		return glfwWindowShouldClose(window) == GLFW_TRUE;
+	}
+
+	float[] generateInterpolatedHeightmap()
+	{
+		int width = renderBuffer.width;
+		int height = renderBuffer.height;
+
+		renderBuffer.bind();
+
+		glViewport(0, 0, width, height);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		auto proj = mat4x4.orthographic(
+			0.0, map.width,
+			-map.height, 0.0,
+			map.highest * 10.0,
+			map.lowest * 10.0
+		).transposed;
+
+		glUseProgram(program);
+
+		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
+		glUniform1i(glGetUniformLocation(program, "mode"), -1);
+		glUniform1i(glGetUniformLocation(program, "lineMode"), 0);
+
+		foreach(model; models)
+			model.draw();
+
+		interpolatedHeightmap.length = width * height;
+		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
+
+		renderBuffer.unbind();
+
+		return interpolatedHeightmap;
 	}
 
 	void onKeyEvent(int key, int scancode, int action, int mods)
@@ -335,11 +356,6 @@ class Viewer
 
 			case GLFW_KEY_L:
 				lineMode = (lineMode + 1) % 4;
-				break;
-
-			case GLFW_KEY_ENTER:
-				draw(toTexture: true);
-				texture.save();
 				break;
 
 			default:
@@ -401,20 +417,20 @@ class Model
 	}
 }
 
-class RenderTexture
+class RenderBuffer
 {
 	int width;
 	int height;
 	GLuint framebuffer;
 
-	ushort[] data;
+	float[] data;
 
 	this(int width, int height)
 	{
 		this.width = width;
 		this.height = height;
 
-		data = new ushort[width * height * 4];
+		data = new float[width * height * 1];
 
 		glGenFramebuffers(1, &framebuffer);
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -424,7 +440,7 @@ class RenderTexture
 
 		glGenRenderbuffers(1, &renderbuffer);
 		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA16, width, height);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 
 		glGenRenderbuffers(1, &depthrenderbuffer);
@@ -447,19 +463,5 @@ class RenderTexture
 	void unbind()
 	{
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	}
-
-	void save()
-	{
-		writeln("Saving image");
-
-		bind();
-		glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_SHORT, data.ptr);
-		unbind();
-
-		Image image;
-		image.createViewFromData(data.ptr, width, height, PixelType.rgba16, width * 4 * ushort.sizeof.to!int);
-		image.flipVertical();
-		image.saveToFile("output.png");
 	}
 }
