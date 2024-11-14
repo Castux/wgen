@@ -49,7 +49,7 @@ void updateVertices(Model model, Heightmap map)
 	model.updateData();
 }
 
-void outputHeightmap(float[] map, int width, int height, double lowest, double highest)
+void outputHeightmap(float[] map, int width, int height, double lowest, double highest, string path)
 {
 	import gamut;
 	writeln("Exporting heightmap");
@@ -61,7 +61,7 @@ void outputHeightmap(float[] map, int width, int height, double lowest, double h
 	image.createViewFromData(normalized.ptr, width, height, PixelType.lf32, width * float.sizeof.to!int);
 	image.flipVertical();
 	image.convertTo(PixelType.l16);
-	image.saveToFile("output.png");
+	image.saveToFile(path);
 }
 
 int main(string[] args)
@@ -115,7 +115,7 @@ int main(string[] args)
 	writeln("Exporting");
 	if (conf.exportSVG) exportSVG(map, path ~ ".svg");
 	if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
-	outputHeightmap(heightmap, map.width, map.height, map.lowest, map.highest);
+	outputHeightmap(heightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
 
 	return 0;
 }
