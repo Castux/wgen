@@ -293,11 +293,15 @@ class Viewer
 			firstPersonDir += rot * dt;
 
 		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+		auto previousPos = firstPersonPos;
 
 		if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
 			firstPersonPos += forward * speed * dt;
 		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 			firstPersonPos -= forward * speed * dt;
+
+		if (!map.inBounds(vec2d(firstPersonPos.x, -firstPersonPos.y)))
+			firstPersonPos = previousPos;
 
 		auto x = firstPersonPos.x.floor.lrint;
 		auto y = firstPersonPos.y.floor.lrint;
