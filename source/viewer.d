@@ -250,7 +250,7 @@ class Viewer
 		checkProgram(program);
 	}
 
-	mat4x4 getTurntableView(double ratio)
+	private mat4x4 getTurntableView(double ratio)
 	{
 		auto model =
 			mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
@@ -266,7 +266,7 @@ class Viewer
 		return (proj * view * model).transposed;
 	}
 
-	mat4x4 getTopView(double ratio)
+	private mat4x4 getTopView(double ratio)
 	{
 		auto proj = mat4x4.orthographic(
 				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
@@ -278,9 +278,35 @@ class Viewer
 		return proj.transposed;
 	}
 
-	mat4x4 getFirstPersonView(double ratio)
+	private double lerp(double a, double b, double x)
 	{
-		const speed = 40.0;
+		return a * (1-x) + b * x;
+	}
+
+	double getZ(vec2 pos)
+	{
+		real x, y;
+		real xfrac = modf(firstPersonPos.x, x);
+		real yfrac = modf(-firstPersonPos.y, y);
+
+		auto xint = x.lrint;
+		auto yint = y.lrint;
+
+		auto z00 = interpolatedHeightmap[(map.height - (yint + 0)) * map.width + (xint + 0)];
+		auto z01 = interpolatedHeightmap[(map.height - (yint + 0)) * map.width + (xint + 1)];
+		auto z10 = interpolatedHeightmap[(map.height - (yint + 1)) * map.width + (xint + 0)];
+		auto z11 = interpolatedHeightmap[(map.height - (yint + 1)) * map.width + (xint + 1)];
+
+		return lerp(
+			lerp(z00, z01, xfrac),
+			lerp(z10, z11, xfrac),
+			yfrac
+		);
+	}
+
+	private mat4x4 getFirstPersonView(double ratio)
+	{
+		auto speed = 4.0;
 		const rot = 0.75;
 
 		auto now = glfwGetTime();
@@ -295,6 +321,9 @@ class Viewer
 		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
 		auto previousPos = firstPersonPos;
 
+		if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
+			speed *= 10.0;
+
 		if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
 			firstPersonPos += forward * speed * dt;
 		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
@@ -303,9 +332,7 @@ class Viewer
 		if (!map.inBounds(vec2d(firstPersonPos.x, -firstPersonPos.y)))
 			firstPersonPos = previousPos;
 
-		auto x = firstPersonPos.x.floor.lrint;
-		auto y = firstPersonPos.y.floor.lrint;
-		firstPersonPos.z = interpolatedHeightmap[(map.height + y) * map.width + x] + 1.75;
+		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.75;
 
 		auto view = mat4x4.lookAt(
 			firstPersonPos,
