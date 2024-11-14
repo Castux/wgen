@@ -165,9 +165,9 @@ class Viewer
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_SAMPLES, 4);
+		glfwWindowHint(GLFW_SAMPLES, 2);
 
-		window = glfwCreateWindow(map.width, map.height, title.toStringz, null, null);
+		window = glfwCreateWindow(1024, 768, title.toStringz, null, null);
 		if (!window)
 			throw new Exception("Could not create window");
 
@@ -407,7 +407,7 @@ class Model
 	void updateData()
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_DYNAMIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
 	}
 
 	void draw()
