@@ -113,11 +113,11 @@ void main()
 
 	if (lineMode == 1)
 	{
-		shading = shading * smoothstep(0.3, 0.4, mod(z, 10));
+		shading = shading * step(0.25, mod(z, 10));
 	}
 	else if (lineMode == 2)
 	{
-		shading = shading * smoothstep(0.3, 0.4, min(mod(position.x, 10), mod(position.y, 10)));
+		shading = shading * step(0.075, min(mod(position.x, 1), mod(position.y, 1)));
 	}
 	else if (lineMode == 3)
 	{
@@ -322,6 +322,8 @@ class Viewer
 		auto previousPos = firstPersonPos;
 
 		if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
+			speed *= 10.0;
+		if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS)
 			speed *= 10.0;
 
 		if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
