@@ -108,7 +108,7 @@ void main()
 	if (mode > 0)
 	{
 		float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
-		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
+		shading = (sunAngle + 1.0) / 2.0 * 0.6 + 0.4;
 	}
 
 	if (lineMode == 1)
@@ -334,7 +334,7 @@ class Viewer
 		if (!map.inBounds(vec2d(firstPersonPos.x, -firstPersonPos.y)))
 			firstPersonPos = previousPos;
 
-		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.75;
+		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.62;
 
 		auto view = mat4x4.lookAt(
 			firstPersonPos,
@@ -353,6 +353,7 @@ class Viewer
 		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
+		glClearColor(156.0/255, 196.0/255, 240.0/255, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		mat4x4 mvp;
