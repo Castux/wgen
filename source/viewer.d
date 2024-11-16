@@ -79,6 +79,9 @@ void main()
 {
 	float z = worldPos.z;
 
+	if (length(worldPos - fpsCenter.xyz) < fpsCenter.w)
+		discard;
+
 	vec3 color;
 	if (mode == -1)
 	{
@@ -131,7 +134,7 @@ void main()
 	}
 
 	vec3 shaded = color * shading;
-	fragment = vec4(shaded, length(worldPos - fpsCenter.xyz) < fpsCenter.w ? 0.0 : 1.0);
+	fragment = vec4(shaded, 1.0);
 }`;
 // `
 
@@ -262,15 +265,15 @@ class Viewer
 
 	private void setTurntableView(double ratio)
 	{
-		auto model =
-			mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
-			mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
+		auto model = mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
 
 		model = model.transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
+		auto angle = glfwGetTime() / 5.0;
+
 		auto view = mat4x4.lookAt(
-			vec3(map.width / 2.0, -map.height / 2.0, max(map.width, map.height) / 2.0),
+			vec3(map.width / 2.0 * cos(angle), -map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
 			vec3(0, 0, 0),
 			vec3(0.0, 0.0, 1.0)
 		);
@@ -387,28 +390,27 @@ class Viewer
 		else if (viewMode == 2)
 			setFirstPersonView(ratio);
 
+		auto cubesRadius = 100;
+
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
 
-		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 100.0);
+		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, showCubes ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
 		if (viewMode == 2 && showCubes)
 		{
-			auto radius = 100;
 			auto c = vec2(firstPersonPos.x.round, firstPersonPos.y.round);
-			foreach(dx; - radius .. radius)
-			foreach(dy; - radius .. radius)
+			foreach(dx; - cubesRadius .. cubesRadius)
+			foreach(dy; - cubesRadius .. cubesRadius)
 			{
 				auto pos = c + vec2(dx, dy);
-				if (!map.inBounds(vec2d(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= radius * radius)
+				if (!map.inBounds(vec2d(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
 					continue;
 
-				auto dz = getZ(pos).floor + 1;
-
-				auto translation = mat4x4.translation(vec3(pos.xy, dz)).transposed;
+				auto translation = mat4x4.translation(vec3(pos.xy, getZ(pos).floor)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
 
