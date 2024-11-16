@@ -430,6 +430,7 @@ class Viewer
 		glUseProgram(program);
 
 		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
+		glUniform1f(glGetUniformLocation(program, "dz"), 0.0);
 		glUniform1i(glGetUniformLocation(program, "mode"), -1);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), 0);
 
