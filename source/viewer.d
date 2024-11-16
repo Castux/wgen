@@ -397,7 +397,7 @@ class Viewer
 		else if (viewMode == 2)
 			setFirstPersonView(ratio);
 
-		auto cubesRadius = 125;
+		auto cubesRadius = 175;
 
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
@@ -408,6 +408,8 @@ class Viewer
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, showCubes ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
+		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+
 		if (viewMode == 2 && showCubes)
 		{
 			auto c = vec2(firstPersonPos.x.round, firstPersonPos.y.round);
@@ -416,6 +418,9 @@ class Viewer
 			{
 				auto pos = c + vec2(dx, dy);
 				if (!map.inBounds(vec2d(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
+					continue;
+
+				if (dot(forward, vec3(dx, dy, 0)) < 0)
 					continue;
 
 				auto translation = mat4x4.translation(vec3(pos.xy, getZ(pos).round)).transposed;
