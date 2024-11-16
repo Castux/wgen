@@ -155,7 +155,7 @@ class Viewer
 	double lastUpdate;
 
 	bool showCubes;
-	Model squareMesh;
+	Model cubeMesh;
 
 	this(Heightmap map, string title)
 	{
@@ -201,8 +201,8 @@ class Viewer
 		mainMesh = new Model(program);
 		updateMainMesh();
 
-		squareMesh = new Model(program);
-		makeSquareMesh();
+		cubeMesh = new Model(program);
+		makeCubeMesh();
 	}
 
 	~this()
@@ -384,7 +384,7 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "dz"), 0.0);
 		mainMesh.draw();
 
-		if (viewMode == 2)
+		if (viewMode == 2 && showCubes)
 		{
 			auto radius = 100;
 			auto c = vec2(firstPersonPos.x.round, firstPersonPos.y.round);
@@ -400,7 +400,7 @@ class Viewer
 				mvp2 = (mvp * translation).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
 				glUniform1f(glGetUniformLocation(program, "dz"), dz);
-				squareMesh.draw();
+				cubeMesh.draw();
 			}
 		}
 
@@ -454,22 +454,22 @@ class Viewer
 		vertices[5] = Vertex(c01, normal, vec3(0,0,1));
 	}
 
-	private void makeSquareMesh()
+	private void makeCubeMesh()
 	{
-		squareMesh.vertices.length = 6 * 5;
+		cubeMesh.vertices.length = 6 * 5;
 
 		auto c00 = vec3(- 0.5, - 0.5, 0.0);
 		auto c01 = vec3(- 0.5, + 0.5, 0.0);
 		auto c10 = vec3(+ 0.5, - 0.5, 0.0);
 		auto c11 = vec3(+ 0.5, + 0.5, 0.0);
 
-		makeSquare(squareMesh.vertices[ 0 ..  6], c00, c10, c01, c11);
-		makeSquare(squareMesh.vertices[ 6 .. 12], c00, c10, vec3(c00.xy, -10.0), vec3(c10.xy, -10.0));
-		makeSquare(squareMesh.vertices[12 .. 18], c01, c00, vec3(c01.xy, -10.0), vec3(c00.xy, -10.0));
-		makeSquare(squareMesh.vertices[18 .. 24], c11, c01, vec3(c11.xy, -10.0), vec3(c01.xy, -10.0));
-		makeSquare(squareMesh.vertices[24 .. 30], c10, c11, vec3(c10.xy, -10.0), vec3(c11.xy, -10.0));
+		makeSquare(cubeMesh.vertices[ 0 ..  6], c00, c10, c01, c11);
+		makeSquare(cubeMesh.vertices[ 6 .. 12], c00, c10, vec3(c00.xy, -10.0), vec3(c10.xy, -10.0));
+		makeSquare(cubeMesh.vertices[12 .. 18], c01, c00, vec3(c01.xy, -10.0), vec3(c00.xy, -10.0));
+		makeSquare(cubeMesh.vertices[18 .. 24], c11, c01, vec3(c11.xy, -10.0), vec3(c01.xy, -10.0));
+		makeSquare(cubeMesh.vertices[24 .. 30], c10, c11, vec3(c10.xy, -10.0), vec3(c11.xy, -10.0));
 
-		squareMesh.updateData();
+		cubeMesh.updateData();
 	}
 
 	void updateMainMesh()
@@ -531,6 +531,10 @@ class Viewer
 
 			case GLFW_KEY_L:
 				lineMode = (lineMode + 1) % 4;
+				break;
+
+			case GLFW_KEY_M:
+				showCubes = !showCubes;
 				break;
 
 			default:
