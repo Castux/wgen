@@ -191,6 +191,8 @@ class Viewer
 		if(loadOpenGL() != GLSupport.gl33)
 			throw new Exception("Could not load OpenGL library");
 		glEnable(GL_DEPTH_TEST);
+		glEnable(GL_CULL_FACE);
+		glFrontFace(GL_CW);
 
 		if (singleton)
 			throw new Exception("Multiple viewer instances");
@@ -391,7 +393,7 @@ class Viewer
 		else if (viewMode == 2)
 			setFirstPersonView(ratio);
 
-		auto cubesRadius = 100;
+		auto cubesRadius = 125;
 
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
@@ -411,7 +413,7 @@ class Viewer
 				if (!map.inBounds(vec2d(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
 					continue;
 
-				auto translation = mat4x4.translation(vec3(pos.xy, getZ(pos).floor)).transposed;
+				auto translation = mat4x4.translation(vec3(pos.xy, getZ(pos).round)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
 
@@ -458,33 +460,33 @@ class Viewer
 		renderBuffer.unbind();
 	}
 
-	private static void makeSquare(Vertex[] vertices, vec3 c00, vec3 c10, vec3 c01, vec3 c11)
+	private static void makeSquare(Vertex[] vertices, vec3 a, vec3 b, vec3 c, vec3 d)
 	{
-		auto normal = cross(c01 - c00, c10 - c00).normalized;
+		auto normal = cross(c - a, b - a).normalized;
 
-		vertices[0] = Vertex(c00, normal, vec3(1,0,0));
-		vertices[1] = Vertex(c01, normal, vec3(0,1,0));
-		vertices[2] = Vertex(c10, normal, vec3(0,0,1));
+		vertices[0] = Vertex(a, normal, vec3(1,0,0));
+		vertices[1] = Vertex(b, normal, vec3(0,1,0));
+		vertices[2] = Vertex(d, normal, vec3(0,0,1));
 
-		vertices[3] = Vertex(c11, normal, vec3(1,0,0));
-		vertices[4] = Vertex(c10, normal, vec3(0,1,0));
-		vertices[5] = Vertex(c01, normal, vec3(0,0,1));
+		vertices[3] = Vertex(b, normal, vec3(1,0,0));
+		vertices[4] = Vertex(c, normal, vec3(0,1,0));
+		vertices[5] = Vertex(d, normal, vec3(0,0,1));
 	}
 
 	private void makeCubeMesh()
 	{
 		cubeMesh.vertices.length = 6 * 5;
 
-		auto c00 = vec3(- 0.5, - 0.5, 0.0);
-		auto c01 = vec3(- 0.5, + 0.5, 0.0);
-		auto c10 = vec3(+ 0.5, - 0.5, 0.0);
-		auto c11 = vec3(+ 0.5, + 0.5, 0.0);
+		auto a = vec3(-0.5, -0.5, 0.0);
+		auto b = vec3(-0.5, +0.5, 0.0);
+		auto c = vec3(+0.5, +0.5, 0.0);
+		auto d = vec3(+0.5, -0.5, 0.0);
 
-		makeSquare(cubeMesh.vertices[ 0 ..  6], c00, c10, c01, c11);
-		makeSquare(cubeMesh.vertices[ 6 .. 12], c00, c10, vec3(c00.xy, -10.0), vec3(c10.xy, -10.0));
-		makeSquare(cubeMesh.vertices[12 .. 18], c01, c00, vec3(c01.xy, -10.0), vec3(c00.xy, -10.0));
-		makeSquare(cubeMesh.vertices[18 .. 24], c11, c01, vec3(c11.xy, -10.0), vec3(c01.xy, -10.0));
-		makeSquare(cubeMesh.vertices[24 .. 30], c10, c11, vec3(c10.xy, -10.0), vec3(c11.xy, -10.0));
+		makeSquare(cubeMesh.vertices[ 0 ..  6], a, b, c, d);
+		makeSquare(cubeMesh.vertices[ 6 .. 12], b, a, vec3(a.xy, -10.0), vec3(b.xy, -10.0));
+		makeSquare(cubeMesh.vertices[12 .. 18], c, b, vec3(b.xy, -10.0), vec3(c.xy, -10.0));
+		makeSquare(cubeMesh.vertices[18 .. 24], d, c, vec3(c.xy, -10.0), vec3(d.xy, -10.0));
+		makeSquare(cubeMesh.vertices[24 .. 30], a, d, vec3(d.xy, -10.0), vec3(a.xy, -10.0));
 
 		cubeMesh.updateData();
 	}
