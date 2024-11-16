@@ -19,6 +19,7 @@ struct Vertex
 {
 	vec3 pos;
 	vec3 norm;
+	vec3 normSmooth;
 	vec3 coord;
 }
 
@@ -47,7 +48,9 @@ static const char* vertex_shader_text = `
 #version 330
 uniform mat4 PV;
 uniform mat4 M;
+uniform int smoothNormals;
 in vec3 vNorm;
+in vec3 vNormSmooth;
 in vec3 vPos;
 in vec3 vCoord;
 out vec3 worldPos;
@@ -57,7 +60,7 @@ void main()
 {
 	vec4 pos = M * vec4(vPos, 1.0);
 	gl_Position = PV * pos;
-	normal = vNorm;
+	normal = smoothNormals == 1 ? vNormSmooth : vNorm;
 	coord = vCoord;
 	worldPos = pos.xyz;
 }`;
@@ -152,6 +155,7 @@ class Viewer
 	int shadingMode;
 	int viewMode;
 	int lineMode;
+	bool smoothNormals;
 
 	RenderBuffer renderBuffer;
 
@@ -399,6 +403,7 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
+		glUniform1i(glGetUniformLocation(program, "smoothNormals"), smoothNormals ? 1 : 0);
 
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, showCubes ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
@@ -464,13 +469,13 @@ class Viewer
 	{
 		auto normal = cross(c - a, b - a).normalized;
 
-		vertices[0] = Vertex(a, normal, vec3(1,0,0));
-		vertices[1] = Vertex(b, normal, vec3(0,1,0));
-		vertices[2] = Vertex(d, normal, vec3(0,0,1));
+		vertices[0] = Vertex(a, normal, normal, vec3(1,0,0));
+		vertices[1] = Vertex(b, normal, normal, vec3(0,1,0));
+		vertices[2] = Vertex(d, normal, normal, vec3(0,0,1));
 
-		vertices[3] = Vertex(b, normal, vec3(1,0,0));
-		vertices[4] = Vertex(c, normal, vec3(0,1,0));
-		vertices[5] = Vertex(d, normal, vec3(0,0,1));
+		vertices[3] = Vertex(b, normal, normal, vec3(1,0,0));
+		vertices[4] = Vertex(c, normal, normal, vec3(0,1,0));
+		vertices[5] = Vertex(d, normal, normal, vec3(0,0,1));
 	}
 
 	private void makeCubeMesh()
@@ -506,6 +511,7 @@ class Viewer
 			{
 				mainMesh.vertices[i * 3 + j] = Vertex(
 					vec3(center.x, -center.y, center.z),
+					vec3(corner.normal.x, -corner.normal.y, corner.normal.z),
 					vec3(center.normal.x, -center.normal.y, center.normal.z),
 					coords[j]
 				);
@@ -543,6 +549,10 @@ class Viewer
 				showCubes = !showCubes;
 				break;
 
+			case GLFW_KEY_S:
+				smoothNormals = !smoothNormals;
+				break;
+
 			default:
 				break;
 		}
@@ -563,6 +573,7 @@ class Model
 
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
+		GLint vnormSmoothLocation = glGetAttribLocation(program, "vNormSmooth");
 		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
 
 		glGenVertexArrays(1, &vertexArray);
@@ -571,6 +582,8 @@ class Model
 		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
 		glEnableVertexAttribArray(vnormLocation);
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
+		glEnableVertexAttribArray(vnormSmoothLocation);
+		glVertexAttribPointer(vnormSmoothLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.normSmooth.offsetof);
 		glEnableVertexAttribArray(vcoordLocation);
 		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
 	}
