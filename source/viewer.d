@@ -45,20 +45,21 @@ void checkError(string error)
 
 static const char* vertex_shader_text = `
 #version 330
-uniform mat4 MVP;
-uniform float dz;
+uniform mat4 PV;
+uniform mat4 M;
 in vec3 vNorm;
 in vec3 vPos;
 in vec3 vCoord;
-out vec3 position;
+out vec3 worldPos;
 out vec3 normal;
 out vec3 coord;
 void main()
 {
-	gl_Position = MVP * vec4(vPos, 1.0);
-	position = vec3(vPos.xy, vPos.z + dz);
+	vec4 pos = M * vec4(vPos, 1.0);
+	gl_Position = PV * pos;
 	normal = vNorm;
 	coord = vCoord;
+	worldPos = pos.xyz;
 }`;
 // `
 
@@ -69,13 +70,14 @@ uniform float lowest;
 uniform float highest;
 uniform int mode;
 uniform int lineMode;
-in vec3 position;
+uniform vec4 fpsCenter;
+in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
 out vec4 fragment;
 void main()
 {
-	float z = position.z;
+	float z = worldPos.z;
 
 	vec3 color;
 	if (mode == -1)
@@ -118,7 +120,7 @@ void main()
 	}
 	else if (lineMode == 2)
 	{
-		shading = shading * step(0.075, min(mod(position.x, 1), mod(position.y, 1)));
+		shading = shading * step(0.075, min(mod(worldPos.x, 1), mod(worldPos.y, 1)));
 	}
 	else if (lineMode == 3)
 	{
@@ -129,7 +131,7 @@ void main()
 	}
 
 	vec3 shaded = color * shading;
-	fragment = vec4(shaded, 1.0);
+	fragment = vec4(shaded, length(worldPos - fpsCenter.xyz) < fpsCenter.w ? 0.0 : 1.0);
 }`;
 // `
 
@@ -258,11 +260,14 @@ class Viewer
 		checkProgram(program);
 	}
 
-	private mat4x4 getTurntableView(double ratio)
+	private void setTurntableView(double ratio)
 	{
 		auto model =
 			mat4x4.rotateZ(cast(float) glfwGetTime() / 5.0) *
 			mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
+
+		model = model.transposed;
+		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
 		auto view = mat4x4.lookAt(
 			vec3(map.width / 2.0, -map.height / 2.0, max(map.width, map.height) / 2.0),
@@ -271,19 +276,24 @@ class Viewer
 		);
 
 		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
-		return (proj * view * model);
+
+		auto PV = (proj * view).transposed;
+		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
 	}
 
-	private mat4x4 getTopView(double ratio)
+	private void setTopView(double ratio)
 	{
+		auto model = mat4x4.identity;
+		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
+
 		auto proj = mat4x4.orthographic(
 				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
 				-map.height, 0.0,
 				-(map.highest + 10.0),
 				(map.highest - map.lowest) + 20.0
-			);
+			).transposed;
 
-		return proj;
+		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
 	}
 
 	private double lerp(double a, double b, double x)
@@ -312,7 +322,7 @@ class Viewer
 		);
 	}
 
-	private mat4x4 getFirstPersonView(double ratio)
+	private void setFirstPersonView(double ratio)
 	{
 		auto speed = 4.0;
 		const rot = 0.75;
@@ -351,7 +361,11 @@ class Viewer
 		);
 
 		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
-		return (proj * view);
+		auto PV = (proj * view).transposed;
+		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
+
+		auto model = mat4x4.identity;
+		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 	}
 
 	bool draw()
@@ -364,24 +378,21 @@ class Viewer
 		glClearColor(156.0/255, 196.0/255, 240.0/255, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		mat4x4 mvp;
+		glUseProgram(program);
 
 		if (viewMode == 0)
-			mvp = getTurntableView(ratio);
+			setTurntableView(ratio);
 		else if (viewMode == 1)
-			mvp = getTopView(ratio);
+			setTopView(ratio);
 		else if (viewMode == 2)
-			mvp = getFirstPersonView(ratio);
+			setFirstPersonView(ratio);
 
-		glUseProgram(program);
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
 
-		auto mvp2 = mvp.transposed;
-		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
-		glUniform1f(glGetUniformLocation(program, "dz"), 0.0);
+		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 100.0);
 		mainMesh.draw();
 
 		if (viewMode == 2 && showCubes)
@@ -396,10 +407,11 @@ class Viewer
 					continue;
 
 				auto dz = getZ(pos).floor + 1;
-				auto translation = mat4x4.translation(vec3(pos.xy, dz));
-				mvp2 = (mvp * translation).transposed;
-				glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
-				glUniform1f(glGetUniformLocation(program, "dz"), dz);
+
+				auto translation = mat4x4.translation(vec3(pos.xy, dz)).transposed;
+				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
+				glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
+
 				cubeMesh.draw();
 			}
 		}
@@ -417,8 +429,12 @@ class Viewer
 
 		renderBuffer.bind();
 
+		glUseProgram(program);
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		auto model = mat4x4.identity;
+		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
 		auto proj = mat4x4.orthographic(
 			0.0, map.width,
@@ -427,10 +443,7 @@ class Viewer
 			map.lowest * 10.0
 		).transposed;
 
-		glUseProgram(program);
-
-		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
-		glUniform1f(glGetUniformLocation(program, "dz"), 0.0);
+		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
 		glUniform1i(glGetUniformLocation(program, "mode"), -1);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), 0);
 
