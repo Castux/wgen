@@ -113,8 +113,9 @@ void main()
 	float shading = 1.0;
 	if (mode > 0)
 	{
-		float sunAngle = dot(normal, vec3(1.0, 0.65, 0.75));
-		shading = (sunAngle + 1.0) / 2.0 * 0.6 + 0.4;
+		vec3 sun = normalize(vec3(-1, -0.65, 0.5));
+		float sunAngle = dot(normal, sun);
+		shading = (sunAngle + 1.0) / 2.0 * 0.7 + 0.3;
 	}
 
 	if (lineMode == 1)
@@ -459,7 +460,7 @@ class Viewer
 
 	private static void makeSquare(Vertex[] vertices, vec3 c00, vec3 c10, vec3 c01, vec3 c11)
 	{
-		auto normal = cross(c10 - c00, c01 - c00).normalized;
+		auto normal = cross(c01 - c00, c10 - c00).normalized;
 
 		vertices[0] = Vertex(c00, normal, vec3(1,0,0));
 		vertices[1] = Vertex(c01, normal, vec3(0,1,0));
@@ -491,21 +492,8 @@ class Viewer
 	void updateMainMesh()
 	{
 		mainMesh.vertices.length = map.corners.length * 3;
-		foreach_reverse(i, corner; map.corners)
+		foreach(i, corner; map.corners)
 		{
-			if (!map.inBoundsPlusHalfMargin(corner.p)) continue;
-
-			auto p0 = corner.centers[0].p;
-			auto p1 = corner.centers[1].p;
-			auto p2 = corner.centers[2].p;
-
-			auto v0 = vec3(p0.x, -p0.y, corner.centers[0].z);
-			auto v1 = vec3(p1.x, -p1.y, corner.centers[1].z);
-			auto v2 = vec3(p2.x, -p2.y, corner.centers[2].z);
-
-			auto normal = cross(v1 - v0, v2 - v0);
-			normal.normalize();
-
 			const vec3[3] coords = [
 				vec3(1,0,0),
 				vec3(0,1,0),
@@ -516,7 +504,7 @@ class Viewer
 			{
 				mainMesh.vertices[i * 3 + j] = Vertex(
 					vec3(center.x, -center.y, center.z),
-					normal,
+					vec3(center.normal.x, -center.normal.y, center.normal.z),
 					coords[j]
 				);
 			}

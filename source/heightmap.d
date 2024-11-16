@@ -7,6 +7,8 @@ import std.range;
 import std.typecons;
 import std.stdio;
 
+import dplug.math;
+
 import gamut;
 import delaunator;
 import graph;
@@ -24,9 +26,16 @@ class Center : CenterBase!(Center, Edge, Corner)
 	Center[] uphill;
 	int flow;
 
+	vec3d normal;
+
 	this(Point p)
 	{
 		 super(p);
+	}
+
+	vec3d pos()
+	{
+		return vec3d(p, z);
 	}
 
 	void reset()
@@ -50,6 +59,8 @@ class Edge : EdgeBase!(Center, Edge, Corner)
 
 class Corner : CornerBase!(Center, Edge, Corner)
 {
+	vec3d normal;
+
 	this(Point p)
 	{
 		super(p);
@@ -365,6 +376,12 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			lowest = lowest / highest * conf.maxHeight;
 			highest = conf.maxHeight;
 		}
+
+		foreach(corner; corners)
+			corner.normal = cross(corner.centers[1].pos - corner.centers[0].pos, corner.centers[2].pos - corner.centers[0].pos).normalized;
+
+		foreach(center; centers)
+			center.normal = center.corners.map!"a.normal".sum.normalized;
 	}
 
 	private void computeRiverFlow()
