@@ -46,6 +46,7 @@ void checkError(string error)
 static const char* vertex_shader_text = `
 #version 330
 uniform mat4 MVP;
+uniform float dz;
 in vec3 vNorm;
 in vec3 vPos;
 in vec3 vCoord;
@@ -55,7 +56,7 @@ out vec3 coord;
 void main()
 {
 	gl_Position = MVP * vec4(vPos, 1.0);
-	position = vPos;
+	position = vec3(vPos.xy, vPos.z + dz);
 	normal = vNorm;
 	coord = vCoord;
 }`;
@@ -107,7 +108,7 @@ void main()
 	float shading = 1.0;
 	if (mode > 0)
 	{
-		float sunAngle = dot(normal, vec3(1.0, 1.0, 1.0));
+		float sunAngle = dot(normal, vec3(1.0, 0.65, 0.75));
 		shading = (sunAngle + 1.0) / 2.0 * 0.6 + 0.4;
 	}
 
@@ -153,6 +154,8 @@ class Viewer
 	double firstPersonDir;
 	double lastUpdate;
 
+	Model squareMesh;
+
 	this(Heightmap map, string title)
 	{
 		this.map = map;
@@ -195,6 +198,8 @@ class Viewer
 		firstPersonPos.x = map.width / 2.0;
 		firstPersonPos.y = -map.height / 2.0;
 		firstPersonDir = 0.0;
+
+		makeSquareMesh();
 	}
 
 	~this()
@@ -224,10 +229,10 @@ class Viewer
 		glGetProgramiv(program, GL_LINK_STATUS, &programLinked);
 		if (programLinked != GL_TRUE)
 		{
-		    GLsizei logLength = 0;
-		    GLchar[1024] message;
-		    glGetProgramInfoLog(program, 1024, &logLength, message.ptr);
-		   throw new Exception("Program error: %s".format(message[0 .. logLength]));
+			GLsizei logLength = 0;
+			GLchar[1024] message;
+			glGetProgramInfoLog(program, 1024, &logLength, message.ptr);
+			throw new Exception("Program error: %s".format(message[0 .. logLength]));
 		}
 	}
 
@@ -263,7 +268,7 @@ class Viewer
 		);
 
 		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
-		return (proj * view * model).transposed;
+		return (proj * view * model);
 	}
 
 	private mat4x4 getTopView(double ratio)
@@ -275,7 +280,7 @@ class Viewer
 				(map.highest - map.lowest) + 20.0
 			);
 
-		return proj.transposed;
+		return proj;
 	}
 
 	private double lerp(double a, double b, double x)
@@ -286,8 +291,8 @@ class Viewer
 	double getZ(vec2 pos)
 	{
 		real x, y;
-		real xfrac = modf(firstPersonPos.x, x);
-		real yfrac = modf(-firstPersonPos.y, y);
+		real xfrac = modf(pos.x, x);
+		real yfrac = modf(-pos.y, y);
 
 		auto xint = x.lrint;
 		auto yint = y.lrint;
@@ -343,7 +348,7 @@ class Viewer
 		);
 
 		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
-		return (proj * view).transposed;
+		return (proj * view);
 	}
 
 	bool draw()
@@ -366,15 +371,35 @@ class Viewer
 			mvp = getFirstPersonView(ratio);
 
 		glUseProgram(program);
-
-		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp);
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
 
-		foreach(model; models)
-			model.draw();
+		auto mvp2 = mvp.transposed;
+		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
+		glUniform1f(glGetUniformLocation(program, "dz"), 0.0);
+		models[1].draw();
+
+		if (viewMode == 2)
+		{
+			auto radius = 100;
+			auto c = vec2(firstPersonPos.x.round, firstPersonPos.y.round);
+			foreach(dx; - radius .. radius)
+			foreach(dy; - radius .. radius)
+			{
+				auto pos = c + vec2(dx, dy);
+				if (!map.inBounds(vec2d(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= radius * radius)
+					continue;
+
+				auto dz = getZ(pos).floor + 1;
+				auto translation = mat4x4.translation(vec3(pos.xy, dz));
+				mvp2 = (mvp * translation).transposed;
+				glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
+				glUniform1f(glGetUniformLocation(program, "dz"), dz);
+				models[0].draw();
+			}
+		}
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
@@ -414,6 +439,38 @@ class Viewer
 		renderBuffer.unbind();
 
 		return interpolatedHeightmap;
+	}
+
+	void makeSquare(Vertex[] vertices, vec3 c00, vec3 c10, vec3 c01, vec3 c11)
+	{
+		auto normal = cross(c10 - c00, c01 - c00).normalized;
+
+		vertices[0] = Vertex(c00, normal, vec3(1,0,0));
+		vertices[1] = Vertex(c01, normal, vec3(0,1,0));
+		vertices[2] = Vertex(c10, normal, vec3(0,0,1));
+
+		vertices[3] = Vertex(c11, normal, vec3(1,0,0));
+		vertices[4] = Vertex(c10, normal, vec3(0,1,0));
+		vertices[5] = Vertex(c01, normal, vec3(0,0,1));
+	}
+
+	void makeSquareMesh()
+	{
+		squareMesh = newModel();
+		squareMesh.vertices.length = 6 * 5;
+
+		auto c00 = vec3(- 0.5, - 0.5, 0.0);
+		auto c01 = vec3(- 0.5, + 0.5, 0.0);
+		auto c10 = vec3(+ 0.5, - 0.5, 0.0);
+		auto c11 = vec3(+ 0.5, + 0.5, 0.0);
+
+		makeSquare(squareMesh.vertices[ 0 ..  6], c00, c10, c01, c11);
+		makeSquare(squareMesh.vertices[ 6 .. 12], c00, c10, vec3(c00.xy, -10.0), vec3(c10.xy, -10.0));
+		makeSquare(squareMesh.vertices[12 .. 18], c01, c00, vec3(c01.xy, -10.0), vec3(c00.xy, -10.0));
+		makeSquare(squareMesh.vertices[18 .. 24], c11, c01, vec3(c11.xy, -10.0), vec3(c01.xy, -10.0));
+		makeSquare(squareMesh.vertices[24 .. 30], c10, c11, vec3(c10.xy, -10.0), vec3(c11.xy, -10.0));
+
+		squareMesh.updateData();
 	}
 
 	void onKeyEvent(int key, int scancode, int action, int mods)
