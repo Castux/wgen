@@ -141,12 +141,12 @@ class Viewer
 	GLuint program;
 
 	Heightmap map;
+	Model mainMesh;
 
 	int shadingMode;
 	int viewMode;
 	int lineMode;
 
-	Model[] models;
 	RenderBuffer renderBuffer;
 
 	float[] interpolatedHeightmap;
@@ -154,6 +154,7 @@ class Viewer
 	double firstPersonDir;
 	double lastUpdate;
 
+	bool showCubes;
 	Model squareMesh;
 
 	this(Heightmap map, string title)
@@ -183,12 +184,10 @@ class Viewer
 
 		if(loadOpenGL() != GLSupport.gl33)
 			throw new Exception("Could not load OpenGL library");
+		glEnable(GL_DEPTH_TEST);
 
 		if (singleton)
 			throw new Exception("Multiple viewer instances");
-
-		glEnable(GL_DEPTH_TEST);
-
 		singleton = this;
 
 		setupShaders();
@@ -199,6 +198,10 @@ class Viewer
 		firstPersonPos.y = -map.height / 2.0;
 		firstPersonDir = 0.0;
 
+		mainMesh = new Model(program);
+		updateMainMesh();
+
+		squareMesh = new Model(program);
 		makeSquareMesh();
 	}
 
@@ -379,7 +382,7 @@ class Viewer
 		auto mvp2 = mvp.transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
 		glUniform1f(glGetUniformLocation(program, "dz"), 0.0);
-		models[1].draw();
+		mainMesh.draw();
 
 		if (viewMode == 2)
 		{
@@ -397,7 +400,7 @@ class Viewer
 				mvp2 = (mvp * translation).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "MVP"), 1, GL_FALSE, cast(const(GLfloat*)) &mvp2);
 				glUniform1f(glGetUniformLocation(program, "dz"), dz);
-				models[0].draw();
+				squareMesh.draw();
 			}
 		}
 
@@ -407,7 +410,7 @@ class Viewer
 		return glfwWindowShouldClose(window) == GLFW_TRUE;
 	}
 
-	float[] generateInterpolatedHeightmap()
+	private void generateInterpolatedHeightmap()
 	{
 		int width = renderBuffer.width;
 		int height = renderBuffer.height;
@@ -430,18 +433,15 @@ class Viewer
 		glUniform1i(glGetUniformLocation(program, "mode"), -1);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), 0);
 
-		foreach(model; models)
-			model.draw();
+		mainMesh.draw();
 
 		interpolatedHeightmap.length = width * height;
 		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
 
 		renderBuffer.unbind();
-
-		return interpolatedHeightmap;
 	}
 
-	void makeSquare(Vertex[] vertices, vec3 c00, vec3 c10, vec3 c01, vec3 c11)
+	private static void makeSquare(Vertex[] vertices, vec3 c00, vec3 c10, vec3 c01, vec3 c11)
 	{
 		auto normal = cross(c10 - c00, c01 - c00).normalized;
 
@@ -454,9 +454,8 @@ class Viewer
 		vertices[5] = Vertex(c01, normal, vec3(0,0,1));
 	}
 
-	void makeSquareMesh()
+	private void makeSquareMesh()
 	{
-		squareMesh = newModel();
 		squareMesh.vertices.length = 6 * 5;
 
 		auto c00 = vec3(- 0.5, - 0.5, 0.0);
@@ -473,7 +472,45 @@ class Viewer
 		squareMesh.updateData();
 	}
 
-	void onKeyEvent(int key, int scancode, int action, int mods)
+	void updateMainMesh()
+	{
+		mainMesh.vertices.length = map.corners.length * 3;
+		foreach_reverse(i, corner; map.corners)
+		{
+			if (!map.inBoundsPlusHalfMargin(corner.p)) continue;
+
+			auto p0 = corner.centers[0].p;
+			auto p1 = corner.centers[1].p;
+			auto p2 = corner.centers[2].p;
+
+			auto v0 = vec3(p0.x, -p0.y, corner.centers[0].z);
+			auto v1 = vec3(p1.x, -p1.y, corner.centers[1].z);
+			auto v2 = vec3(p2.x, -p2.y, corner.centers[2].z);
+
+			auto normal = cross(v1 - v0, v2 - v0);
+			normal.normalize();
+
+			const vec3[3] coords = [
+				vec3(1,0,0),
+				vec3(0,1,0),
+				vec3(0,0,1)
+			];
+
+			foreach (j, center; corner.centers)
+			{
+				mainMesh.vertices[i * 3 + j] = Vertex(
+					vec3(center.x, -center.y, center.z),
+					normal,
+					coords[j]
+				);
+			}
+		}
+
+		mainMesh.updateData();
+		generateInterpolatedHeightmap();
+	}
+
+	private void onKeyEvent(int key, int scancode, int action, int mods)
 	{
 		if (action != GLFW_PRESS)
 			return;
@@ -499,14 +536,6 @@ class Viewer
 			default:
 				break;
 		}
-	}
-
-	Model newModel()
-	{
-		Model model = new Model(program);
-		models ~= model;
-
-		return model;
 	}
 }
 
