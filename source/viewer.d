@@ -405,7 +405,8 @@ class Viewer
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
 		glUniform1i(glGetUniformLocation(program, "smoothNormals"), smoothNormals ? 1 : 0);
 
-		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, showCubes ? cubesRadius - 2.0 : 0.0);
+		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
+			viewMode == 2 && showCubes ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
 		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
