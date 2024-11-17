@@ -164,7 +164,7 @@ class Viewer
 	double firstPersonDir;
 	double lastUpdate;
 
-	bool showCubes;
+	int cubeMode;
 	Model cubeMesh;
 
 	this(Heightmap map, string title)
@@ -406,12 +406,12 @@ class Viewer
 		glUniform1i(glGetUniformLocation(program, "smoothNormals"), smoothNormals ? 1 : 0);
 
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
-			viewMode == 2 && showCubes ? cubesRadius - 2.0 : 0.0);
+			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
 		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
 
-		if (viewMode == 2 && showCubes)
+		if (viewMode == 2 && cubeMode != 0)
 		{
 			auto c = vec2(firstPersonPos.x.round, firstPersonPos.y.round);
 			foreach(dx; - cubesRadius .. cubesRadius)
@@ -424,7 +424,10 @@ class Viewer
 				if (dot(forward, vec3(dx, dy, 0)) < 0)
 					continue;
 
-				auto translation = mat4x4.translation(vec3(pos.xy, getZ(pos).round)).transposed;
+				auto z = getZ(pos);
+				if (cubeMode == 2) z = z.round;
+
+				auto translation = mat4x4.translation(vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
 
@@ -552,7 +555,7 @@ class Viewer
 				break;
 
 			case GLFW_KEY_M:
-				showCubes = !showCubes;
+				cubeMode = (cubeMode + 1) % 3;
 				break;
 
 			case GLFW_KEY_S:
