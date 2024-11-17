@@ -73,7 +73,7 @@ int main(string[] args)
 	writeln("Exporting");
 	if (conf.exportSVG) exportSVG(map, path ~ ".svg");
 	if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
-	outputHeightmap(viewer.interpolatedHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
+	outputHeightmap(viewer.blurredHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
 
 	return 0;
 }

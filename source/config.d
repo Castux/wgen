@@ -40,6 +40,7 @@ class Config
 	int erosionMinFlow;
 	double erosionFactor;
 	double maxHeight = 0;
+	int blurRadius;
 
 	bool exportOBJ;
 	bool exportSVG;
@@ -66,6 +67,9 @@ class Config
 
 		if ("maxHeight" in json)
 			maxHeight = json["maxHeight"].get!double;
+
+		if ("blurRadius" in json)
+			blurRadius = json["blurRadius"].get!int;
 
 		foreach(string name, t; json["terrains"])
 		{

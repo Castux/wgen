@@ -160,6 +160,9 @@ class Viewer
 	RenderBuffer renderBuffer;
 
 	float[] interpolatedHeightmap;
+	float[] blurredHeightmap;
+	bool useBlurred;
+
 	vec3 firstPersonPos;
 	double firstPersonDir;
 	double lastUpdate;
@@ -320,10 +323,12 @@ class Viewer
 		auto xint = x.lrint;
 		auto yint = y.lrint;
 
-		auto z00 = interpolatedHeightmap[(map.height - (yint + 0)) * map.width + (xint + 0)];
-		auto z01 = interpolatedHeightmap[(map.height - (yint + 0)) * map.width + (xint + 1)];
-		auto z10 = interpolatedHeightmap[(map.height - (yint + 1)) * map.width + (xint + 0)];
-		auto z11 = interpolatedHeightmap[(map.height - (yint + 1)) * map.width + (xint + 1)];
+		auto array = useBlurred ? blurredHeightmap : interpolatedHeightmap;
+
+		auto z00 = array[(map.height - (yint + 0)) * map.width + (xint + 0)];
+		auto z01 = array[(map.height - (yint + 0)) * map.width + (xint + 1)];
+		auto z10 = array[(map.height - (yint + 1)) * map.width + (xint + 0)];
+		auto z11 = array[(map.height - (yint + 1)) * map.width + (xint + 1)];
 
 		return lerp(
 			lerp(z00, z01, xfrac),
@@ -472,9 +477,70 @@ class Viewer
 		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
 
 		renderBuffer.unbind();
+
+		blurHeightmap();
 	}
 
-	private static void makeSquare(Vertex[] vertices, vec3 a, vec3 b, vec3 c, vec3 d)
+	private static int[] binomialCoefs(int order) pure
+	{
+		int[] coefs = [1];
+		foreach(k; 1 .. order + 1)
+			coefs ~= coefs[$ - 1] * (order + 1 - k) / k;
+
+		return coefs;
+	}
+
+	private void blurHeightmap()
+	{
+		const radius = map.conf.blurRadius;
+		if (radius == 0)
+		{
+			blurredHeightmap = interpolatedHeightmap.dup;
+			return;
+		}
+
+		double[] tmp;
+		tmp.length = interpolatedHeightmap.length;
+		blurredHeightmap.length = interpolatedHeightmap.length;
+
+		auto coefs = binomialCoefs(2 * radius)[radius .. $];
+
+		foreach(row; 0 .. map.height)
+		foreach(col; 0 .. map.width)
+		{
+			double sum = 0.0;
+			int coefsum = 0;
+
+			foreach(dcol; -radius .. radius + 1)
+			{
+				auto c = col + dcol;
+				if (c < 0 || c >= map.width) continue;
+				sum += interpolatedHeightmap[row * map.width + c] * coefs[dcol.abs];
+				coefsum += coefs[dcol.abs];
+			}
+
+			tmp[row * map.width + col] = sum / coefsum;
+		}
+
+		foreach(row; 0 .. map.height)
+		foreach(col; 0 .. map.width)
+		{
+			double sum = 0.0;
+			int coefsum = 0;
+
+			foreach(drow; -radius .. radius + 1)
+			{
+				auto r = row + drow;
+				if (r < 0 || r >= map.height) continue;
+				sum += tmp[r * map.width + col] * coefs[drow.abs];
+				coefsum += coefs[drow.abs];
+			}
+
+			blurredHeightmap[row * map.width + col] = sum / coefsum;
+		}
+	}
+
+	private static void makeSquare(Vertex[] vertices, vec3 a, vec3 b, vec3 c, vec3 d) pure
 	{
 		auto normal = cross(c - a, b - a).normalized;
 
@@ -560,6 +626,10 @@ class Viewer
 
 			case GLFW_KEY_S:
 				smoothNormals = !smoothNormals;
+				break;
+
+			case GLFW_KEY_B:
+				useBlurred = !useBlurred;
 				break;
 
 			default:

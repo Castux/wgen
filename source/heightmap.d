@@ -122,7 +122,6 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			|| newConfig.maxHeight != conf.maxHeight)
 		{
 			centers.each!(c => c.reset);
-			conf = newConfig;
 
 			writeln("Assigning terrain types");
 			assignTerrainTypes();
@@ -136,16 +135,22 @@ class Heightmap : Graph!(Center, Edge, Corner)
 			writeln("Eroding");
 			erode();
 
+			conf = newConfig;
 			return true;
 		}
 
 		if (newConfig.erosionMinFlow != conf.erosionMinFlow || newConfig.erosionFactor != conf.erosionFactor)
 		{
-			conf = newConfig;
-
 			writeln("Eroding");
 			erode();
 
+			conf = newConfig;
+			return true;
+		}
+
+		if (newConfig.blurRadius != conf.blurRadius)
+		{			
+			conf = newConfig;
 			return true;
 		}
 
