@@ -4,6 +4,9 @@ import std.exception;
 import std.math;
 import std.algorithm;
 import std.conv;
+import std.range;
+import std.parallelism;
+
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -478,7 +481,8 @@ class Viewer
 
 		renderBuffer.unbind();
 
-		blurHeightmap();
+		auto t = task(&blurHeightmap);
+		t.executeInNewThread();
 	}
 
 	private static int[] binomialCoefs(int order) pure
@@ -505,7 +509,7 @@ class Viewer
 
 		auto coefs = binomialCoefs(2 * radius)[radius .. $];
 
-		foreach(row; 0 .. map.height)
+		foreach(row; iota(0, map.height).array.parallel)
 		foreach(col; 0 .. map.width)
 		{
 			double sum = 0.0;
@@ -522,8 +526,8 @@ class Viewer
 			tmp[row * map.width + col] = sum / coefsum;
 		}
 
+		foreach(col; iota(0, map.width).array.parallel)
 		foreach(row; 0 .. map.height)
-		foreach(col; 0 .. map.width)
 		{
 			double sum = 0.0;
 			int coefsum = 0;
