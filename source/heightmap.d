@@ -250,7 +250,7 @@ class Heightmap
 		assignTerrainTypes();
 
 		writeln("Computing elevation");
-		computeElevation((Vertex c, Vertex n) {return c.gradient;});
+		computeElevation();
 
 		writeln("Computing river flow");
 		computeRiverFlow();
@@ -258,7 +258,7 @@ class Heightmap
 		NewErosion:
 
 		writeln("Eroding");
-		erode();
+		computeElevation(erosionPass: true);
 		writefln("Range %f %f", lowest, highest);
 
 		Default:
@@ -542,7 +542,7 @@ class Heightmap
 
 		foreach (vertex; vertices)
 		{
-			if (vertex.isLand && vertex.neighbours.any!"a.isWater")
+			if (vertex.isWater && vertex.neighbours.any!"a.isLand")
 			{
 				vertex.shore = true;
 				shores ~= vertex;
@@ -550,10 +550,13 @@ class Heightmap
 		}
 	}
 
-	private void computeElevation(double delegate(Vertex, Vertex) gradFunc)
+	private void computeElevation(bool erosionPass = false)
 	{
 		assert(shores.length > 0);
 		Vertex[] queue;
+
+		if (erosionPass)
+			vertices.each!(v => v.z = double.infinity);
 
 		foreach(shore; shores)
 		{
@@ -567,11 +570,14 @@ class Heightmap
 
 			foreach (n; c.neighbours)
 			{
-				if (n.terrain is null) continue;
+				if (n.terrain is null || n.shore) continue;
 
-				auto gradient = n.isWater ? n.gradient : gradFunc(c, n);
+				auto gradient = n.gradient;
 
-				auto newZ = c.z + gradient.abs * n.xy.distanceTo(c.xy);
+				if (erosionPass && n.terrain.erosion && n.downhill is c && n.flow > conf.erosionMinFlow)
+					gradient *= conf.erosionFactor;
+
+				auto newZ = c.z + gradient.abs * c.xy.distanceTo(n.xy);
 				if (newZ < n.z)
 				{
 					n.z = newZ;
@@ -642,16 +648,6 @@ class Heightmap
 	static double linearMap(double a, double b, double u, double v, double x)
 	{
 		return (x - a) / (b - a) * (v - u) + u;
-	}
-
-	void erode()
-	{
-		vertices.each!(c => c.z = double.infinity);
-		computeElevation((Vertex c, Vertex n) {
-			return c.terrain.erosion && n.downhill is c && c.flow > conf.erosionMinFlow ?
-				c.gradient * conf.erosionFactor :
-				c.gradient;
-		});
 	}
 
 	private void indexTriangles()
