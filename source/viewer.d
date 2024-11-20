@@ -370,8 +370,8 @@ class Viewer
 		glfwGetWindowSize(window, &width, &height);
 		glfwSetCursorPos(window, width / 2, height / 2);
 
-		firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2.0);
-		firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2.0);
+		firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2);
+		firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2);
 
 		if (firstPersonVDir > PI / 2.0 - 0.1) firstPersonVDir = PI / 2.0 - 0.1;
 		if (firstPersonVDir < -PI / 2.0 + 0.1) firstPersonVDir = -PI / 2.0 + 0.1;
