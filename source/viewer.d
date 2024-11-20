@@ -202,7 +202,6 @@ class Viewer
 			throw new Exception("Could not load OpenGL library");
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
-		glFrontFace(GL_CW);
 
 		if (singleton)
 			throw new Exception("Multiple viewer instances");
@@ -213,7 +212,7 @@ class Viewer
 		renderBuffer = new RenderBuffer(map.width, map.height);
 
 		firstPersonPos.x = map.width / 2.0;
-		firstPersonPos.y = -map.height / 2.0;
+		firstPersonPos.y = map.height / 2.0;
 		firstPersonDir = 0.0;
 
 		mainMesh = new Model(program);
@@ -278,7 +277,7 @@ class Viewer
 
 	private void setTurntableView(double ratio)
 	{
-		auto model = Mat4.translation(Vec3(-map.width / 2, map.height / 2, 0));
+		auto model = Mat4.translation(Vec3(-map.width / 2, -map.height / 2, 0));
 
 		model = model.transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
@@ -286,7 +285,7 @@ class Viewer
 		auto angle = glfwGetTime() / 5.0;
 
 		auto view = Mat4.lookAt(
-			Vec3(map.width / 2.0 * cos(angle), -map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
+			Vec3(map.width / 2.0 * cos(angle), map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
 			Vec3(0, 0, 0),
 			Vec3(0.0, 0.0, 1.0)
 		);
@@ -304,7 +303,7 @@ class Viewer
 
 		auto proj = Mat4.orthographic(
 				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
-				-map.height, 0.0,
+				0.0, map.height,
 				-(map.highest + 10.0),
 				(map.highest - map.lowest) + 20.0
 			).transposed;
@@ -321,17 +320,17 @@ class Viewer
 	{
 		real x, y;
 		real xfrac = modf(pos.x, x);
-		real yfrac = modf(-pos.y, y);
+		real yfrac = modf(pos.y, y);
 
 		auto xint = x.lrint;
 		auto yint = y.lrint;
 
 		auto array = useBlurred ? blurredHeightmap : interpolatedHeightmap;
 
-		auto z00 = array[(map.height - (yint + 0)) * map.width + (xint + 0)];
-		auto z01 = array[(map.height - (yint + 0)) * map.width + (xint + 1)];
-		auto z10 = array[(map.height - (yint + 1)) * map.width + (xint + 0)];
-		auto z11 = array[(map.height - (yint + 1)) * map.width + (xint + 1)];
+		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
+		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
+		auto z10 = array[(yint + 1) * map.width + (xint + 0)];
+		auto z11 = array[(yint + 1) * map.width + (xint + 1)];
 
 		return lerp(
 			lerp(z00, z01, xfrac),
@@ -350,11 +349,11 @@ class Viewer
 		lastUpdate = now;
 
 		if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-			firstPersonDir -= rot * dt;
-		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
 			firstPersonDir += rot * dt;
+		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+			firstPersonDir -= rot * dt;
 
-		auto forward = Vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+		auto forward = Vec3(cos(firstPersonDir), sin(firstPersonDir), 0.0);
 		auto previousPos = firstPersonPos;
 
 		if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
@@ -367,7 +366,7 @@ class Viewer
 		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 			firstPersonPos -= forward * speed * dt;
 
-		if (!map.inBounds(Vec2(firstPersonPos.x, -firstPersonPos.y)))
+		if (!map.inBounds(firstPersonPos.xy))
 			firstPersonPos = previousPos;
 
 		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.62;
@@ -417,7 +416,7 @@ class Viewer
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
-		auto forward = Vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+		auto forward = Vec3(cos(firstPersonDir), sin(firstPersonDir), 0.0);
 
 		if (viewMode == 2 && cubeMode != 0)
 		{
@@ -426,7 +425,7 @@ class Viewer
 			foreach(dy; - cubesRadius .. cubesRadius)
 			{
 				auto pos = c + Vec2(dx, dy);
-				if (!map.inBounds(Vec2(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
+				if (!map.inBounds(pos) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
 					continue;
 
 				if (dot(forward, Vec3(dx, dy, 0)) < 0)
@@ -465,7 +464,7 @@ class Viewer
 
 		auto proj = Mat4.orthographic(
 			0.0, map.width,
-			-map.height, 0.0,
+			0.0, map.height,
 			map.highest * 10.0,
 			map.lowest * 10.0
 		).transposed;
@@ -546,7 +545,7 @@ class Viewer
 
 	private static void makeSquare(Vertex[] vertices, Vec3 a, Vec3 b, Vec3 c, Vec3 d) pure
 	{
-		auto normal = cross(c - a, b - a).normalized;
+		auto normal = cross(b - a, c - a).normalized;
 
 		vertices[0] = Vertex(a, normal, normal, Vec3(1,0,0));
 		vertices[1] = Vertex(b, normal, normal, Vec3(0,1,0));
@@ -561,10 +560,10 @@ class Viewer
 	{
 		cubeMesh.vertices.length = 6 * 5;
 
-		auto a = Vec3(-0.5, -0.5, 0.0);
-		auto b = Vec3(-0.5, +0.5, 0.0);
-		auto c = Vec3(+0.5, +0.5, 0.0);
-		auto d = Vec3(+0.5, -0.5, 0.0);
+		auto d = Vec3(-0.5, -0.5, 0.0);
+		auto c = Vec3(-0.5, +0.5, 0.0);
+		auto b = Vec3(+0.5, +0.5, 0.0);
+		auto a = Vec3(+0.5, -0.5, 0.0);
 
 		makeSquare(cubeMesh.vertices[ 0 ..  6], a, b, c, d);
 		makeSquare(cubeMesh.vertices[ 6 .. 12], b, a, Vec3(a.xy, -10.0), Vec3(b.xy, -10.0));
@@ -589,9 +588,9 @@ class Viewer
 			foreach (j, vertex; triangle.vertices)
 			{
 				mainMesh.vertices[i * 3 + j] = Vertex(
-					Vec3(vertex.x, -vertex.y, vertex.z),
-					Vec3(triangle.normal.x, -triangle.normal.y, triangle.normal.z),
-					Vec3(vertex.normal.x, -vertex.normal.y, vertex.normal.z),
+					Vec3(vertex.pos),
+					Vec3(triangle.normal),
+					Vec3(vertex.normal),
 					coords[j]
 				);
 			}

@@ -17,7 +17,6 @@ alias HalfEdge = delaunator.Edge;
 alias Vec2 = vec2d;
 alias Vec3 = vec3d;
 
-
 class Vertex
 {
 	Vec3 pos;
@@ -36,7 +35,7 @@ class Vertex
 	Vertex[] uphill;
 	int flow;
 
-	vec3d normal;
+	Vec3 normal;
 
 	this(Vec2 pos)
 	{
@@ -126,6 +125,7 @@ class Heightmap
 		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
 		if (outline.isError)
 			throw new Exception("Could not load " ~ conf.path);
+		outline.flipVertical();
 
 		this.width = outline.width;
 		this.height = outline.height;
