@@ -40,14 +40,14 @@ class Vertex
 
 	this(Vec2 pos)
 	{
-		this.pos = Vec3(pos, double.infinity);
+		this.pos = Vec3(pos, double.nan);
 	}
 
 	void reset()
 	{
 		terrain = null;
 		shore = false;
-		z = double.infinity;
+		z = double.nan;
 		gradient = double.nan;
 		downhill = null;
 		uphill = [];
@@ -556,7 +556,7 @@ class Heightmap
 		Vertex[] queue;
 
 		if (erosionPass)
-			vertices.each!(v => v.z = double.infinity);
+			vertices.each!(v => v.z = double.nan);
 
 		foreach(shore; shores)
 		{
@@ -577,8 +577,8 @@ class Heightmap
 				if (erosionPass && n.terrain.erosion && n.downhill is c && n.flow > conf.erosionMinFlow)
 					gradient *= conf.erosionFactor;
 
-				auto newZ = c.z + gradient.abs * c.xy.distanceTo(n.xy);
-				if (newZ < n.z)
+				auto newZ = c.z + gradient * c.xy.distanceTo(n.xy);
+				if (n.z.isNaN || gradient > 0 && newZ < n.z || gradient < 0 && newZ > n.z)
 				{
 					n.z = newZ;
 					queue ~= n;
@@ -594,9 +594,6 @@ class Heightmap
 		foreach (vertex; vertices)
 		{
 			if (vertex.terrain is null) continue;
-
-			if (vertex.isWater)
-				vertex.z = -vertex.z;
 
 			lowest = min(lowest, vertex.z);
 			highest = max(highest, vertex.z);
