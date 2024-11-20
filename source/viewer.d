@@ -22,7 +22,6 @@ struct Vertex
 {
 	Vec3 pos;
 	Vec3 norm;
-	Vec3 normSmooth;
 	Vec3 coord;
 }
 
@@ -553,13 +552,13 @@ class Viewer
 	{
 		auto normal = cross(b - a, c - a).normalized;
 
-		vertices[0] = Vertex(a, normal, normal, Vec3(1,0,0));
-		vertices[1] = Vertex(b, normal, normal, Vec3(0,1,0));
-		vertices[2] = Vertex(d, normal, normal, Vec3(0,0,1));
+		vertices[0] = Vertex(a, normal, Vec3(1,0,0));
+		vertices[1] = Vertex(b, normal, Vec3(0,1,0));
+		vertices[2] = Vertex(d, normal, Vec3(0,0,1));
 
-		vertices[3] = Vertex(b, normal, normal, Vec3(1,0,0));
-		vertices[4] = Vertex(c, normal, normal, Vec3(0,1,0));
-		vertices[5] = Vertex(d, normal, normal, Vec3(0,0,1));
+		vertices[3] = Vertex(b, normal, Vec3(1,0,0));
+		vertices[4] = Vertex(c, normal, Vec3(0,1,0));
+		vertices[5] = Vertex(d, normal, Vec3(0,0,1));
 	}
 
 	private void makeCubeMesh()
@@ -655,7 +654,6 @@ class Model
 
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
-		GLint vnormSmoothLocation = glGetAttribLocation(program, "vNormSmooth");
 		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
 
 		glGenVertexArrays(1, &vertexArray);
