@@ -78,6 +78,14 @@ in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
 out vec4 fragment;
+
+float distToInt(float x)
+{
+	x = mod(x, 1.0);
+	if (x > 0.5) x = x - 1.0;
+	return abs(x);
+}
+
 void main()
 {
 	float z = worldPos.z;
@@ -123,11 +131,11 @@ void main()
 
 	if (lineMode == 1)
 	{
-		shading = shading * step(0.25, mod(z, 10));
+		shading = shading * step(0.25, distToInt(z / 10) * 10.0);
 	}
 	else if (lineMode == 2)
 	{
-		shading = shading * step(0.075, min(mod(worldPos.x, 1), mod(worldPos.y, 1)));
+		shading = shading * step(0.075, min(distToInt(worldPos.x), distToInt(worldPos.y)));
 	}
 	else if (lineMode == 3)
 	{
