@@ -645,6 +645,7 @@ class Viewer
 
 			case GLFW_KEY_V:
 				viewMode = (viewMode + 1) % 3;
+				glfwSetInputMode(window, GLFW_CURSOR, viewMode == 2 ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 				break;
 
 			case GLFW_KEY_L:
