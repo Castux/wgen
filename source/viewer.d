@@ -172,7 +172,8 @@ class Viewer
 	bool useBlurred;
 
 	Vec3 firstPersonPos;
-	double firstPersonDir;
+	double firstPersonHDir;
+	double firstPersonVDir;
 	double lastUpdate;
 
 	int cubeMode;
@@ -216,7 +217,8 @@ class Viewer
 
 		firstPersonPos.x = map.width / 2.0;
 		firstPersonPos.y = map.height / 2.0;
-		firstPersonDir = 0.0;
+		firstPersonHDir = 0.0;
+		firstPersonVDir = 0.0;
 
 		cubeMesh = new Model(program);
 		makeCubeMesh();
@@ -342,21 +344,38 @@ class Viewer
 		);
 	}
 
+	private Vec3 forward() const
+	{
+		return Vec3(
+			cos(firstPersonVDir) * cos(firstPersonHDir),
+			cos(firstPersonVDir) * sin(firstPersonHDir),
+			sin(firstPersonVDir)
+		);
+	}
+
 	private void setFirstPersonView(double ratio)
 	{
 		auto speed = 4.0;
-		const rot = 0.75;
+		const mouseSpeed = 0.15;
 
 		auto now = glfwGetTime();
+		if (lastUpdate.isNaN) lastUpdate = now;
+
 		auto dt = now - lastUpdate;
 		lastUpdate = now;
 
-		if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
-			firstPersonDir += rot * dt;
-		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
-			firstPersonDir -= rot * dt;
+		double xpos, ypos;
+		int width, height;
+		glfwGetCursorPos(window, &xpos, &ypos);
+		glfwGetWindowSize(window, &width, &height);
+		glfwSetCursorPos(window, width / 2, height / 2);
 
-		auto forward = Vec3(cos(firstPersonDir), sin(firstPersonDir), 0.0);
+		firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2.0);
+		firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2.0);
+
+		if (firstPersonVDir > PI / 2.0 - 0.1) firstPersonVDir = PI / 2.0 - 0.1;
+		if (firstPersonVDir < -PI / 2.0 + 0.1) firstPersonVDir = -PI / 2.0 + 0.1;
+
 		auto previousPos = firstPersonPos;
 
 		if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
@@ -364,9 +383,9 @@ class Viewer
 		if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS)
 			speed *= 10.0;
 
-		if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
 			firstPersonPos += forward * speed * dt;
-		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
 			firstPersonPos -= forward * speed * dt;
 
 		if (!map.inBounds(firstPersonPos))
@@ -420,8 +439,6 @@ class Viewer
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
-
-		auto forward = Vec3(cos(firstPersonDir), sin(firstPersonDir), 0.0);
 
 		if (viewMode == 2 && cubeMode != 0)
 		{
