@@ -14,11 +14,14 @@ import delaunator;
 import config;
 
 alias HalfEdge = delaunator.Edge;
+alias Vec2 = vec2d;
+alias Vec3 = vec3d;
+
 
 class Center
 {
-	Point p;
-	alias p this;
+	Vec3 pos;
+	alias pos this;
 
 	Center[] neighbours;
 	Edge[] edges;
@@ -27,7 +30,6 @@ class Center
 	Terrain terrain;
 	bool shore;
 
-	double z = double.infinity;
 	double gradient;
 
 	Center downhill;
@@ -36,14 +38,9 @@ class Center
 
 	vec3d normal;
 
-	this(Point p)
+	this(Vec2 pos)
 	{
-		this.p = p;
-	}
-
-	vec3d pos()
-	{
-		return vec3d(p, z);
+		this.pos = Vec3(pos, double.infinity);
 	}
 
 	void reset()
@@ -88,18 +85,18 @@ class Edge
 
 class Corner
 {
-	Point p;
-	alias p this;
+	Vec3 pos;
+	alias pos this;
 
 	Corner[] neighbours;
 	Edge[] edges;
 	Center[] centers;
 
-	vec3d normal;
+	Vec3 normal;
 
-	this(Point p)
+	this(Vec2 pos)
 	{
-		this.p = p;
+		this.pos = Vec3(pos, double.nan);
 	}
 }
 
@@ -202,12 +199,12 @@ class Heightmap
 		return resolution * 4;
 	}
 
-	bool inBounds(Point p) const
+	bool inBounds(V)(V p) const
 	{
 		return p.x >= 0 && p.x < width && p.y >= 0 && p.y < width;
 	}
 
-	bool inBoundsPlusHalfMargin(Point p) const
+	bool inBoundsPlusHalfMargin(V)(V p) const
 	{
 		double h = margin / 2.0;
 		return p.x > -h && p.x < width + h && p.y > -h && p.y < height + h;
@@ -232,13 +229,13 @@ class Heightmap
 
 	private Triangulation generateTriangulation()
 	{
-		Point[] points;
+		Vec2[] points;
 
 		if (conf.grid == "square")
 		{
 			for(auto x = -margin; x < width + margin; x += resolution)
 			for(auto y = -margin; y < height + margin; y += resolution)
-				points ~= Point(
+				points ~= Vec2(
 					x + uniform(-resolution, resolution) * conf.jitter,
 					y + uniform(-resolution, resolution) * conf.jitter
 				);
@@ -251,7 +248,7 @@ class Heightmap
 				for(auto y = -margin; y < height + margin; y += resolution * sqrt(3.0) / 2.0)
 				{
 					row++;
-					points ~= Point(
+					points ~= Vec2(
 						x + ((row % 2) * 0.5 * resolution) + uniform(-resolution, resolution) * conf.jitter,
 						y + uniform(-resolution, resolution) * conf.jitter
 					);
@@ -295,7 +292,7 @@ class Heightmap
 				continue;
 
 			auto tri = he.triangle;
-			Point c = circumcenter(tri.e1.from, tri.e2.from, tri.e3.from);
+			auto c = circumcenter(tri.e1.from, tri.e2.from, tri.e3.from);
 			Corner corner = new Corner(c);
 
 			foreach(hedge; tri.tupleof)
@@ -389,22 +386,22 @@ class Heightmap
 		import std.algorithm;
 
 		foreach(corner; corners)
-			corner.centers.sort!((a,b) => pseudoAngle(a.p - corner.p) < pseudoAngle(b.p - corner.p));
+			corner.centers.sort!((a,b) => pseudoAngle(a.xy - corner.xy) < pseudoAngle(b.xy - corner.xy));
 
 		foreach(center; centers)
-			center.corners.sort!((a,b) => pseudoAngle(a.p - center.p) < pseudoAngle(b.p - center.p));
+			center.corners.sort!((a,b) => pseudoAngle(a.xy - center.xy) < pseudoAngle(b.xy - center.xy));
 	}
 
 	private void relaxGraph()
 	{
-		Point[] points;
+		Vec2[] points;
 
 		foreach(center; centers)
 		{
-			if (!inBoundsPlusHalfMargin(center.p))
-				points ~= center.p;
+			if (!inBoundsPlusHalfMargin(center.pos))
+				points ~= center.xy;
 			else
-				points ~= center.corners.map!"a.p".fold!((a,b) => a + b) / center.corners.length;
+				points ~= center.corners.map!"a.xy".sum / center.corners.length;
 		}
 
 		auto triangulation = Triangulation(points);
@@ -441,7 +438,7 @@ class Heightmap
 
 		foreach(center; centers)
 		{
-			if (!inBoundsPlusHalfMargin(center.p))
+			if (!inBoundsPlusHalfMargin(center.pos))
 			{
 				center.terrain = null;
 				continue;
@@ -470,7 +467,7 @@ class Heightmap
 
 				foreach(i; 0..numSamples)
 				{
-					Point p = Point(uniform(center.x - r, center.x + r), uniform(center.y - r, center.y + r));
+					Vec2 p = Vec2(uniform(center.x - r, center.x + r), uniform(center.y - r, center.y + r));
 
 					if (inBounds(p))
 					{
@@ -525,7 +522,7 @@ class Heightmap
 				if (n.terrain is null) continue;
 
 				auto gradient = gradFunc(c, n);
-				auto newZ = c.z + gradient * n.p.distanceTo(c.p);
+				auto newZ = c.z + gradient * n.xy.distanceTo(c.xy);
 				if (newZ < n.z)
 				{
 					n.z = newZ;
@@ -613,7 +610,7 @@ class Heightmap
 
 		foreach(corner; corners)
 		{
-			if (!inBounds(corner.p)) continue;
+			if (!inBounds(corner.pos)) continue;
 
 			auto row = floor(corner.y / binSize).to!int;
 			auto col = floor(corner.x / binSize).to!int;
@@ -626,11 +623,11 @@ class Heightmap
 
 	alias BinResult = Tuple!(Corner,double[3]);
 
-	private static BinResult findTriangleInBin(Point p, Corner[] bin)
+	private static BinResult findTriangleInBin(Vec2 p, Corner[] bin)
 	{
 		foreach(corner; bin)
 		{
-			auto bary = barycentricCoordinates(corner.centers[0].p, corner.centers[1].p, corner.centers[2].p, p);
+			auto bary = barycentricCoordinates(corner.centers[0].xy, corner.centers[1].xy, corner.centers[2].xy, p);
 			if (bary[0] >= 0 && bary[1] >= 0 && bary[2] >= 0)
 			{
 				return tuple(corner, bary);
@@ -640,7 +637,7 @@ class Heightmap
 		return BinResult.init;
 	}
 
-	private BinResult findTriangle(Point p)
+	private BinResult findTriangle(Vec2 p)
 	{
 		if (!inBounds(p)) return BinResult.init;
 
@@ -697,7 +694,7 @@ class Heightmap
 		foreach(row; 0..height)
 		foreach(col; 0..width)
 		{
-			auto p = Point(col, row);
+			auto p = Vec2(col, row);
 			auto res = findTriangle(p);
 			if (res[0])
 				data[row][col] = interpolateElevation(res);

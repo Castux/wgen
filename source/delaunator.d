@@ -4,21 +4,21 @@ import std.algorithm;
 
 import dplug.math;
 
-alias Point = vec2d;
+private alias Point = vec2d;
 
 const EPSILON = pow(2, -52);
 
-double cross(Point a, Point b)
+private double cross(Point a, Point b)
 {
 	return dplug.math.cross(vec3d(a, 0.0), dplug.math.vec3d(b, 0.0)).z;
 }
 
-bool clockwise(Point a, Point b, Point c)
+private bool clockwise(Point a, Point b, Point c)
 {
 	return cross(b - a, c - a) > 0;
 }
 
-bool inCircle(Point a, Point b, Point c, Point p)
+private bool inCircle(Point a, Point b, Point c, Point p)
 {
 	auto dx = a.x - p.x;
 	auto dy = a.y - p.y;
@@ -309,7 +309,7 @@ struct Triangulation
 
 		hashSize = (cast(double) points.length).sqrt.ceil.lrint;
 		hash = new Edge[hashSize];
-		
+
 		setInitialHull(centerTri);
 		hashAdd(centerTri.e1);
 		hashAdd(centerTri.e2);
