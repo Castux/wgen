@@ -14,16 +14,16 @@ public import dplug.math;
 
 import heightmap;
 
-alias vec2 = vec2f;
-alias vec3 = vec3f;
-alias mat4x4 = mat4x4f;
+alias Vec2 = vec2f;
+alias Vec3 = vec3f;
+alias Mat4 = mat4x4f;
 
 struct Vertex
 {
-	vec3 pos;
-	vec3 norm;
-	vec3 normSmooth;
-	vec3 coord;
+	Vec3 pos;
+	Vec3 norm;
+	Vec3 normSmooth;
+	Vec3 coord;
 }
 
 extern(C) nothrow void errorCallback(int error, const(char)* description)
@@ -166,7 +166,7 @@ class Viewer
 	float[] blurredHeightmap;
 	bool useBlurred;
 
-	vec3 firstPersonPos;
+	Vec3 firstPersonPos;
 	double firstPersonDir;
 	double lastUpdate;
 
@@ -278,20 +278,20 @@ class Viewer
 
 	private void setTurntableView(double ratio)
 	{
-		auto model = mat4x4.translation(vec3(-map.width / 2, map.height / 2, 0));
+		auto model = Mat4.translation(Vec3(-map.width / 2, map.height / 2, 0));
 
 		model = model.transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
 		auto angle = glfwGetTime() / 5.0;
 
-		auto view = mat4x4.lookAt(
-			vec3(map.width / 2.0 * cos(angle), -map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
-			vec3(0, 0, 0),
-			vec3(0.0, 0.0, 1.0)
+		auto view = Mat4.lookAt(
+			Vec3(map.width / 2.0 * cos(angle), -map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
+			Vec3(0, 0, 0),
+			Vec3(0.0, 0.0, 1.0)
 		);
 
-		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
+		auto proj = Mat4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
 
 		auto PV = (proj * view).transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
@@ -299,10 +299,10 @@ class Viewer
 
 	private void setTopView(double ratio)
 	{
-		auto model = mat4x4.identity;
+		auto model = Mat4.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
-		auto proj = mat4x4.orthographic(
+		auto proj = Mat4.orthographic(
 				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
 				-map.height, 0.0,
 				-(map.highest + 10.0),
@@ -317,7 +317,7 @@ class Viewer
 		return a * (1-x) + b * x;
 	}
 
-	double getZ(vec2 pos)
+	double getZ(Vec2 pos)
 	{
 		real x, y;
 		real xfrac = modf(pos.x, x);
@@ -354,7 +354,7 @@ class Viewer
 		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
 			firstPersonDir += rot * dt;
 
-		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+		auto forward = Vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
 		auto previousPos = firstPersonPos;
 
 		if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
@@ -367,22 +367,22 @@ class Viewer
 		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 			firstPersonPos -= forward * speed * dt;
 
-		if (!map.inBounds(vec2d(firstPersonPos.x, -firstPersonPos.y)))
+		if (!map.inBounds(Vec2(firstPersonPos.x, -firstPersonPos.y)))
 			firstPersonPos = previousPos;
 
 		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.62;
 
-		auto view = mat4x4.lookAt(
+		auto view = Mat4.lookAt(
 			firstPersonPos,
 			firstPersonPos + forward,
-			vec3(0.0, 0.0, 1.0)
+			Vec3(0.0, 0.0, 1.0)
 		);
 
-		auto proj = mat4x4.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
+		auto proj = Mat4.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
 		auto PV = (proj * view).transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
 
-		auto model = mat4x4.identity;
+		auto model = Mat4.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 	}
 
@@ -417,25 +417,25 @@ class Viewer
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
-		auto forward = vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
+		auto forward = Vec3(cos(firstPersonDir), -sin(firstPersonDir), 0.0);
 
 		if (viewMode == 2 && cubeMode != 0)
 		{
-			auto c = vec2(firstPersonPos.x.round, firstPersonPos.y.round);
+			auto c = Vec2(firstPersonPos.x.round, firstPersonPos.y.round);
 			foreach(dx; - cubesRadius .. cubesRadius)
 			foreach(dy; - cubesRadius .. cubesRadius)
 			{
-				auto pos = c + vec2(dx, dy);
-				if (!map.inBounds(vec2d(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
+				auto pos = c + Vec2(dx, dy);
+				if (!map.inBounds(Vec2(pos.x, -pos.y)) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
 					continue;
 
-				if (dot(forward, vec3(dx, dy, 0)) < 0)
+				if (dot(forward, Vec3(dx, dy, 0)) < 0)
 					continue;
 
 				auto z = getZ(pos);
 				if (cubeMode == 2) z = z.round;
 
-				auto translation = mat4x4.translation(vec3(pos.xy, z)).transposed;
+				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
 
@@ -460,10 +460,10 @@ class Viewer
 		glViewport(0, 0, width, height);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		auto model = mat4x4.identity;
+		auto model = Mat4.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
-		auto proj = mat4x4.orthographic(
+		auto proj = Mat4.orthographic(
 			0.0, map.width,
 			-map.height, 0.0,
 			map.highest * 10.0,
@@ -544,33 +544,33 @@ class Viewer
 		}
 	}
 
-	private static void makeSquare(Vertex[] vertices, vec3 a, vec3 b, vec3 c, vec3 d) pure
+	private static void makeSquare(Vertex[] vertices, Vec3 a, Vec3 b, Vec3 c, Vec3 d) pure
 	{
 		auto normal = cross(c - a, b - a).normalized;
 
-		vertices[0] = Vertex(a, normal, normal, vec3(1,0,0));
-		vertices[1] = Vertex(b, normal, normal, vec3(0,1,0));
-		vertices[2] = Vertex(d, normal, normal, vec3(0,0,1));
+		vertices[0] = Vertex(a, normal, normal, Vec3(1,0,0));
+		vertices[1] = Vertex(b, normal, normal, Vec3(0,1,0));
+		vertices[2] = Vertex(d, normal, normal, Vec3(0,0,1));
 
-		vertices[3] = Vertex(b, normal, normal, vec3(1,0,0));
-		vertices[4] = Vertex(c, normal, normal, vec3(0,1,0));
-		vertices[5] = Vertex(d, normal, normal, vec3(0,0,1));
+		vertices[3] = Vertex(b, normal, normal, Vec3(1,0,0));
+		vertices[4] = Vertex(c, normal, normal, Vec3(0,1,0));
+		vertices[5] = Vertex(d, normal, normal, Vec3(0,0,1));
 	}
 
 	private void makeCubeMesh()
 	{
 		cubeMesh.vertices.length = 6 * 5;
 
-		auto a = vec3(-0.5, -0.5, 0.0);
-		auto b = vec3(-0.5, +0.5, 0.0);
-		auto c = vec3(+0.5, +0.5, 0.0);
-		auto d = vec3(+0.5, -0.5, 0.0);
+		auto a = Vec3(-0.5, -0.5, 0.0);
+		auto b = Vec3(-0.5, +0.5, 0.0);
+		auto c = Vec3(+0.5, +0.5, 0.0);
+		auto d = Vec3(+0.5, -0.5, 0.0);
 
 		makeSquare(cubeMesh.vertices[ 0 ..  6], a, b, c, d);
-		makeSquare(cubeMesh.vertices[ 6 .. 12], b, a, vec3(a.xy, -10.0), vec3(b.xy, -10.0));
-		makeSquare(cubeMesh.vertices[12 .. 18], c, b, vec3(b.xy, -10.0), vec3(c.xy, -10.0));
-		makeSquare(cubeMesh.vertices[18 .. 24], d, c, vec3(c.xy, -10.0), vec3(d.xy, -10.0));
-		makeSquare(cubeMesh.vertices[24 .. 30], a, d, vec3(d.xy, -10.0), vec3(a.xy, -10.0));
+		makeSquare(cubeMesh.vertices[ 6 .. 12], b, a, Vec3(a.xy, -10.0), Vec3(b.xy, -10.0));
+		makeSquare(cubeMesh.vertices[12 .. 18], c, b, Vec3(b.xy, -10.0), Vec3(c.xy, -10.0));
+		makeSquare(cubeMesh.vertices[18 .. 24], d, c, Vec3(c.xy, -10.0), Vec3(d.xy, -10.0));
+		makeSquare(cubeMesh.vertices[24 .. 30], a, d, Vec3(d.xy, -10.0), Vec3(a.xy, -10.0));
 
 		cubeMesh.updateData();
 	}
@@ -580,18 +580,18 @@ class Viewer
 		mainMesh.vertices.length = map.corners.length * 3;
 		foreach(i, corner; map.corners)
 		{
-			const vec3[3] coords = [
-				vec3(1,0,0),
-				vec3(0,1,0),
-				vec3(0,0,1)
+			const Vec3[3] coords = [
+				Vec3(1,0,0),
+				Vec3(0,1,0),
+				Vec3(0,0,1)
 			];
 
 			foreach (j, center; corner.centers)
 			{
 				mainMesh.vertices[i * 3 + j] = Vertex(
-					vec3(center.x, -center.y, center.z),
-					vec3(corner.normal.x, -corner.normal.y, corner.normal.z),
-					vec3(center.normal.x, -center.normal.y, center.normal.z),
+					Vec3(center.x, -center.y, center.z),
+					Vec3(corner.normal.x, -corner.normal.y, corner.normal.z),
+					Vec3(center.normal.x, -center.normal.y, center.normal.z),
 					coords[j]
 				);
 			}
