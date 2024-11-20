@@ -52,6 +52,7 @@ class Vertex
 		downhill = null;
 		uphill = [];
 		flow = 0;
+		normal = Vec3();
 	}
 }
 
@@ -98,12 +99,19 @@ class Triangle
 	{
 		this.pos = Vec3(pos, double.nan);
 	}
+
+	void reset()
+	{
+		z = double.infinity;
+		normal = Vec3();
+	}
 }
 
 class Heightmap
 {
 	Config conf;
 	FileWatch configWatcher;
+	FileWatch imageWatcher;
 
 	Vertex[] vertices;
 	Triangle[] triangles;
@@ -131,6 +139,7 @@ class Heightmap
 		updateConfig(config);
 
 		configWatcher = FileWatch(path);
+		imageWatcher = FileWatch(config.path);
 	}
 
 	bool checkConfigUpdate()
@@ -138,14 +147,31 @@ class Heightmap
 		foreach (event; configWatcher.getEvents())
 		if (event.type == FileChangeEventType.modify)
 		{
-			Config newConfig = new Config(event.path);
-			return updateConfig(newConfig);
+			loadConfig(event.path);
+			return true;
+		}
+
+		foreach (event; imageWatcher.getEvents())
+		if (event.type == FileChangeEventType.modify)
+		{
+			int oldWidth = outline.width;
+			int oldHeight = outline.height;
+
+			outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
+			if (outline.isError)
+				throw new Exception("Could not load " ~ conf.path);
+			outline.flipVertical();
+
+			auto sameSize = oldWidth == outline.width && oldHeight == outline.height;
+			updateConfig(conf, skipImageLoad: true, skipMesh: sameSize);
+
+			return true;
 		}
 
 		return false;
 	}
 
-	private bool updateConfig(Config newConf)
+	private void updateConfig(Config newConf, bool skipImageLoad = false, bool skipMesh = false)
 	{
 		auto old = conf;
 		conf = newConf;
@@ -153,6 +179,7 @@ class Heightmap
 		Triangulation triangulation;
 
 		if (old is null ||
+			old is conf ||
 			conf.path != old.path ||
 			conf.resolution != old.resolution ||
 			conf.relax != old.relax ||
@@ -172,36 +199,42 @@ class Heightmap
 		if (conf.blurRadius != old.blurRadius)
 			goto Default;
 
-		return false;
-
 		NewMesh:
 
-		writeln("Loading " ~ conf.path);
-		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
-		if (outline.isError)
-			throw new Exception("Could not load " ~ conf.path);
-		outline.flipVertical();
+		if (!skipImageLoad)
+		{
+			writeln("Loading " ~ conf.path);
+			outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
+			if (outline.isError)
+				throw new Exception("Could not load " ~ conf.path);
+			outline.flipVertical();
+		}
 
 		width = outline.width;
 		height = outline.height;
 		resolution = conf.resolution;
 		binSize = conf.resolution * 4;
 
-		writeln("Triangulating");
-		triangulation = generateTriangulation();
-
-		writeln("Building graph");
-		createGraph(triangulation.edges);
-
-		if (conf.relax)
+		if (!skipMesh)
 		{
-			writeln("Relaxing");
-			relaxGraph();
+			writeln("Triangulating");
+			triangulation = generateTriangulation();
+
+			writeln("Building graph");
+			createGraph(triangulation.edges);
+
+			if (conf.relax)
+			{
+				writeln("Relaxing");
+				relaxGraph();
+			}
 		}
 
 		NewTerrain:
 
-		vertices.each!(c => c.reset);
+		vertices.each!(v => v.reset);
+		triangles.each!(t => t.reset);
+		shores = [];
 
 		writeln("Assigning terrain types");
 		assignTerrainTypes();
@@ -219,8 +252,6 @@ class Heightmap
 		writefln("Range %f %f", lowest, highest);
 
 		Default:
-
-		return true;
 	}
 
 	double margin() const
