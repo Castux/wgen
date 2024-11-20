@@ -424,9 +424,7 @@ class Heightmap
 			vertex.triangles ~= triangle;
 		}
 
-		// Order clockwise
-
-		import std.algorithm;
+		// Order counterclockwise
 
 		foreach(triangle; triangles)
 			triangle.vertices.sort!((a,b) => pseudoAngle(a.xy - triangle.xy) < pseudoAngle(b.xy - triangle.xy));
@@ -487,8 +485,8 @@ class Heightmap
 				continue;
 			}
 
-			int row = vertex.y.to!int;
-			int col = vertex.x.to!int;
+			int row = vertex.y.roundTo!int;
+			int col = vertex.x.roundTo!int;
 
 			auto pixel = getPixel(row, col);
 			vertex.terrain = conf.terrains.get(pixel, null);
@@ -508,13 +506,13 @@ class Heightmap
 
 				auto numSamples = ceil(pow(conf.smoothingRadius / conf.resolution, 2)).to!int;
 
-				foreach(i; 0..numSamples)
+				foreach(i; 0 .. numSamples)
 				{
-					Vec2 p = Vec2(uniform(vertex.x - r, vertex.x + r), uniform(vertex.y - r, vertex.y + r));
+					Vec2 p = vertex.xy + Vec2(uniform(-r, r), uniform(-r, +r));
 
 					if (inBounds(p))
 					{
-						pixel = getPixel(p.y.to!int, p.x.to!int);
+						pixel = getPixel(p.y.roundTo!int, p.x.roundTo!int);
 						auto terrain = conf.terrains.get(pixel, null);
 						if (terrain)
 						{
@@ -533,7 +531,7 @@ class Heightmap
 			// 	vertex.gradient = pow((fnlGetNoise2D(&noise, vertex.x, vertex.y) + 1.0) / 2.0, 1.0);
 		}
 
-		foreach(vertex; vertices)
+		foreach (vertex; vertices)
 		{
 			if (vertex.terrain !is null
 				&& vertex.terrain.name != "sea"
