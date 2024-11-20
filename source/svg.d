@@ -18,15 +18,16 @@ void exportSVG(Heightmap m, string path)
 
 	lines ~=
 		`<svg width='%f' height='%f'
-		viewBox='0 0 %f %f'
+		viewBox='%f %f %f %f'
 		xmlns='http://www.w3.org/2000/svg'
 		version='1.1'
 		xmlns:xlink='http://www.w3.org/1999/xlink'>`
-			.format(m.width, m.height, m.width, m.height);
+			.format(m.width, m.height,
+					0.0, -m.height, m.width, m.height);
 
 	foreach(vertex; m.vertices)
 	{
-		auto s = vertex.triangles.map!(c => "%f,%f".format(c.x, c.y)).join(" ");
+		auto s = vertex.triangles.map!(c => "%f,%f".format(c.x, -c.y)).join(" ");
 
 		string col;
 
@@ -64,8 +65,8 @@ void exportSVG(Heightmap m, string path)
 		{
 			auto width = pow(vertex.flow, 0.5) * pow(m.resolution / 30, 2);
 			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="#0E443D" stroke-width="%f" />`,
-	 			vertex.x, vertex.y,
-	 			vertex.downhill.x, vertex.downhill.y,
+	 			vertex.x, -vertex.y,
+	 			vertex.downhill.x, -vertex.downhill.y,
 				width
 			);
 		}

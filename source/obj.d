@@ -19,7 +19,7 @@ void exportOBJ(Heightmap m, string path)
 			z = 0;
 
 		vertexIDs[vertex] = i + 1;
-		lines ~= "v %.6f %.6f %.6f".format(vertex.x, z, vertex.y);
+		lines ~= "v %.6f %.6f %.6f".format(vertex.x, z, -vertex.y);
 		lines ~= "vt %.6f %.6f".format(vertex.x / m.width, 1 - vertex.y / m.height);
 	}
 
