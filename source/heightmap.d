@@ -11,11 +11,19 @@ import dplug.math;
 
 import gamut;
 import delaunator;
-import graph;
 import config;
 
-class Center : CenterBase!(Center, Edge, Corner)
+alias HalfEdge = delaunator.Edge;
+
+class Center
 {
+	Point p;
+	alias p this;
+
+	Center[] neighbours;
+	Edge[] edges;
+	Corner[] corners;
+
 	Terrain terrain;
 	bool shore;
 
@@ -30,7 +38,7 @@ class Center : CenterBase!(Center, Edge, Corner)
 
 	this(Point p)
 	{
-		 super(p);
+		this.p = p;
 	}
 
 	vec3d pos()
@@ -50,26 +58,58 @@ class Center : CenterBase!(Center, Edge, Corner)
 	}
 }
 
-class Edge : EdgeBase!(Center, Edge, Corner)
+class Edge
 {
-	this()
+	Center center1, center2;
+	Corner corner1, corner2;
+
+	void addCenter(Center c)
 	{
+		if (center1 is null)
+			center1 = c;
+		else
+		{
+			assert(center2 is null);
+			center2 = c;
+		}
+	}
+
+	void addCorner(Corner c)
+	{
+		if (corner1 is null)
+			corner1 = c;
+		else
+		{
+			assert(corner2 is null);
+			corner2 = c;
+		}
 	}
 }
 
-class Corner : CornerBase!(Center, Edge, Corner)
+class Corner
 {
+	Point p;
+	alias p this;
+
+	Corner[] neighbours;
+	Edge[] edges;
+	Center[] centers;
+
 	vec3d normal;
 
 	this(Point p)
 	{
-		super(p);
+		this.p = p;
 	}
 }
 
-class Heightmap : Graph!(Center, Edge, Corner)
+class Heightmap
 {
 	Config conf;
+
+	Center[] centers;
+	Corner[] corners;
+	Edge[] edges;
 
 	Image outline;
 	int width;
@@ -99,7 +139,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		auto triangulation = generateTriangulation();
 
 		writeln("Building graph");
-		super(triangulation.edges);
+		createGraph(triangulation.edges);
 
 		if (conf.relax)
 		{
@@ -149,7 +189,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 
 		if (newConfig.blurRadius != conf.blurRadius)
-		{			
+		{
 			conf = newConfig;
 			return true;
 		}
@@ -222,6 +262,139 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		return Triangulation(points);
 	}
 
+	private void createGraph(HalfEdge[] halfEdges)
+	{
+		centers = [];
+		corners = [];
+		edges = [];
+
+		// Create edges. Associate pairs of opposite half edges
+		// to the same full edge
+
+		Edge[HalfEdge] edgeMap;
+		foreach(he; halfEdges)
+		{
+			if (he in edgeMap)
+				continue;
+
+			Edge edge = new Edge();
+			edgeMap[he] = edge;
+			if (he.rev)
+				edgeMap[he.rev] = edge;
+
+			edges ~= edge;
+		}
+
+		// Create corners at the circumcenter of each triangle
+		// Associate them with the three edges of the triangle
+
+		Corner[HalfEdge] cornerMap;
+		foreach(he; halfEdges)
+		{
+			if (he in cornerMap)
+				continue;
+
+			auto tri = he.triangle;
+			Point c = circumcenter(tri.e1.from, tri.e2.from, tri.e3.from);
+			Corner corner = new Corner(c);
+
+			foreach(hedge; tri.tupleof)
+			{
+				cornerMap[hedge] = corner;
+
+				auto e = edgeMap[hedge];
+				corner.edges ~= e;
+				e.addCorner(corner);
+			}
+
+			corners ~= corner;
+		}
+
+		// Create centers for each original point given to triangulate
+		// Associate all the edges in their orbits
+
+		Center[HalfEdge] centerMap;
+		foreach(he; halfEdges)
+		{
+			if (he in centerMap)
+				continue;
+
+			auto orbit = he.orbit;
+			Center center = new Center(he.from);
+
+			foreach(orbitHedge; orbit)
+			{
+				centerMap[orbitHedge] = center;
+
+				auto e = edgeMap[orbitHedge];
+				e.addCenter(center);
+				center.edges ~= e;
+
+				// On the hull, we need to also add the one edge comes into
+				// this node (but don't put it in the map or it might
+				// get skipped for its own center)
+
+				if (orbitHedge.onHull)
+				{
+					e = edgeMap[orbitHedge.hullPrev];
+					e.addCenter(center);
+					center.edges ~= e;
+				}
+			}
+
+			centers ~= center;
+		}
+
+		// Connect centers to centers, and corners to corners,
+		// via the edges
+
+		foreach(edge; edges)
+		{
+			assert(edge.center1 && edge.center2);
+
+			// Every edge must connect two centers (they're the original
+			// point we triangulated)
+
+			auto c1 = edge.center1;
+			auto c2 = edge.center2;
+
+			c1.neighbours ~= c2;
+			c2.neighbours ~= c1;
+
+			// but hull edges don't connect corners to anything
+
+			if (edge.corner2 !is null)
+			{
+				auto co1 = edge.corner1;
+				auto co2 = edge.corner2;
+
+				co1.neighbours ~= co2;
+				co2.neighbours ~= co1;
+			}
+		}
+
+		// Finally, connect centers to corners and vice-versa
+
+		foreach(he; halfEdges)
+		{
+			auto corner = cornerMap[he];
+			auto center = centerMap[he];
+
+			corner.centers ~= center;
+			center.corners ~= corner;
+		}
+
+		// Order clockwise
+
+		import std.algorithm;
+
+		foreach(corner; corners)
+			corner.centers.sort!((a,b) => pseudoAngle(a.p - corner.p) < pseudoAngle(b.p - corner.p));
+
+		foreach(center; centers)
+			center.corners.sort!((a,b) => pseudoAngle(a.p - center.p) < pseudoAngle(b.p - center.p));
+	}
+
 	private void relaxGraph()
 	{
 		Point[] points;
@@ -235,11 +408,7 @@ class Heightmap : Graph!(Center, Edge, Corner)
 		}
 
 		auto triangulation = Triangulation(points);
-		auto tmp = new Graph!(Center, Edge, Corner)(triangulation.edges);
-
-		edges = tmp.edges;
-		centers = tmp.centers;
-		corners = tmp.corners;
+		createGraph(triangulation.edges);
 	}
 
 	private Pixel getPixel(int row, int col)
