@@ -109,7 +109,7 @@ void main()
 	}
 	else if (mode == 2)
 	{
-		if (z >= 0)
+		if (z > 0)
 		{
 			float f = z / highest;
 			color = mix(vec3(84, 169, 50), vec3(255, 255, 255), f) / 255.0;

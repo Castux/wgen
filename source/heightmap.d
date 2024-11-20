@@ -48,11 +48,21 @@ class Vertex
 		terrain = null;
 		shore = false;
 		z = double.infinity;
-		gradient = 0;
+		gradient = double.nan;
 		downhill = null;
 		uphill = [];
 		flow = 0;
 		normal = Vec3();
+	}
+
+	bool isWater()
+	{
+		return terrain !is null && gradient < 0;
+	}
+
+	bool isLand()
+	{
+		return terrain !is null && gradient >= 0;
 	}
 }
 
@@ -485,8 +495,8 @@ class Heightmap
 				continue;
 			}
 
-			int row = vertex.y.roundTo!int;
-			int col = vertex.x.roundTo!int;
+			int row = vertex.y.to!int;
+			int col = vertex.x.to!int;
 
 			auto pixel = getPixel(row, col);
 			vertex.terrain = conf.terrains.get(pixel, null);
@@ -494,7 +504,6 @@ class Heightmap
 			if (vertex.terrain is null)
 			{
 				writefln("Bad pixel %s at %d,%d", pixel, col, row);
-				vertex.gradient = 0;
 				continue;
 			}
 
@@ -512,7 +521,7 @@ class Heightmap
 
 					if (inBounds(p))
 					{
-						pixel = getPixel(p.y.roundTo!int, p.x.roundTo!int);
+						pixel = getPixel(p.y.to!int, p.x.to!int);
 						auto terrain = conf.terrains.get(pixel, null);
 						if (terrain)
 						{
@@ -533,9 +542,7 @@ class Heightmap
 
 		foreach (vertex; vertices)
 		{
-			if (vertex.terrain !is null
-				&& vertex.terrain.name != "sea"
-				&& vertex.neighbours.any!(n => n.terrain && n.terrain.name == "sea"))
+			if (vertex.isLand && vertex.neighbours.any!"a.isWater")
 			{
 				vertex.shore = true;
 				shores ~= vertex;
@@ -562,8 +569,9 @@ class Heightmap
 			{
 				if (n.terrain is null) continue;
 
-				auto gradient = gradFunc(c, n);
-				auto newZ = c.z + gradient * n.xy.distanceTo(c.xy);
+				auto gradient = n.isWater ? n.gradient : gradFunc(c, n);
+
+				auto newZ = c.z + gradient.abs * n.xy.distanceTo(c.xy);
 				if (newZ < n.z)
 				{
 					n.z = newZ;
@@ -576,11 +584,17 @@ class Heightmap
 
 		lowest = double.infinity;
 		highest = -double.infinity;
-		vertices
-			.filter!(a => a.terrain !is null)
-			.tee!((c) { lowest = min(lowest, c.z); highest = max(highest, c.z); })
-			.filter!(a => a.terrain.name == "sea")
-			.each!(c => c.z = -c.z);
+
+		foreach (vertex; vertices)
+		{
+			if (vertex.terrain is null) continue;
+
+			if (vertex.isWater)
+				vertex.z = -vertex.z;
+
+			lowest = min(lowest, vertex.z);
+			highest = max(highest, vertex.z);
+		}
 
 		if (conf.maxHeight != 0.0)
 		{
