@@ -51,9 +51,7 @@ static const char* vertex_shader_text = `
 #version 330
 uniform mat4 PV;
 uniform mat4 M;
-uniform int smoothNormals;
 in vec3 vNorm;
-in vec3 vNormSmooth;
 in vec3 vPos;
 in vec3 vCoord;
 out vec3 worldPos;
@@ -63,7 +61,7 @@ void main()
 {
 	vec4 pos = M * vec4(vPos, 1.0);
 	gl_Position = PV * pos;
-	normal = smoothNormals == 1 ? vNormSmooth : vNorm;
+	normal = vNorm;
 	coord = vCoord;
 	worldPos = pos.xyz;
 }`;
@@ -410,7 +408,6 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
-		glUniform1i(glGetUniformLocation(program, "smoothNormals"), smoothNormals ? 1 : 0);
 
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
@@ -590,7 +587,6 @@ class Viewer
 				mainMesh.vertices[i * 3 + j] = Vertex(
 					Vec3(vertex.pos),
 					Vec3(triangle.normal),
-					Vec3(vertex.normal),
 					coords[j]
 				);
 			}
@@ -625,10 +621,6 @@ class Viewer
 
 			case GLFW_KEY_M:
 				cubeMode = (cubeMode + 1) % 3;
-				break;
-
-			case GLFW_KEY_S:
-				smoothNormals = !smoothNormals;
 				break;
 
 			case GLFW_KEY_B:
