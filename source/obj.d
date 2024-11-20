@@ -10,25 +10,25 @@ import heightmap;
 void exportOBJ(Heightmap m, string path)
 {
 	string[] lines;
-	ulong[Center] centerIDs;
+	ulong[Vertex] vertexIDs;
 
-	foreach(i, center; m.centers)
+	foreach(i, vertex; m.vertices)
 	{
-		auto z = center.z;
+		auto z = vertex.z;
 		if (z == double.infinity)
 			z = 0;
 
-		centerIDs[center] = i + 1;
-		lines ~= "v %.6f %.6f %.6f".format(center.x, z, center.y);
-		lines ~= "vt %.6f %.6f".format(center.x / m.width, 1 - center.y / m.height);
+		vertexIDs[vertex] = i + 1;
+		lines ~= "v %.6f %.6f %.6f".format(vertex.x, z, vertex.y);
+		lines ~= "vt %.6f %.6f".format(vertex.x / m.width, 1 - vertex.y / m.height);
 	}
 
-	foreach(corner; m.corners)
+	foreach(triangle; m.triangles)
 	{
-		if (corner.centers.any!(c => c.terrain is null))
+		if (triangle.vertices.any!(c => c.terrain is null))
 			continue;
 
-		auto ids = corner.centers.map!(c => centerIDs[c]).array.reverse;
+		auto ids = triangle.vertices.map!(c => vertexIDs[c]).array.reverse;
 
 		lines ~= "f " ~ ids.map!(i => "%d/%d".format(i,i)).join(" ");
 	}

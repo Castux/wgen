@@ -18,22 +18,22 @@ alias Vec2 = vec2d;
 alias Vec3 = vec3d;
 
 
-class Center
+class Vertex
 {
 	Vec3 pos;
 	alias pos this;
 
-	Center[] neighbours;
+	Vertex[] neighbours;
 	Edge[] edges;
-	Corner[] corners;
+	Triangle[] triangles;
 
 	Terrain terrain;
 	bool shore;
 
 	double gradient;
 
-	Center downhill;
-	Center[] uphill;
+	Vertex downhill;
+	Vertex[] uphill;
 	int flow;
 
 	vec3d normal;
@@ -57,40 +57,40 @@ class Center
 
 class Edge
 {
-	Center center1, center2;
-	Corner corner1, corner2;
+	Vertex vertex1, vertex2;
+	Triangle triangle1, triangle2;
 
-	void addCenter(Center c)
+	void addVertex(Vertex c)
 	{
-		if (center1 is null)
-			center1 = c;
+		if (vertex1 is null)
+			vertex1 = c;
 		else
 		{
-			assert(center2 is null);
-			center2 = c;
+			assert(vertex2 is null);
+			vertex2 = c;
 		}
 	}
 
-	void addCorner(Corner c)
+	void addTriangle(Triangle c)
 	{
-		if (corner1 is null)
-			corner1 = c;
+		if (triangle1 is null)
+			triangle1 = c;
 		else
 		{
-			assert(corner2 is null);
-			corner2 = c;
+			assert(triangle2 is null);
+			triangle2 = c;
 		}
 	}
 }
 
-class Corner
+class Triangle
 {
 	Vec3 pos;
 	alias pos this;
 
-	Corner[] neighbours;
+	Triangle[] neighbours;
 	Edge[] edges;
-	Center[] centers;
+	Vertex[] vertices;
 
 	Vec3 normal;
 
@@ -104,8 +104,8 @@ class Heightmap
 {
 	Config conf;
 
-	Center[] centers;
-	Corner[] corners;
+	Vertex[] vertices;
+	Triangle[] triangles;
 	Edge[] edges;
 
 	Image outline;
@@ -113,10 +113,10 @@ class Heightmap
 	int height;
 	double resolution;
 
-	Center[] shores;
+	Vertex[] shores;
 	double lowest, highest;
 
-	Corner[][][] spatialIndex;
+	Triangle[][][] spatialIndex;
 	double binSize;
 
 	this(Config conf)
@@ -158,13 +158,13 @@ class Heightmap
 		if (newConfig.terrains != conf.terrains || newConfig.smoothingRadius != conf.smoothingRadius
 			|| newConfig.maxHeight != conf.maxHeight)
 		{
-			centers.each!(c => c.reset);
+			vertices.each!(c => c.reset);
 
 			writeln("Assigning terrain types");
 			assignTerrainTypes();
 
 			writeln("Computing elevation");
-			computeElevation((Center c, Center n) {return c.gradient;});
+			computeElevation((Vertex c, Vertex n) {return c.gradient;});
 
 			writeln("Computing river flow");
 			computeRiverFlow();
@@ -218,7 +218,7 @@ class Heightmap
 		assignTerrainTypes();
 
 		writeln("Computing elevation");
-		computeElevation((Center c, Center n) {return c.gradient;});
+		computeElevation((Vertex c, Vertex n) {return c.gradient;});
 
 		writeln("Computing river flow");
 		computeRiverFlow();
@@ -261,8 +261,8 @@ class Heightmap
 
 	private void createGraph(HalfEdge[] halfEdges)
 	{
-		centers = [];
-		corners = [];
+		vertices = [];
+		triangles = [];
 		edges = [];
 
 		// Create edges. Associate pairs of opposite half edges
@@ -282,126 +282,126 @@ class Heightmap
 			edges ~= edge;
 		}
 
-		// Create corners at the circumcenter of each triangle
+		// Create triangles at the circumvertex of each triangle
 		// Associate them with the three edges of the triangle
 
-		Corner[HalfEdge] cornerMap;
+		Triangle[HalfEdge] triangleMap;
 		foreach(he; halfEdges)
 		{
-			if (he in cornerMap)
+			if (he in triangleMap)
 				continue;
 
 			auto tri = he.triangle;
 			auto c = circumcenter(tri.e1.from, tri.e2.from, tri.e3.from);
-			Corner corner = new Corner(c);
+			Triangle triangle = new Triangle(c);
 
 			foreach(hedge; tri.tupleof)
 			{
-				cornerMap[hedge] = corner;
+				triangleMap[hedge] = triangle;
 
 				auto e = edgeMap[hedge];
-				corner.edges ~= e;
-				e.addCorner(corner);
+				triangle.edges ~= e;
+				e.addTriangle(triangle);
 			}
 
-			corners ~= corner;
+			triangles ~= triangle;
 		}
 
-		// Create centers for each original point given to triangulate
+		// Create vertices for each original point given to triangulate
 		// Associate all the edges in their orbits
 
-		Center[HalfEdge] centerMap;
+		Vertex[HalfEdge] vertexMap;
 		foreach(he; halfEdges)
 		{
-			if (he in centerMap)
+			if (he in vertexMap)
 				continue;
 
 			auto orbit = he.orbit;
-			Center center = new Center(he.from);
+			Vertex vertex = new Vertex(he.from);
 
 			foreach(orbitHedge; orbit)
 			{
-				centerMap[orbitHedge] = center;
+				vertexMap[orbitHedge] = vertex;
 
 				auto e = edgeMap[orbitHedge];
-				e.addCenter(center);
-				center.edges ~= e;
+				e.addVertex(vertex);
+				vertex.edges ~= e;
 
 				// On the hull, we need to also add the one edge comes into
 				// this node (but don't put it in the map or it might
-				// get skipped for its own center)
+				// get skipped for its own vertex)
 
 				if (orbitHedge.onHull)
 				{
 					e = edgeMap[orbitHedge.hullPrev];
-					e.addCenter(center);
-					center.edges ~= e;
+					e.addVertex(vertex);
+					vertex.edges ~= e;
 				}
 			}
 
-			centers ~= center;
+			vertices ~= vertex;
 		}
 
-		// Connect centers to centers, and corners to corners,
+		// Connect vertices to vertices, and triangles to triangles,
 		// via the edges
 
 		foreach(edge; edges)
 		{
-			assert(edge.center1 && edge.center2);
+			assert(edge.vertex1 && edge.vertex2);
 
-			// Every edge must connect two centers (they're the original
+			// Every edge must connect two vertices (they're the original
 			// point we triangulated)
 
-			auto c1 = edge.center1;
-			auto c2 = edge.center2;
+			auto c1 = edge.vertex1;
+			auto c2 = edge.vertex2;
 
 			c1.neighbours ~= c2;
 			c2.neighbours ~= c1;
 
-			// but hull edges don't connect corners to anything
+			// but hull edges don't connect triangles to anything
 
-			if (edge.corner2 !is null)
+			if (edge.triangle2 !is null)
 			{
-				auto co1 = edge.corner1;
-				auto co2 = edge.corner2;
+				auto co1 = edge.triangle1;
+				auto co2 = edge.triangle2;
 
 				co1.neighbours ~= co2;
 				co2.neighbours ~= co1;
 			}
 		}
 
-		// Finally, connect centers to corners and vice-versa
+		// Finally, connect vertices to triangles and vice-versa
 
 		foreach(he; halfEdges)
 		{
-			auto corner = cornerMap[he];
-			auto center = centerMap[he];
+			auto triangle = triangleMap[he];
+			auto vertex = vertexMap[he];
 
-			corner.centers ~= center;
-			center.corners ~= corner;
+			triangle.vertices ~= vertex;
+			vertex.triangles ~= triangle;
 		}
 
 		// Order clockwise
 
 		import std.algorithm;
 
-		foreach(corner; corners)
-			corner.centers.sort!((a,b) => pseudoAngle(a.xy - corner.xy) < pseudoAngle(b.xy - corner.xy));
+		foreach(triangle; triangles)
+			triangle.vertices.sort!((a,b) => pseudoAngle(a.xy - triangle.xy) < pseudoAngle(b.xy - triangle.xy));
 
-		foreach(center; centers)
-			center.corners.sort!((a,b) => pseudoAngle(a.xy - center.xy) < pseudoAngle(b.xy - center.xy));
+		foreach(vertex; vertices)
+			vertex.triangles.sort!((a,b) => pseudoAngle(a.xy - vertex.xy) < pseudoAngle(b.xy - vertex.xy));
 	}
 
 	private void relaxGraph()
 	{
 		Vec2[] points;
 
-		foreach(center; centers)
+		foreach(vertex; vertices)
 		{
-			if (!inBoundsPlusHalfMargin(center.pos))
-				points ~= center.xy;
+			if (!inBoundsPlusHalfMargin(vertex.pos))
+				points ~= vertex.xy;
 			else
-				points ~= center.corners.map!"a.xy".sum / center.corners.length;
+				points ~= vertex.triangles.map!"a.xy".sum / vertex.triangles.length;
 		}
 
 		auto triangulation = Triangulation(points);
@@ -436,38 +436,38 @@ class Heightmap
 		noise.lacunarity = 2;
 		noise.gain = 0.5;
 
-		foreach(center; centers)
+		foreach(vertex; vertices)
 		{
-			if (!inBoundsPlusHalfMargin(center.pos))
+			if (!inBoundsPlusHalfMargin(vertex.pos))
 			{
-				center.terrain = null;
+				vertex.terrain = null;
 				continue;
 			}
 
-			int row = center.y.to!int;
-			int col = center.x.to!int;
+			int row = vertex.y.to!int;
+			int col = vertex.x.to!int;
 
 			auto pixel = getPixel(row, col);
-			center.terrain = conf.terrains.get(pixel, null);
+			vertex.terrain = conf.terrains.get(pixel, null);
 
-			if (center.terrain is null)
+			if (vertex.terrain is null)
 			{
 				writefln("Bad pixel %s at %d,%d", pixel, col, row);
-				center.gradient = 0;
+				vertex.gradient = 0;
 				continue;
 			}
 
 			auto r = conf.smoothingRadius;
-			if (center.terrain.smoothing && r > 0.0)
+			if (vertex.terrain.smoothing && r > 0.0)
 			{
-				auto sum = center.terrain.gradient;
+				auto sum = vertex.terrain.gradient;
 				auto count = 1;
 
 				auto numSamples = ceil(pow(conf.smoothingRadius / conf.resolution, 2)).to!int;
 
 				foreach(i; 0..numSamples)
 				{
-					Vec2 p = Vec2(uniform(center.x - r, center.x + r), uniform(center.y - r, center.y + r));
+					Vec2 p = Vec2(uniform(vertex.x - r, vertex.x + r), uniform(vertex.y - r, vertex.y + r));
 
 					if (inBounds(p))
 					{
@@ -481,31 +481,31 @@ class Heightmap
 					}
 				}
 
-				center.gradient = sum/count;
+				vertex.gradient = sum/count;
 			}
 			else
-				center.gradient = center.terrain.gradient;
+				vertex.gradient = vertex.terrain.gradient;
 
-			// if (center.terrain.name != "sea")
-			// 	center.gradient = pow((fnlGetNoise2D(&noise, center.x, center.y) + 1.0) / 2.0, 1.0);
+			// if (vertex.terrain.name != "sea")
+			// 	vertex.gradient = pow((fnlGetNoise2D(&noise, vertex.x, vertex.y) + 1.0) / 2.0, 1.0);
 		}
 
-		foreach(center; centers)
+		foreach(vertex; vertices)
 		{
-			if (center.terrain !is null
-				&& center.terrain.name != "sea"
-				&& center.neighbours.any!(n => n.terrain && n.terrain.name == "sea"))
+			if (vertex.terrain !is null
+				&& vertex.terrain.name != "sea"
+				&& vertex.neighbours.any!(n => n.terrain && n.terrain.name == "sea"))
 			{
-				center.shore = true;
-				shores ~= center;
+				vertex.shore = true;
+				shores ~= vertex;
 			}
 		}
 	}
 
-	private void computeElevation(double delegate(Center, Center) gradFunc)
+	private void computeElevation(double delegate(Vertex, Vertex) gradFunc)
 	{
 		assert(shores.length > 0);
-		Center[] queue;
+		Vertex[] queue;
 
 		foreach(shore; shores)
 		{
@@ -535,7 +535,7 @@ class Heightmap
 
 		lowest = double.infinity;
 		highest = -double.infinity;
-		centers
+		vertices
 			.filter!(a => a.terrain !is null)
 			.tee!((c) { lowest = min(lowest, c.z); highest = max(highest, c.z); })
 			.filter!(a => a.terrain.name == "sea")
@@ -543,42 +543,42 @@ class Heightmap
 
 		if (conf.maxHeight != 0.0)
 		{
-			centers.each!(c => c.z = c.z / highest * conf.maxHeight);
+			vertices.each!(c => c.z = c.z / highest * conf.maxHeight);
 			lowest = lowest / highest * conf.maxHeight;
 			highest = conf.maxHeight;
 		}
 
-		foreach(corner; corners)
-			corner.normal = cross(corner.centers[1].pos - corner.centers[0].pos, corner.centers[2].pos - corner.centers[0].pos).normalized;
+		foreach(triangle; triangles)
+			triangle.normal = cross(triangle.vertices[1].pos - triangle.vertices[0].pos, triangle.vertices[2].pos - triangle.vertices[0].pos).normalized;
 
-		foreach(center; centers)
-			center.normal = center.corners.map!"a.normal".sum.normalized;
+		foreach(vertex; vertices)
+			vertex.normal = vertex.triangles.map!"a.normal".sum.normalized;
 	}
 
 	private void computeRiverFlow()
 	{
 		// Find the steepest downhill from every point
 
-		foreach(center; centers)
+		foreach(vertex; vertices)
 		{
 			// It needs to be actually downhill (avoid rivers along shores)
-			auto lower = center.neighbours.filter!(n => n.z < center.z);
+			auto lower = vertex.neighbours.filter!(n => n.z < vertex.z);
 
 			if (!lower.empty)
 			{
 				auto lowest = lower.minElement!(n => n.z);
-				center.downhill = lowest;
-				lowest.uphill ~= center;
+				vertex.downhill = lowest;
+				lowest.uphill ~= vertex;
 			}
 		}
 
 		// Go up from the shores to compute flows: each rivers
 		// gets the sum of the uphill ones, plus 1 for itself
 
-		int flow(Center center)
+		int flow(Vertex vertex)
 		{
-			center.flow = center.uphill.map!flow.sum + 1;
-			return center.flow;
+			vertex.flow = vertex.uphill.map!flow.sum + 1;
+			return vertex.flow;
 		}
 
 		shores.each!flow;
@@ -591,46 +591,46 @@ class Heightmap
 
 	void erode()
 	{
-		centers.each!(c => c.z = double.infinity);
-		computeElevation((Center c, Center n) {
+		vertices.each!(c => c.z = double.infinity);
+		computeElevation((Vertex c, Vertex n) {
 			return c.terrain.erosion && n.downhill is c && c.flow > conf.erosionMinFlow ?
 				c.gradient * conf.erosionFactor :
 				c.gradient;
 		});
 	}
 
-	private void indexCorners()
+	private void indexTriangles()
 	{
 		auto numBinsH = ceil(height / binSize).to!int;
 		auto numBinsW = ceil(width / binSize).to!int;
 
-		auto index = new Corner[][][numBinsH];
+		auto index = new Triangle[][][numBinsH];
 		foreach(ref row; index)
-			row = new Corner[][numBinsW];
+			row = new Triangle[][numBinsW];
 
-		foreach(corner; corners)
+		foreach(triangle; triangles)
 		{
-			if (!inBounds(corner.pos)) continue;
+			if (!inBounds(triangle.pos)) continue;
 
-			auto row = floor(corner.y / binSize).to!int;
-			auto col = floor(corner.x / binSize).to!int;
+			auto row = floor(triangle.y / binSize).to!int;
+			auto col = floor(triangle.x / binSize).to!int;
 
-			index[row][col] ~= corner;
+			index[row][col] ~= triangle;
 		}
 
 		spatialIndex = index;
 	}
 
-	alias BinResult = Tuple!(Corner,double[3]);
+	alias BinResult = Tuple!(Triangle,double[3]);
 
-	private static BinResult findTriangleInBin(Vec2 p, Corner[] bin)
+	private static BinResult findTriangleInBin(Vec2 p, Triangle[] bin)
 	{
-		foreach(corner; bin)
+		foreach(triangle; bin)
 		{
-			auto bary = barycentricCoordinates(corner.centers[0].xy, corner.centers[1].xy, corner.centers[2].xy, p);
+			auto bary = barycentricCoordinates(triangle.vertices[0].xy, triangle.vertices[1].xy, triangle.vertices[2].xy, p);
 			if (bary[0] >= 0 && bary[1] >= 0 && bary[2] >= 0)
 			{
-				return tuple(corner, bary);
+				return tuple(triangle, bary);
 			}
 		}
 
@@ -676,16 +676,16 @@ class Heightmap
 		auto coords = res[1];
 
 		return
-			c.centers[0].z * coords[0] +
-			c.centers[1].z * coords[1] +
-			c.centers[2].z * coords[2];
+			c.vertices[0].z * coords[0] +
+			c.vertices[1].z * coords[1] +
+			c.vertices[2].z * coords[2];
 	}
 
 	double[][] rasterize()
 	{
 		import std.stdio;
 
-		indexCorners();
+		indexTriangles();
 
 		auto data = new double[][height];
 		foreach (ref row; data)

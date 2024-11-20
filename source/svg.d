@@ -24,22 +24,22 @@ void exportSVG(Heightmap m, string path)
 		xmlns:xlink='http://www.w3.org/1999/xlink'>`
 			.format(m.width, m.height, m.width, m.height);
 
-	foreach(center; m.centers)
+	foreach(vertex; m.vertices)
 	{
-		auto s = center.corners.map!(c => "%f,%f".format(c.x, c.y)).join(" ");
+		auto s = vertex.triangles.map!(c => "%f,%f".format(c.x, c.y)).join(" ");
 
 		string col;
 
-		if (!center.terrain)
+		if (!vertex.terrain)
 			col = "pink";
 		else
-		switch (center.terrain.name)
+		switch (vertex.terrain.name)
 		{
 			case "lake":
 				col = "#0E443D";
 				break;
 			case "sea":
-				auto f = center.z / m.lowest;
+				auto f = vertex.z / m.lowest;
 				col = "rgb(%.2f,%.2f,%.2f)".format(
 					lerp(95, 0, f),
 					lerp(132, 10, f),
@@ -47,7 +47,7 @@ void exportSVG(Heightmap m, string path)
 				);
 				break;
 			default:
-				auto f = center.z / m.highest;
+				auto f = vertex.z / m.highest;
 				col = "rgb(%.2f,%.2f,%.2f)".format(
 					lerp(84, 255, f),
 					lerp(169, 255, f),
@@ -58,14 +58,14 @@ void exportSVG(Heightmap m, string path)
 		lines ~= format(`<polygon points="%s" fill="%s" stroke="%s" />`, s, col, col);
 	}
 
-	foreach(center; m.centers)
+	foreach(vertex; m.vertices)
 	{
-		if (center.downhill)
+		if (vertex.downhill)
 		{
-			auto width = pow(center.flow, 0.5) * pow(m.resolution / 30, 2);
+			auto width = pow(vertex.flow, 0.5) * pow(m.resolution / 30, 2);
 			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="#0E443D" stroke-width="%f" />`,
-	 			center.x, center.y,
-	 			center.downhill.x, center.downhill.y,
+	 			vertex.x, vertex.y,
+	 			vertex.downhill.x, vertex.downhill.y,
 				width
 			);
 		}

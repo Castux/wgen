@@ -577,8 +577,8 @@ class Viewer
 
 	void updateMainMesh()
 	{
-		mainMesh.vertices.length = map.corners.length * 3;
-		foreach(i, corner; map.corners)
+		mainMesh.vertices.length = map.triangles.length * 3;
+		foreach(i, triangle; map.triangles)
 		{
 			const Vec3[3] coords = [
 				Vec3(1,0,0),
@@ -586,12 +586,12 @@ class Viewer
 				Vec3(0,0,1)
 			];
 
-			foreach (j, center; corner.centers)
+			foreach (j, vertex; triangle.vertices)
 			{
 				mainMesh.vertices[i * 3 + j] = Vertex(
-					Vec3(center.x, -center.y, center.z),
-					Vec3(corner.normal.x, -corner.normal.y, corner.normal.z),
-					Vec3(center.normal.x, -center.normal.y, center.normal.z),
+					Vec3(vertex.x, -vertex.y, vertex.z),
+					Vec3(triangle.normal.x, -triangle.normal.y, triangle.normal.z),
+					Vec3(vertex.normal.x, -vertex.normal.y, vertex.normal.z),
 					coords[j]
 				);
 			}
