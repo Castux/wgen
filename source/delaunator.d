@@ -259,7 +259,7 @@ private void checkDelaunayCondition(Edge e)
 	}
 }
 
-struct Triangulation
+class Triangulation
 {
 	Edge[] edges;
 

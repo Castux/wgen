@@ -120,20 +120,53 @@ class Heightmap
 
 	this(Config conf)
 	{
-		this.conf = conf;
+		updateConfig(conf);
+	}
 
+	bool updateConfig(Config newConf)
+	{
+		auto old = conf;
+		conf = newConf;
+
+		Triangulation triangulation;
+
+		if (old is null ||
+			conf.path != old.path ||
+			conf.resolution != old.resolution ||
+			conf.relax != old.relax ||
+			conf.grid != old.grid ||
+			conf.jitter != old.jitter)
+			goto NewMesh;
+
+		if (conf.terrains != old.terrains ||
+			conf.smoothingRadius != old.smoothingRadius ||
+			conf.maxHeight != old.maxHeight)
+			goto NewTerrain;
+
+		if (conf.erosionMinFlow != old.erosionMinFlow ||
+			conf.erosionFactor != old.erosionFactor)
+			goto NewErosion;
+
+		if (conf.blurRadius != old.blurRadius)
+			goto Default;
+
+		return false;
+
+		NewMesh:
+
+		writeln("Loading " ~ conf.path);
 		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
 		if (outline.isError)
 			throw new Exception("Could not load " ~ conf.path);
 		outline.flipVertical();
 
-		this.width = outline.width;
-		this.height = outline.height;
-		this.resolution = conf.resolution;
-		this.binSize = conf.resolution * 4;
+		width = outline.width;
+		height = outline.height;
+		resolution = conf.resolution;
+		binSize = conf.resolution * 4;
 
 		writeln("Triangulating");
-		auto triangulation = generateTriangulation();
+		triangulation = generateTriangulation();
 
 		writeln("Building graph");
 		createGraph(triangulation.edges);
@@ -144,54 +177,27 @@ class Heightmap
 			relaxGraph();
 		}
 
-		generate();
-	}
+		NewTerrain:
 
-	bool updateConfig(Config newConfig)
-	{
-		if (newConfig.path != conf.path || newConfig.resolution != conf.resolution)
-		{
-			writeln("Cannot update path or resolution");
-			return false;
-		}
+		vertices.each!(c => c.reset);
 
-		if (newConfig.terrains != conf.terrains || newConfig.smoothingRadius != conf.smoothingRadius
-			|| newConfig.maxHeight != conf.maxHeight)
-		{
-			vertices.each!(c => c.reset);
+		writeln("Assigning terrain types");
+		assignTerrainTypes();
 
-			writeln("Assigning terrain types");
-			assignTerrainTypes();
+		writeln("Computing elevation");
+		computeElevation((Vertex c, Vertex n) {return c.gradient;});
 
-			writeln("Computing elevation");
-			computeElevation((Vertex c, Vertex n) {return c.gradient;});
+		writeln("Computing river flow");
+		computeRiverFlow();
 
-			writeln("Computing river flow");
-			computeRiverFlow();
+		NewErosion:
 
-			writeln("Eroding");
-			erode();
+		writeln("Eroding");
+		erode();
 
-			conf = newConfig;
-			return true;
-		}
+		Default:
 
-		if (newConfig.erosionMinFlow != conf.erosionMinFlow || newConfig.erosionFactor != conf.erosionFactor)
-		{
-			writeln("Eroding");
-			erode();
-
-			conf = newConfig;
-			return true;
-		}
-
-		if (newConfig.blurRadius != conf.blurRadius)
-		{
-			conf = newConfig;
-			return true;
-		}
-
-		return false;
+		return true;
 	}
 
 	double margin() const
@@ -208,23 +214,6 @@ class Heightmap
 	{
 		double h = margin / 2.0;
 		return p.x > -h && p.x < width + h && p.y > -h && p.y < height + h;
-	}
-
-	private void generate()
-	{
-		import std.stdio;
-
-		writeln("Assigning terrain types");
-		assignTerrainTypes();
-
-		writeln("Computing elevation");
-		computeElevation((Vertex c, Vertex n) {return c.gradient;});
-
-		writeln("Computing river flow");
-		computeRiverFlow();
-
-		writeln("Eroding");
-		erode();
 	}
 
 	private Triangulation generateTriangulation()
@@ -256,7 +245,7 @@ class Heightmap
 			}
 		}
 
-		return Triangulation(points);
+		return new Triangulation(points);
 	}
 
 	private void createGraph(HalfEdge[] halfEdges)
@@ -404,7 +393,7 @@ class Heightmap
 				points ~= vertex.triangles.map!"a.xy".sum / vertex.triangles.length;
 		}
 
-		auto triangulation = Triangulation(points);
+		auto triangulation = new Triangulation(points);
 		createGraph(triangulation.edges);
 	}
 
