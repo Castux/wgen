@@ -3,8 +3,6 @@ import std.format;
 import std.conv;
 import std.regex;
 
-import fswatch;
-
 import config;
 import heightmap;
 import svg;
@@ -36,33 +34,17 @@ int main(string[] args)
 	}
 
 	auto path = args[1];
-
-	Config conf = new Config(path);
-	Heightmap map = new Heightmap(conf);
+	Heightmap map = new Heightmap(path);
 
 	writefln("Range %f %f", map.lowest, map.highest);
 
 	auto viewer = new Viewer(map, "wgen");
-	auto watcher = FileWatch(path);
 
 	while (true)
 	{
-		foreach (event; watcher.getEvents())
-		{
-			if (event.type == FileChangeEventType.modify)
-			{
-				Config newConfig = new Config(path);
-				auto changed = map.updateConfig(newConfig);
-
-				if (changed)
-				{
-					writefln("Range %f %f", map.lowest, map.highest);
-					viewer.onMapChanged();
-				}
-
-				break;
-			}
-		}
+		auto changed = map.checkConfigUpdate();
+		if (changed)
+			viewer.onMapChanged();
 
 		auto shouldClose = viewer.draw();
 		if (shouldClose)
@@ -70,8 +52,8 @@ int main(string[] args)
 	}
 
 	writeln("Exporting");
-	if (conf.exportSVG) exportSVG(map, path ~ ".svg");
-	if (conf.exportOBJ) exportOBJ(map, path ~ ".obj");
+	if (map.conf.exportSVG) exportSVG(map, path ~ ".svg");
+	if (map.conf.exportOBJ) exportOBJ(map, path ~ ".obj");
 	outputHeightmap(viewer.blurredHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
 
 	return 0;

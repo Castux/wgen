@@ -7,9 +7,10 @@ import std.range;
 import std.typecons;
 import std.stdio;
 
+import fswatch;
 import dplug.math;
-
 import gamut;
+
 import delaunator;
 import config;
 
@@ -102,6 +103,7 @@ class Triangle
 class Heightmap
 {
 	Config conf;
+	FileWatch configWatcher;
 
 	Vertex[] vertices;
 	Triangle[] triangles;
@@ -118,12 +120,32 @@ class Heightmap
 	Triangle[][][] spatialIndex;
 	double binSize;
 
-	this(Config conf)
+	this(string path)
 	{
-		updateConfig(conf);
+		loadConfig(path);
 	}
 
-	bool updateConfig(Config newConf)
+	private void loadConfig(string path)
+	{
+		auto config = new Config(path);
+		updateConfig(config);
+
+		configWatcher = FileWatch(path);
+	}
+
+	bool checkConfigUpdate()
+	{
+		foreach (event; configWatcher.getEvents())
+		if (event.type == FileChangeEventType.modify)
+		{
+			Config newConfig = new Config(event.path);
+			return updateConfig(newConfig);
+		}
+
+		return false;
+	}
+
+	private bool updateConfig(Config newConf)
 	{
 		auto old = conf;
 		conf = newConf;
@@ -194,6 +216,7 @@ class Heightmap
 
 		writeln("Eroding");
 		erode();
+		writefln("Range %f %f", lowest, highest);
 
 		Default:
 
