@@ -39,7 +39,6 @@ int main(string[] args)
 
 	Config conf = new Config(path);
 	Heightmap map = new Heightmap(conf);
-	float[] heightmap;
 
 	writefln("Range %f %f", map.lowest, map.highest);
 
@@ -58,7 +57,7 @@ int main(string[] args)
 				if (changed)
 				{
 					writefln("Range %f %f", map.lowest, map.highest);
-					viewer.updateMainMesh();
+					viewer.onMapChanged();
 				}
 
 				break;

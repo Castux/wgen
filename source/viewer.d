@@ -207,17 +207,15 @@ class Viewer
 
 		setupShaders();
 
-		renderBuffer = new RenderBuffer(map.width, map.height);
-
 		firstPersonPos.x = map.width / 2.0;
 		firstPersonPos.y = map.height / 2.0;
 		firstPersonDir = 0.0;
 
-		mainMesh = new Model(program);
-		updateMainMesh();
-
 		cubeMesh = new Model(program);
 		makeCubeMesh();
+
+		mainMesh = new Model(program);
+		onMapChanged();
 	}
 
 	~this()
@@ -364,8 +362,11 @@ class Viewer
 		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 			firstPersonPos -= forward * speed * dt;
 
-		if (!map.inBounds(firstPersonPos.xy))
+		if (!map.inBounds(firstPersonPos))
 			firstPersonPos = previousPos;
+
+		if (!map.inBounds(previousPos))		// The map probably changed size with a config reload
+			firstPersonPos = Vec3(map.width / 2.0, map.height / 2.0, 0.0);
 
 		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.62;
 
@@ -445,6 +446,17 @@ class Viewer
 		return glfwWindowShouldClose(window) == GLFW_TRUE;
 	}
 
+	void onMapChanged()
+	{
+		updateMainMesh();
+
+		if (renderBuffer is null || renderBuffer.width != map.width || renderBuffer.height != map.height)
+			renderBuffer = new RenderBuffer(map.width, map.height);
+
+		generateInterpolatedHeightmap();
+		blurHeightmap();
+	}
+
 	private void generateInterpolatedHeightmap()
 	{
 		int width = renderBuffer.width;
@@ -476,9 +488,6 @@ class Viewer
 		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
 
 		renderBuffer.unbind();
-
-		auto t = task(&blurHeightmap);
-		t.executeInNewThread();
 	}
 
 	private static int[] binomialCoefs(int order) pure
@@ -571,7 +580,7 @@ class Viewer
 		cubeMesh.updateData();
 	}
 
-	void updateMainMesh()
+	private void updateMainMesh()
 	{
 		mainMesh.vertices.length = map.triangles.length * 3;
 		foreach(i, triangle; map.triangles)
@@ -593,7 +602,6 @@ class Viewer
 		}
 
 		mainMesh.updateData();
-		generateInterpolatedHeightmap();
 	}
 
 	private void onKeyEvent(int key, int scancode, int action, int mods)
@@ -656,8 +664,6 @@ class Model
 		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
 		glEnableVertexAttribArray(vnormLocation);
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
-		glEnableVertexAttribArray(vnormSmoothLocation);
-		glVertexAttribPointer(vnormSmoothLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.normSmooth.offsetof);
 		glEnableVertexAttribArray(vcoordLocation);
 		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
 	}
@@ -687,6 +693,9 @@ class RenderBuffer
 	int height;
 	GLuint framebuffer;
 
+	GLuint renderbuffer;
+	GLuint depthrenderbuffer;
+
 	float[] data;
 
 	this(int width, int height)
@@ -698,9 +707,6 @@ class RenderBuffer
 
 		glGenFramebuffers(1, &framebuffer);
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
-		GLuint renderbuffer;
-		GLuint depthrenderbuffer;
 
 		glGenRenderbuffers(1, &renderbuffer);
 		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
@@ -717,6 +723,13 @@ class RenderBuffer
 
 		glBindRenderbuffer(GL_RENDERBUFFER, 0);
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+
+	~this()
+	{
+		glDeleteFramebuffers(1, &framebuffer);
+		glDeleteRenderbuffers(1, &renderbuffer);
+		glDeleteRenderbuffers(1, &depthrenderbuffer);
 	}
 
 	void bind()
