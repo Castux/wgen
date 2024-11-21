@@ -22,7 +22,7 @@ struct Vertex
 	Vec3 pos;
 	Vec3 norm;
 	Vec3 coord;
-	int type;
+	float waterLevel;
 }
 
 extern(C) nothrow void errorCallback(int error, const(char)* description)
@@ -50,15 +50,15 @@ static const char* vertex_shader_text = `
 #version 330
 uniform mat4 PV;
 uniform mat4 M;
-uniform int typeOverride;
+uniform float waterLevelOverride;
 in vec3 vNorm;
 in vec3 vPos;
 in vec3 vCoord;
-in int vType;
+in float vWaterLevel;
 out vec3 worldPos;
 out vec3 normal;
 out vec3 coord;
-flat out int type;
+out float waterLevel;
 void main()
 {
 	vec4 pos = M * vec4(vPos, 1.0);
@@ -66,7 +66,8 @@ void main()
 	normal = vNorm;
 	coord = vCoord;
 	worldPos = pos.xyz;
-	type = max(vType, typeOverride);
+	//waterLevel = max(vWaterLevel, waterLevelOverride);
+	waterLevel = vWaterLevel;
 }`;
 // `
 
@@ -81,7 +82,7 @@ uniform vec4 fpsCenter;
 in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
-flat in int type;
+in float waterLevel;
 out vec4 fragment;
 
 float distToInt(float x)
@@ -115,13 +116,13 @@ void main()
 	}
 	else if (mode == 2)
 	{
-		if (type == 1)
-		{
-			color = mix(vec3(42, 84, 25), vec3(200, 255, 200), f) / 255.0;
-		}
-		else if(type == 2)
+		if (z < waterLevel)
 		{
 			color = mix(vec3(0, 10, 100), vec3(95, 132, 255), f) / 255.0;
+		}
+		else
+		{
+			color = mix(vec3(42, 84, 25), vec3(200, 255, 200), f) / 255.0;
 		}
 	}
 
@@ -439,7 +440,7 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
-		glUniform1i(glGetUniformLocation(program, "typeOverride"), 0);
+		glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), -float.infinity);
 
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
@@ -465,7 +466,7 @@ class Viewer
 
 				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
-				glUniform1i(glGetUniformLocation(program, "typeOverride"), z > 0.0 ? 1 : 2);
+				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), 0.0);	// FIXME
 
 				cubeMesh.draw();
 			}
@@ -584,13 +585,13 @@ class Viewer
 	{
 		auto normal = cross(b - a, c - a).normalized;
 
-		vertices[0] = Vertex(a, normal, Vec3(1,0,0), 0);
-		vertices[1] = Vertex(b, normal, Vec3(0,1,0), 0);
-		vertices[2] = Vertex(d, normal, Vec3(0,0,1), 0);
+		vertices[0] = Vertex(a, normal, Vec3(1,0,0), -float.infinity);
+		vertices[1] = Vertex(b, normal, Vec3(0,1,0), -float.infinity);
+		vertices[2] = Vertex(d, normal, Vec3(0,0,1), -float.infinity);
 
-		vertices[3] = Vertex(b, normal, Vec3(1,0,0), 0);
-		vertices[4] = Vertex(c, normal, Vec3(0,1,0), 0);
-		vertices[5] = Vertex(d, normal, Vec3(0,0,1), 0);
+		vertices[3] = Vertex(b, normal, Vec3(1,0,0), -float.infinity);
+		vertices[4] = Vertex(c, normal, Vec3(0,1,0), -float.infinity);
+		vertices[5] = Vertex(d, normal, Vec3(0,0,1), -float.infinity);
 	}
 
 	private void makeCubeMesh()
@@ -622,7 +623,7 @@ class Viewer
 				Vec3(0,0,1)
 			];
 
-			auto type = triangle.vertices.all!"a.isWater" ? 2 : 1;
+			auto waterTri = triangle.vertices.all!"a.isWater";
 
 			foreach (j, vertex; triangle.vertices)
 			{
@@ -630,7 +631,7 @@ class Viewer
 					Vec3(vertex.pos),
 					Vec3(triangle.normal),
 					coords[j],
-					type
+					waterTri ? vertex.waterLevel : float.nan
 				);
 			}
 		}
@@ -691,7 +692,7 @@ class Model
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
 		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
-		GLint vtypeLocation = glGetAttribLocation(program, "vType");
+		GLint vwaterLevelLocation = glGetAttribLocation(program, "vWaterLevel");
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
@@ -701,8 +702,8 @@ class Model
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
 		glEnableVertexAttribArray(vcoordLocation);
 		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
-		glEnableVertexAttribArray(vtypeLocation);
-		glVertexAttribIPointer(vtypeLocation, 1, GL_INT, Vertex.sizeof, cast(void*) Vertex.type.offsetof);
+		glEnableVertexAttribArray(vwaterLevelLocation);
+		glVertexAttribPointer(vwaterLevelLocation, 1, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.waterLevel.offsetof);
 	}
 
 	~this()

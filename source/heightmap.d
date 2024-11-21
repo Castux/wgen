@@ -31,6 +31,7 @@ class Vertex
 	bool shore;
 
 	double gradient;
+	double waterLevel;
 
 	Vertex downhill;
 	Vertex[] uphill;
@@ -45,8 +46,9 @@ class Vertex
 	{
 		terrain = null;
 		shore = false;
-		z = double.nan;
-		gradient = double.nan;
+		z = double.init;
+		gradient = double.init;
+		waterLevel = double.init;
 		downhill = null;
 		uphill = [];
 		flow = 0;
@@ -620,6 +622,11 @@ class Heightmap
 		{
 			auto c = queue[0];
 
+			if (c.isSea)
+				c.waterLevel = c.terrain.fixedShore;
+			else if (c.isLake && c.shore)
+				c.waterLevel = c.z;
+
 			foreach (n; c.neighbours)
 			{
 				if (n.terrain is null || n.isLand) continue;
@@ -628,6 +635,10 @@ class Heightmap
 				if (n.z.isNaN || newZ > n.z)
 				{
 					n.z = newZ;
+
+					if (n.isLake)
+						n.waterLevel = c.waterLevel;
+
 					queue ~= n;
 				}
 			}
