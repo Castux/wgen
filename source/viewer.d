@@ -66,8 +66,7 @@ void main()
 	normal = vNorm;
 	coord = vCoord;
 	worldPos = pos.xyz;
-	//waterLevel = max(vWaterLevel, waterLevelOverride);
-	waterLevel = vWaterLevel;
+	waterLevel = max(waterLevelOverride, vWaterLevel);
 }`;
 // `
 
@@ -104,7 +103,7 @@ void main()
 
 	if (mode == -1)
 	{
-		color = vec3(z, z, z);
+		color = vec3(z, waterLevel, 0.0);
 	}
 	else if (mode == 0)
 	{
@@ -174,6 +173,7 @@ class Viewer
 
 	float[] interpolatedHeightmap;
 	float[] blurredHeightmap;
+	float[] waterLevelHeightmap;
 	bool useBlurred;
 
 	Vec3 firstPersonPos;
@@ -326,7 +326,7 @@ class Viewer
 		return a * (1-x) + b * x;
 	}
 
-	double getZ(Vec2 pos)
+	double getZ(Vec2 pos, bool waterLevel = false)
 	{
 		real x, y;
 		real xfrac = modf(pos.x, x);
@@ -335,7 +335,10 @@ class Viewer
 		auto xint = x.lrint;
 		auto yint = y.lrint;
 
-		auto array = useBlurred ? blurredHeightmap : interpolatedHeightmap;
+		auto array =
+			waterLevel ? waterLevelHeightmap :
+			useBlurred ? blurredHeightmap :
+			interpolatedHeightmap;
 
 		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
 		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
@@ -440,7 +443,7 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
-		glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), -float.infinity);
+		glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), map.lowest);
 
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
@@ -466,7 +469,7 @@ class Viewer
 
 				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
-				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), 0.0);	// FIXME
+				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, waterLevel: true));
 
 				cubeMesh.draw();
 			}
@@ -518,6 +521,9 @@ class Viewer
 
 		interpolatedHeightmap.length = width * height;
 		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
+
+		waterLevelHeightmap.length = width * height;
+		glReadPixels(0, 0, width, height, GL_GREEN, GL_FLOAT, waterLevelHeightmap.ptr);
 
 		renderBuffer.unbind();
 	}
@@ -585,13 +591,13 @@ class Viewer
 	{
 		auto normal = cross(b - a, c - a).normalized;
 
-		vertices[0] = Vertex(a, normal, Vec3(1,0,0), -float.infinity);
-		vertices[1] = Vertex(b, normal, Vec3(0,1,0), -float.infinity);
-		vertices[2] = Vertex(d, normal, Vec3(0,0,1), -float.infinity);
+		vertices[0] = Vertex(a, normal, Vec3(1,0,0), float.nan);
+		vertices[1] = Vertex(b, normal, Vec3(0,1,0), float.nan);
+		vertices[2] = Vertex(d, normal, Vec3(0,0,1), float.nan);
 
-		vertices[3] = Vertex(b, normal, Vec3(1,0,0), -float.infinity);
-		vertices[4] = Vertex(c, normal, Vec3(0,1,0), -float.infinity);
-		vertices[5] = Vertex(d, normal, Vec3(0,0,1), -float.infinity);
+		vertices[3] = Vertex(b, normal, Vec3(1,0,0), float.nan);
+		vertices[4] = Vertex(c, normal, Vec3(0,1,0), float.nan);
+		vertices[5] = Vertex(d, normal, Vec3(0,0,1), float.nan);
 	}
 
 	private void makeCubeMesh()
@@ -631,7 +637,7 @@ class Viewer
 					Vec3(vertex.pos),
 					Vec3(triangle.normal),
 					coords[j],
-					waterTri ? vertex.waterLevel : float.nan
+					waterTri ? vertex.waterLevel : map.lowest
 				);
 			}
 		}
@@ -748,7 +754,7 @@ class RenderBuffer
 
 		glGenRenderbuffers(1, &renderbuffer);
 		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_R32F, width, height);
+		glRenderbufferStorage(GL_RENDERBUFFER, GL_RG32F, width, height);
 		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 
 		glGenRenderbuffers(1, &depthrenderbuffer);

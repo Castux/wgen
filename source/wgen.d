@@ -55,6 +55,7 @@ int main(string[] args)
 	if (map.conf.exportSVG) exportSVG(map, path ~ ".svg");
 	if (map.conf.exportOBJ) exportOBJ(map, path ~ ".obj");
 	outputHeightmap(viewer.blurredHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
+	outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, map.lowest, map.highest, path ~ "-w.png");
 
 	return 0;
 }
