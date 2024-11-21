@@ -7,7 +7,6 @@ import std.conv;
 import std.range;
 import std.parallelism;
 
-
 import bindbc.glfw;
 import bindbc.opengl;
 public import dplug.math;
@@ -23,7 +22,7 @@ struct Vertex
 	Vec3 pos;
 	Vec3 norm;
 	Vec3 coord;
-	float gradient;
+	int type;
 }
 
 extern(C) nothrow void errorCallback(int error, const(char)* description)
@@ -51,14 +50,15 @@ static const char* vertex_shader_text = `
 #version 330
 uniform mat4 PV;
 uniform mat4 M;
+uniform int typeOverride;
 in vec3 vNorm;
 in vec3 vPos;
 in vec3 vCoord;
-in float vGrad;
+in int vType;
 out vec3 worldPos;
 out vec3 normal;
 out vec3 coord;
-out float gradient;
+flat out int type;
 void main()
 {
 	vec4 pos = M * vec4(vPos, 1.0);
@@ -66,7 +66,7 @@ void main()
 	normal = vNorm;
 	coord = vCoord;
 	worldPos = pos.xyz;
-	gradient = vGrad;
+	type = max(vType, typeOverride);
 }`;
 // `
 
@@ -81,7 +81,7 @@ uniform vec4 fpsCenter;
 in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
-in float gradient;
+flat in int type;
 out vec4 fragment;
 
 float distToInt(float x)
@@ -98,7 +98,7 @@ void main()
 	if (length(worldPos - fpsCenter.xyz) < fpsCenter.w)
 		discard;
 
-	vec3 color;
+	vec3 color = vec3(1.0, 0.0, 1.0);
 	float f = (z - lowest) / (highest - lowest);
 
 	if (mode == -1)
@@ -115,11 +115,11 @@ void main()
 	}
 	else if (mode == 2)
 	{
-		if (gradient > 0)
+		if (type == 1)
 		{
 			color = mix(vec3(42, 84, 25), vec3(200, 255, 200), f) / 255.0;
 		}
-		else
+		else if(type == 2)
 		{
 			color = mix(vec3(0, 10, 100), vec3(95, 132, 255), f) / 255.0;
 		}
@@ -439,6 +439,7 @@ class Viewer
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
 		glUniform1i(glGetUniformLocation(program, "mode"), shadingMode);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
+		glUniform1i(glGetUniformLocation(program, "typeOverride"), 0);
 
 		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
@@ -446,6 +447,8 @@ class Viewer
 
 		if (viewMode == 2 && cubeMode != 0)
 		{
+			glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
+
 			auto c = Vec2(firstPersonPos.x.round, firstPersonPos.y.round);
 			foreach(dx; - cubesRadius .. cubesRadius)
 			foreach(dy; - cubesRadius .. cubesRadius)
@@ -462,7 +465,7 @@ class Viewer
 
 				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
-				glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
+				glUniform1i(glGetUniformLocation(program, "typeOverride"), z > 0.0 ? 1 : 2);
 
 				cubeMesh.draw();
 			}
@@ -581,13 +584,13 @@ class Viewer
 	{
 		auto normal = cross(b - a, c - a).normalized;
 
-		vertices[0] = Vertex(a, normal, Vec3(1,0,0));
-		vertices[1] = Vertex(b, normal, Vec3(0,1,0));
-		vertices[2] = Vertex(d, normal, Vec3(0,0,1));
+		vertices[0] = Vertex(a, normal, Vec3(1,0,0), 0);
+		vertices[1] = Vertex(b, normal, Vec3(0,1,0), 0);
+		vertices[2] = Vertex(d, normal, Vec3(0,0,1), 0);
 
-		vertices[3] = Vertex(b, normal, Vec3(1,0,0));
-		vertices[4] = Vertex(c, normal, Vec3(0,1,0));
-		vertices[5] = Vertex(d, normal, Vec3(0,0,1));
+		vertices[3] = Vertex(b, normal, Vec3(1,0,0), 0);
+		vertices[4] = Vertex(c, normal, Vec3(0,1,0), 0);
+		vertices[5] = Vertex(d, normal, Vec3(0,0,1), 0);
 	}
 
 	private void makeCubeMesh()
@@ -619,13 +622,15 @@ class Viewer
 				Vec3(0,0,1)
 			];
 
+			auto type = triangle.vertices.all!"a.isWater" ? 2 : 1;
+
 			foreach (j, vertex; triangle.vertices)
 			{
 				mainMesh.vertices[i * 3 + j] = Vertex(
 					Vec3(vertex.pos),
 					Vec3(triangle.normal),
 					coords[j],
-					vertex.gradient
+					type
 				);
 			}
 		}
@@ -686,7 +691,7 @@ class Model
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
 		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
-		GLint vgradLocation = glGetAttribLocation(program, "vGrad");
+		GLint vtypeLocation = glGetAttribLocation(program, "vType");
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
@@ -696,8 +701,8 @@ class Model
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
 		glEnableVertexAttribArray(vcoordLocation);
 		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
-		glEnableVertexAttribArray(vgradLocation);
-		glVertexAttribPointer(vgradLocation, 1, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.gradient.offsetof);
+		glEnableVertexAttribArray(vtypeLocation);
+		glVertexAttribIPointer(vtypeLocation, 1, GL_INT, Vertex.sizeof, cast(void*) Vertex.type.offsetof);
 	}
 
 	~this()
