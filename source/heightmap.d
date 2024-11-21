@@ -524,7 +524,7 @@ class Heightmap
 			auto r = conf.smoothingRadius;
 			if (vertex.terrain.smoothing && r > 0.0)
 			{
-				auto sum = vertex.terrain.gradient;
+				auto sum = vertex.terrain.gradient.abs;
 				auto count = 1;
 
 				auto numSamples = ceil(pow(conf.smoothingRadius / conf.resolution, 2)).to!int;
@@ -539,13 +539,15 @@ class Heightmap
 						auto terrain = conf.terrains.get(pixel, null);
 						if (terrain)
 						{
-							sum += terrain.gradient;
+							sum += terrain.gradient.abs;
 							count++;
 						}
 					}
 				}
 
 				vertex.gradient = sum/count;
+				if (vertex.terrain.gradient < 0)
+					vertex.gradient = -vertex.gradient;
 			}
 			else
 				vertex.gradient = vertex.terrain.gradient;
