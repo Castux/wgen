@@ -10,13 +10,13 @@ import obj;
 import image;
 import viewer;
 
-void outputHeightmap(float[] map, int width, int height, double lowest, double highest, string path)
+void outputHeightmap(float[] data, int width, int height, double lowest, double highest, string path)
 {
 	import gamut;
 	writeln("Exporting heightmap");
 
-	float[] normalized = new float[map.length];
-	normalized[] = (map[] - lowest) / (highest - lowest);
+	float[] normalized = new float[data.length];
+	normalized[] = (data[] - lowest) / (highest - lowest);
 
 	Image image;
 	image.createViewFromData(normalized.ptr, width, height, PixelType.lf32, width * float.sizeof.to!int);
@@ -49,6 +49,13 @@ int main(string[] args)
 		auto shouldClose = viewer.draw();
 		if (shouldClose)
 			break;
+
+		if (viewer.requestExport)
+		{
+			viewer.requestExport = false;
+			outputHeightmap(viewer.blurredHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
+			outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, map.lowest, map.highest, path ~ "-w.png");
+		}
 	}
 
 	writeln("Exporting");

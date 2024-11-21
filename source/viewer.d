@@ -160,6 +160,7 @@ class Viewer
 
 	GLFWwindow* window;
 	GLuint program;
+	bool requestExport;
 
 	Heightmap map;
 	Model mainMesh;
@@ -314,8 +315,8 @@ class Viewer
 		auto proj = Mat4.orthographic(
 				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
 				0.0, map.height,
-				-(map.highest + 10.0),
-				(map.highest - map.lowest) + 20.0
+				-1e6,
+				1e6
 			).transposed;
 
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
@@ -501,6 +502,7 @@ class Viewer
 
 		glUseProgram(program);
 		glViewport(0, 0, width, height);
+		glClearColor(0.0, 0.0, 0.0, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		auto model = Mat4.identity;
@@ -509,21 +511,24 @@ class Viewer
 		auto proj = Mat4.orthographic(
 			0.0, map.width,
 			0.0, map.height,
-			map.highest * 10.0,
-			map.lowest * 10.0
+			-1e6,
+			1e6
 		).transposed;
 
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
 		glUniform1i(glGetUniformLocation(program, "mode"), -1);
 		glUniform1i(glGetUniformLocation(program, "lineMode"), 0);
+		glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), map.lowest);
 
 		mainMesh.draw();
 
-		interpolatedHeightmap.length = width * height;
+		interpolatedHeightmap = new float[width * height];
 		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
+		writefln("Heightmap: low %f, high %f", interpolatedHeightmap.minElement, interpolatedHeightmap.maxElement);
 
-		waterLevelHeightmap.length = width * height;
+		waterLevelHeightmap = new float[width * height];
 		glReadPixels(0, 0, width, height, GL_GREEN, GL_FLOAT, waterLevelHeightmap.ptr);
+		writefln("Water level: low %f, high %f", waterLevelHeightmap.minElement, waterLevelHeightmap.maxElement);
 
 		renderBuffer.unbind();
 	}
@@ -546,9 +551,8 @@ class Viewer
 			return;
 		}
 
-		double[] tmp;
-		tmp.length = interpolatedHeightmap.length;
-		blurredHeightmap.length = interpolatedHeightmap.length;
+		auto tmp = new float[interpolatedHeightmap.length];
+		blurredHeightmap = new float[interpolatedHeightmap.length];
 
 		auto coefs = binomialCoefs(2 * radius)[radius .. $];
 
@@ -677,6 +681,10 @@ class Viewer
 				useBlurred = !useBlurred;
 				break;
 
+			case GLFW_KEY_ENTER:
+				requestExport = true;
+				break;
+
 			default:
 				break;
 		}
@@ -740,14 +748,10 @@ class RenderBuffer
 	GLuint renderbuffer;
 	GLuint depthrenderbuffer;
 
-	float[] data;
-
 	this(int width, int height)
 	{
 		this.width = width;
 		this.height = height;
-
-		data = new float[width * height * 1];
 
 		glGenFramebuffers(1, &framebuffer);
 		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
