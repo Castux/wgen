@@ -36,8 +36,6 @@ class Vertex
 	Vertex[] uphill;
 	int flow;
 
-	Vec3 normal;
-
 	this(Vec2 pos)
 	{
 		this.pos = Vec3(pos, double.nan);
@@ -52,7 +50,6 @@ class Vertex
 		downhill = null;
 		uphill = [];
 		flow = 0;
-		normal = Vec3();
 	}
 
 	bool isWater()
@@ -63,6 +60,16 @@ class Vertex
 	bool isLand()
 	{
 		return terrain !is null && gradient >= 0;
+	}
+
+	bool isLake()
+	{
+		return isWater && terrain.fixedShore.isNaN;
+	}
+
+	bool isSea()
+	{
+		return isWater && !terrain.fixedShore.isNaN;
 	}
 }
 
@@ -259,9 +266,14 @@ class Heightmap
 
 		writeln("Eroding");
 		computeElevation(erosionPass: true);
+
+		writeln("Computing water depth");
+		computeWaterDepth();
+		finalizeElevation();
 		writefln("Range %f %f", lowest, highest);
 
 		Default:
+
 	}
 
 	double margin() const
@@ -548,6 +560,9 @@ class Heightmap
 				shores ~= vertex;
 			}
 		}
+
+		if (!shores.any!"a.isSea")
+			throw new Exception("No sea defined");
 	}
 
 	private void computeElevation(bool erosionPass = false)
@@ -560,8 +575,11 @@ class Heightmap
 
 		foreach(shore; shores)
 		{
-			shore.z = 0;
-			queue ~= shore;
+			if (shore.isSea)
+			{
+				shore.z = shore.terrain.fixedShore;
+				queue ~= shore;
+			}
 		}
 
 		while (queue.length > 0)
@@ -570,15 +588,18 @@ class Heightmap
 
 			foreach (n; c.neighbours)
 			{
-				if (n.terrain is null || n.shore) continue;
+				if (n.terrain is null || n.isSea) continue;
 
 				auto gradient = n.gradient;
+
+				if (n.isLake)
+					gradient = 0.00001;
 
 				if (erosionPass && n.terrain.erosion && n.downhill is c && n.flow > conf.erosionMinFlow)
 					gradient *= conf.erosionFactor;
 
 				auto newZ = c.z + gradient * c.xy.distanceTo(n.xy);
-				if (n.z.isNaN || gradient > 0 && newZ < n.z || gradient < 0 && newZ > n.z)
+				if (n.z.isNaN || newZ < n.z)
 				{
 					n.z = newZ;
 					queue ~= n;
@@ -587,7 +608,36 @@ class Heightmap
 
 			queue = queue[1..$];
 		}
+	}
 
+	private void computeWaterDepth()
+	{
+		Vertex[] queue = shores.dup;
+
+		vertices.filter!"a.isWater && !a.shore".each!(v => v.z = double.nan);
+
+		while (queue.length > 0)
+		{
+			auto c = queue[0];
+
+			foreach (n; c.neighbours)
+			{
+				if (n.terrain is null || n.isLand) continue;
+
+				auto newZ = c.z + n.gradient * c.xy.distanceTo(n.xy);
+				if (n.z.isNaN || newZ > n.z)
+				{
+					n.z = newZ;
+					queue ~= n;
+				}
+			}
+
+			queue = queue[1..$];
+		}
+	}
+
+	private void finalizeElevation()
+	{
 		lowest = double.infinity;
 		highest = -double.infinity;
 
@@ -608,9 +658,6 @@ class Heightmap
 
 		foreach(triangle; triangles)
 			triangle.normal = cross(triangle.vertices[1].pos - triangle.vertices[0].pos, triangle.vertices[2].pos - triangle.vertices[0].pos).normalized;
-
-		foreach(vertex; vertices)
-			vertex.normal = vertex.triangles.map!"a.normal".sum.normalized;
 	}
 
 	private void computeRiverFlow()
@@ -639,7 +686,7 @@ class Heightmap
 			return vertex.flow;
 		}
 
-		shores.each!flow;
+		vertices.filter!"a.downhill is null".each!flow;
 	}
 
 	static double linearMap(double a, double b, double u, double v, double x)

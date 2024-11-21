@@ -12,6 +12,7 @@ class Terrain
 	string name;
 	Pixel color;
 	double gradient;
+	double fixedShore;
 	bool smoothing = true;
 	bool erosion = true;
 
@@ -77,6 +78,9 @@ class Config
 			terrain.name = name;
 			terrain.color = Pixel(t["r"].get!ubyte, t["g"].get!ubyte, t["b"].get!ubyte);
 			terrain.gradient = t["gradient"].get!double;
+
+			if ("fixedShore" in t)
+				terrain.fixedShore = t["fixedShore"].get!double;
 
 			if ("smoothing" in t)
 				terrain.smoothing = t["smoothing"].get!bool;

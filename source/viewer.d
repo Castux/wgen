@@ -23,6 +23,7 @@ struct Vertex
 	Vec3 pos;
 	Vec3 norm;
 	Vec3 coord;
+	float gradient;
 }
 
 extern(C) nothrow void errorCallback(int error, const(char)* description)
@@ -53,9 +54,11 @@ uniform mat4 M;
 in vec3 vNorm;
 in vec3 vPos;
 in vec3 vCoord;
+in float vGrad;
 out vec3 worldPos;
 out vec3 normal;
 out vec3 coord;
+out float gradient;
 void main()
 {
 	vec4 pos = M * vec4(vPos, 1.0);
@@ -63,6 +66,7 @@ void main()
 	normal = vNorm;
 	coord = vCoord;
 	worldPos = pos.xyz;
+	gradient = vGrad;
 }`;
 // `
 
@@ -77,6 +81,7 @@ uniform vec4 fpsCenter;
 in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
+in float gradient;
 out vec4 fragment;
 
 float distToInt(float x)
@@ -94,13 +99,14 @@ void main()
 		discard;
 
 	vec3 color;
+	float f = (z - lowest) / (highest - lowest);
+
 	if (mode == -1)
 	{
 		color = vec3(z, z, z);
 	}
 	else if (mode == 0)
 	{
-		float f = (z - lowest) / (highest - lowest);
 		color = vec3(f, f, f);
 	}
 	else if (mode == 1)
@@ -109,15 +115,13 @@ void main()
 	}
 	else if (mode == 2)
 	{
-		if (z > 0)
+		if (gradient > 0)
 		{
-			float f = z / highest;
-			color = mix(vec3(84, 169, 50), vec3(255, 255, 255), f) / 255.0;
+			color = mix(vec3(42, 84, 25), vec3(200, 255, 200), f) / 255.0;
 		}
 		else
 		{
-			float f = z / lowest;
-			color = mix(vec3(95, 132, 255), vec3(0, 10, 100), f) / 255.0;
+			color = mix(vec3(0, 10, 100), vec3(95, 132, 255), f) / 255.0;
 		}
 	}
 
@@ -620,7 +624,8 @@ class Viewer
 				mainMesh.vertices[i * 3 + j] = Vertex(
 					Vec3(vertex.pos),
 					Vec3(triangle.normal),
-					coords[j]
+					coords[j],
+					vertex.gradient
 				);
 			}
 		}
@@ -681,6 +686,7 @@ class Model
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
 		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
+		GLint vgradLocation = glGetAttribLocation(program, "vGrad");
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
@@ -690,6 +696,8 @@ class Model
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
 		glEnableVertexAttribArray(vcoordLocation);
 		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
+		glEnableVertexAttribArray(vgradLocation);
+		glVertexAttribPointer(vgradLocation, 1, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.gradient.offsetof);
 	}
 
 	~this()
