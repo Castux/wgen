@@ -466,7 +466,7 @@ class Viewer
 					continue;
 
 				auto z = getZ(pos);
-				if (cubeMode == 2) z = z.round;
+				if (cubeMode == 2) z = z.floor;
 
 				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
@@ -524,11 +524,9 @@ class Viewer
 
 		interpolatedHeightmap = new float[width * height];
 		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
-		writefln("Heightmap: low %f, high %f", interpolatedHeightmap.minElement, interpolatedHeightmap.maxElement);
 
 		waterLevelHeightmap = new float[width * height];
 		glReadPixels(0, 0, width, height, GL_GREEN, GL_FLOAT, waterLevelHeightmap.ptr);
-		writefln("Water level: low %f, high %f", waterLevelHeightmap.minElement, waterLevelHeightmap.maxElement);
 
 		renderBuffer.unbind();
 	}

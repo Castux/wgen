@@ -2,6 +2,9 @@ import std.stdio;
 import std.format;
 import std.conv;
 import std.regex;
+import std.algorithm;
+import std.math;
+import std.array;
 
 import config;
 import heightmap;
@@ -10,18 +13,22 @@ import obj;
 import image;
 import viewer;
 
-void outputHeightmap(float[] data, int width, int height, double lowest, double highest, string path)
+void outputHeightmap(float[] data, int width, int height, string path)
 {
 	import gamut;
 	writeln("Exporting heightmap");
 
-	float[] normalized = new float[data.length];
-	normalized[] = (data[] - lowest) / (highest - lowest);
+	alias T = ushort;
+	auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
+
+	auto floored = data.map!("a.floor.lrint");
+	T[] output = floored.map!(v => v.to!T).array;
+
+	writefln("Range: %d, %d", output.minElement, output.maxElement);
 
 	Image image;
-	image.createViewFromData(normalized.ptr, width, height, PixelType.lf32, width * float.sizeof.to!int);
+	image.createViewFromData(output.ptr, width, height, PT, width * T.sizeof.to!int);
 	image.flipVertical();
-	image.convertTo(PixelType.l16);
 	image.saveToFile(path);
 }
 
@@ -35,10 +42,13 @@ int main(string[] args)
 
 	auto path = args[1];
 	Heightmap map = new Heightmap(path);
-
-	writefln("Range %f %f", map.lowest, map.highest);
-
 	auto viewer = new Viewer(map, "wgen");
+
+	void doExport()
+	{
+		outputHeightmap(viewer.blurredHeightmap, map.width, map.height, path ~ ".png");
+		outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, path ~ "-w.png");
+	}
 
 	while (true)
 	{
@@ -53,16 +63,14 @@ int main(string[] args)
 		if (viewer.requestExport)
 		{
 			viewer.requestExport = false;
-			outputHeightmap(viewer.blurredHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
-			outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, map.lowest, map.highest, path ~ "-w.png");
+			doExport();
 		}
 	}
 
 	writeln("Exporting");
 	if (map.conf.exportSVG) exportSVG(map, path ~ ".svg");
 	if (map.conf.exportOBJ) exportOBJ(map, path ~ ".obj");
-	outputHeightmap(viewer.blurredHeightmap, map.width, map.height, map.lowest, map.highest, path ~ ".png");
-	outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, map.lowest, map.highest, path ~ "-w.png");
+	doExport();
 
 	return 0;
 }
