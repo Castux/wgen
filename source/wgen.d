@@ -13,16 +13,16 @@ import obj;
 import image;
 import viewer;
 
-void outputHeightmap(float[] data, int width, int height, string path)
+void outputHeightmap(T)(T[] data, int width, int height, string path)
 {
 	import gamut;
 	writeln("Exporting heightmap");
 
-	alias T = ushort;
+	alias T = ubyte;
 	auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
 
 	auto floored = data.map!("a.floor.lrint");
-	T[] output = floored.map!(v => v.to!T).array;
+	T[] output = floored.map!(v => v.clamp(0, T.max).to!T).array;
 
 	writefln("Range: %d, %d", output.minElement, output.maxElement);
 
@@ -46,8 +46,8 @@ int main(string[] args)
 
 	void doExport()
 	{
-		outputHeightmap(viewer.blurredHeightmap, map.width, map.height, path ~ ".png");
-		outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, path ~ "-w.png");
+		outputHeightmap(map.heightmap, map.width, map.height, path ~ ".png");
+		outputHeightmap(map.waterLevel, map.width, map.height, path ~ "-w.png");
 	}
 
 	while (true)

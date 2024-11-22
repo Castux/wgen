@@ -168,14 +168,6 @@ class Viewer
 	int shadingMode;
 	int viewMode;
 	int lineMode;
-	bool smoothNormals;
-
-	RenderBuffer renderBuffer;
-
-	float[] interpolatedHeightmap;
-	float[] blurredHeightmap;
-	float[] waterLevelHeightmap;
-	bool useBlurred;
 
 	Vec3 firstPersonPos;
 	double firstPersonHDir;
@@ -336,10 +328,7 @@ class Viewer
 		auto xint = x.lrint;
 		auto yint = y.lrint;
 
-		auto array =
-			waterLevel ? waterLevelHeightmap :
-			useBlurred ? blurredHeightmap :
-			interpolatedHeightmap;
+		auto array = waterLevel ? map.waterLevel : map.heightmap;
 
 		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
 		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
@@ -485,108 +474,6 @@ class Viewer
 	void onMapChanged()
 	{
 		updateMainMesh();
-
-		if (renderBuffer is null || renderBuffer.width != map.width || renderBuffer.height != map.height)
-			renderBuffer = new RenderBuffer(map.width, map.height);
-
-		generateInterpolatedHeightmap();
-		blurHeightmap();
-	}
-
-	private void generateInterpolatedHeightmap()
-	{
-		int width = renderBuffer.width;
-		int height = renderBuffer.height;
-
-		renderBuffer.bind();
-
-		glUseProgram(program);
-		glViewport(0, 0, width, height);
-		glClearColor(0.0, 0.0, 0.0, 1.0);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		auto model = Mat4.identity;
-		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
-
-		auto proj = Mat4.orthographic(
-			0.0, map.width,
-			0.0, map.height,
-			-1e6,
-			1e6
-		).transposed;
-
-		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
-		glUniform1i(glGetUniformLocation(program, "mode"), -1);
-		glUniform1i(glGetUniformLocation(program, "lineMode"), 0);
-		glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), map.lowest);
-
-		mainMesh.draw();
-
-		interpolatedHeightmap = new float[width * height];
-		glReadPixels(0, 0, width, height, GL_RED, GL_FLOAT, interpolatedHeightmap.ptr);
-
-		waterLevelHeightmap = new float[width * height];
-		glReadPixels(0, 0, width, height, GL_GREEN, GL_FLOAT, waterLevelHeightmap.ptr);
-
-		renderBuffer.unbind();
-	}
-
-	private static int[] binomialCoefs(int order) pure
-	{
-		int[] coefs = [1];
-		foreach(k; 1 .. order + 1)
-			coefs ~= coefs[$ - 1] * (order + 1 - k) / k;
-
-		return coefs;
-	}
-
-	private void blurHeightmap()
-	{
-		const radius = map.conf.blurRadius;
-		if (radius == 0)
-		{
-			blurredHeightmap = interpolatedHeightmap.dup;
-			return;
-		}
-
-		auto tmp = new float[interpolatedHeightmap.length];
-		blurredHeightmap = new float[interpolatedHeightmap.length];
-
-		auto coefs = binomialCoefs(2 * radius)[radius .. $];
-
-		foreach(row; iota(0, map.height).array.parallel)
-		foreach(col; 0 .. map.width)
-		{
-			double sum = 0.0;
-			int coefsum = 0;
-
-			foreach(dcol; -radius .. radius + 1)
-			{
-				auto c = col + dcol;
-				if (c < 0 || c >= map.width) continue;
-				sum += interpolatedHeightmap[row * map.width + c] * coefs[dcol.abs];
-				coefsum += coefs[dcol.abs];
-			}
-
-			tmp[row * map.width + col] = sum / coefsum;
-		}
-
-		foreach(col; iota(0, map.width).array.parallel)
-		foreach(row; 0 .. map.height)
-		{
-			double sum = 0.0;
-			int coefsum = 0;
-
-			foreach(drow; -radius .. radius + 1)
-			{
-				auto r = row + drow;
-				if (r < 0 || r >= map.height) continue;
-				sum += tmp[r * map.width + col] * coefs[drow.abs];
-				coefsum += coefs[drow.abs];
-			}
-
-			blurredHeightmap[row * map.width + col] = sum / coefsum;
-		}
 	}
 
 	private static void makeSquare(Vertex[] vertices, Vec3 a, Vec3 b, Vec3 c, Vec3 d) pure
@@ -675,10 +562,6 @@ class Viewer
 				cubeMode = (cubeMode + 1) % 3;
 				break;
 
-			case GLFW_KEY_B:
-				useBlurred = !useBlurred;
-				break;
-
 			case GLFW_KEY_ENTER:
 				requestExport = true;
 				break;
@@ -734,57 +617,5 @@ class Model
 	{
 		glBindVertexArray(vertexArray);
 		glDrawArrays(GL_TRIANGLES, 0, cast(int) vertices.length);
-	}
-}
-
-class RenderBuffer
-{
-	int width;
-	int height;
-	GLuint framebuffer;
-
-	GLuint renderbuffer;
-	GLuint depthrenderbuffer;
-
-	this(int width, int height)
-	{
-		this.width = width;
-		this.height = height;
-
-		glGenFramebuffers(1, &framebuffer);
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
-		glGenRenderbuffers(1, &renderbuffer);
-		glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_RG32F, width, height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
-
-		glGenRenderbuffers(1, &depthrenderbuffer);
-		glBindRenderbuffer(GL_RENDERBUFFER, depthrenderbuffer);
-		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
-		glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthrenderbuffer);
-
-		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-			throw new Exception("Couldn't set up render to texture");
-
-		glBindRenderbuffer(GL_RENDERBUFFER, 0);
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	}
-
-	~this()
-	{
-		glDeleteFramebuffers(1, &framebuffer);
-		glDeleteRenderbuffers(1, &renderbuffer);
-		glDeleteRenderbuffers(1, &depthrenderbuffer);
-	}
-
-	void bind()
-	{
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-	}
-
-	void unbind()
-	{
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 }
