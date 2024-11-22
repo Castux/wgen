@@ -358,35 +358,38 @@ class Viewer
 		auto dt = now - lastUpdate;
 		lastUpdate = now;
 
-		double xpos, ypos;
-		int width, height;
-		glfwGetCursorPos(window, &xpos, &ypos);
-		glfwGetWindowSize(window, &width, &height);
-		glfwSetCursorPos(window, width / 2, height / 2);
+		if (glfwGetWindowAttrib(window, GLFW_FOCUSED))
+		{
+			double xpos, ypos;
+			int width, height;
+			glfwGetCursorPos(window, &xpos, &ypos);
+			glfwGetWindowSize(window, &width, &height);
+			glfwSetCursorPos(window, width / 2, height / 2);
 
-		firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2);
-		firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2);
+			firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2);
+			firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2);
 
-		if (firstPersonVDir > PI / 2.0 - 0.1) firstPersonVDir = PI / 2.0 - 0.1;
-		if (firstPersonVDir < -PI / 2.0 + 0.1) firstPersonVDir = -PI / 2.0 + 0.1;
+			if (firstPersonVDir > PI / 2.0 - 0.1) firstPersonVDir = PI / 2.0 - 0.1;
+			if (firstPersonVDir < -PI / 2.0 + 0.1) firstPersonVDir = -PI / 2.0 + 0.1;
 
-		auto previousPos = firstPersonPos;
+			auto previousPos = firstPersonPos;
 
-		if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
-			speed *= 10.0;
-		if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS)
-			speed *= 10.0;
+			if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
+				speed *= 10.0;
+			if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS)
+				speed *= 10.0;
 
-		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-			firstPersonPos += forward * speed * dt;
-		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-			firstPersonPos -= forward * speed * dt;
+			if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+				firstPersonPos += forward * speed * dt;
+			if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+				firstPersonPos -= forward * speed * dt;
 
-		if (!map.inBounds(firstPersonPos))
-			firstPersonPos = previousPos;
+			if (!map.inBounds(firstPersonPos))
+				firstPersonPos = previousPos;
 
-		if (!map.inBounds(previousPos))		// The map probably changed size with a config reload
-			firstPersonPos = Vec3(map.width / 2.0, map.height / 2.0, 0.0);
+			if (!map.inBounds(previousPos))		// The map probably changed size with a config reload
+				firstPersonPos = Vec3(map.width / 2.0, map.height / 2.0, 0.0);
+		}
 
 		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.62;
 
