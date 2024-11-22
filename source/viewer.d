@@ -101,11 +101,7 @@ void main()
 	vec3 color = vec3(1.0, 0.0, 1.0);
 	float f = (z - lowest) / (highest - lowest);
 
-	if (mode == -1)
-	{
-		color = vec3(z, waterLevel, 0.0);
-	}
-	else if (mode == 0)
+	if (mode == 0)
 	{
 		color = vec3(f, f, f);
 	}
@@ -328,7 +324,7 @@ class Viewer
 		auto xint = x.lrint;
 		auto yint = y.lrint;
 
-		auto array = waterLevel ? map.waterLevel : map.heightmap;
+		const array = waterLevel ? map.waterLevel : map.heightmap;
 
 		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
 		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
