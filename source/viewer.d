@@ -28,15 +28,6 @@ struct Vertex
 	float waterLevel;
 }
 
-void checkError(string error)
-{
-	GLint r = glGetError();
-	if (r != GL_NO_ERROR)
-	{
-		throw new Exception(error);
-	}
-}
-
 static const char* vertex_shader_text = `
 #version 330
 uniform mat4 PV;
@@ -155,8 +146,10 @@ class Viewer
 	static Viewer singleton;
 
 	sfRenderWindow* window;
+	sfView* view;
 	sfFont* font;
 	sfText* text;
+	string[] currentText;
 
 	GLuint program;
 	bool requestExport;
@@ -200,16 +193,9 @@ class Viewer
 		if (!window)
 			throw new Exception("Could not open SFML window");
 		sfRenderWindow_setVerticalSyncEnabled(window, true);
+		view = sfView_createFromRect(sfFloatRect(0, 0, mode.width, mode.height));
 
-		font = sfFont_createFromFile("CascadiaMono.ttf");
-		if (!font)
-			throw new Exception("Could not load font");
-
-		text = sfText_create();
-		sfText_setFont(text, font);
-		sfText_setPosition(text, sfVector2f(20, 20));
-		sfText_setCharacterSize(text, 20);
-		sfText_setFillColor(text, sfBlack);
+		resetText();
 
 		if(loadOpenGL() != GLSupport.gl33)
 		{
@@ -245,6 +231,7 @@ class Viewer
 
 		sfText_destroy(text);
 		sfFont_destroy(font);
+		sfView_destroy(view);
 		sfRenderWindow_destroy(window);
 	}
 
@@ -305,6 +292,25 @@ class Viewer
 	private double time()
 	{
 		return sw.peek.total!"msecs" / 1000.0;
+	}
+
+	private void resetText()
+	{
+		if (font)
+			sfFont_destroy(font);
+
+		font = sfFont_createFromFile("CascadiaMono.ttf");
+		if (!font)
+			throw new Exception("Could not load font");
+
+		if (text)
+			sfText_destroy(text);
+
+		text = sfText_create();
+		sfText_setFont(text, font);
+		sfText_setPosition(text, sfVector2f(20, 20));
+		sfText_setCharacterSize(text, 20);
+		sfText_setFillColor(text, sfBlack);
 	}
 
 	private void setTurntableView(double ratio)
@@ -435,11 +441,12 @@ class Viewer
 				firstPersonPos = Vec3(map.width / 2.0, map.height / 2.0, 0.0);
 		}
 
-		firstPersonPos.z = getZ(firstPersonPos.xy) + 1.62;
+		firstPersonPos.z = getZ(firstPersonPos.xy);
+		auto camera = firstPersonPos + Vec3(0, 0, 1.63);
 
 		auto view = Mat4.lookAt(
-			firstPersonPos,
-			firstPersonPos + forward,
+			camera,
+			camera + forward,
 			Vec3(0.0, 0.0, 1.0)
 		);
 
@@ -450,11 +457,10 @@ class Viewer
 		auto model = Mat4.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
-		sfText_setString(text, "%d %d %d".format(
+		currentText ~= "x=%d y=%d z=%d".format(
 			firstPersonPos.x.roundTo!int,
 			firstPersonPos.y.roundTo!int,
-			firstPersonPos.z.roundTo!int)
-		.toStringz);
+			firstPersonPos.z.roundTo!int);
 	}
 
 	bool draw()
@@ -477,12 +483,15 @@ class Viewer
 		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
+		sfView_reset(view, sfFloatRect(0, 0, width, height));
+		sfRenderWindow_setView(window, view);
+
 		glClearColor(156.0/255, 196.0/255, 240.0/255, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(program);
 
-		sfText_setString(text, "");
+		currentText = [];
 
 		if (viewMode == 0)
 			setTurntableView(ratio);
@@ -533,7 +542,13 @@ class Viewer
 			}
 		}
 
+		currentText ~= "width=%d height=%d minz=%.2f maxz=%.2f".format(
+			map.width, map.height,
+			map.lowest, map.highest
+		);
+
 		sfRenderWindow_pushGLStates(window);
+		sfText_setString(text, currentText.join("\n").toStringz);
 		sfRenderWindow_drawText(window, text, null);
 		sfRenderWindow_popGLStates(window);
 
