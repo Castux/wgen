@@ -818,4 +818,57 @@ class Heightmap
 
 		heightmap = output;
 	}
+
+	private void writeImage(T)(double[] data, string path)
+	{
+		import gamut;
+		auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
+
+		writefln("Exporting %d bits heightmap to %s", T.sizeof * 8, path);
+
+		T[] output = new T[data.length];
+		bool outOfBounds;
+		float outOfBoundsValue;
+
+		foreach(i, v; data)
+		{
+			if (v.isNaN)
+			{
+				outOfBounds = true;
+				outOfBoundsValue = v;
+				v = 0.0;
+			}
+
+			auto tmp = v.floor;
+			if (tmp < 0 || tmp > T.max)
+			{
+				outOfBounds = true;
+				outOfBoundsValue = tmp;
+			}
+			tmp = tmp.clamp(0, T.max);
+			output[i] = tmp.to!T;
+		}
+
+		writefln("Warning, some values out of bounds: %f", outOfBoundsValue);
+		writefln("Range: %d, %d", output.minElement, output.maxElement);
+
+		Image image;
+		image.createViewFromData(output.ptr, width, height, PT, width * T.sizeof.to!int);
+		image.flipVertical();
+		image.saveToFile(path);
+	}
+
+	void exportHeightmaps(string heightmapPath, string waterLevelPath)
+	{
+		if (conf.png16)
+		{
+			writeImage!ushort(heightmap, heightmapPath);
+			writeImage!ushort(waterLevel, waterLevelPath);
+		}
+		else
+		{
+			writeImage!ubyte(heightmap, heightmapPath);
+			writeImage!ubyte(waterLevel, waterLevelPath);
+		}
+	}
 }

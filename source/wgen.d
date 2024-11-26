@@ -13,46 +13,6 @@ import obj;
 import image;
 import viewer;
 
-void outputHeightmap(T)(T[] data, int width, int height, string path)
-{
-	import gamut;
-	writeln("Exporting heightmap: ", path);
-
-	alias T = ubyte;
-	auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
-
-	T[] output = new T[data.length];
-	bool outOfBounds;
-	float outOfBoundsValue;
-
-	foreach(i, v; data)
-	{
-		if (v.isNaN)
-		{
-			v = 0.0;
-			outOfBounds = true;
-			outOfBoundsValue = v;
-		}
-
-		auto tmp = v.floor;
-		if (tmp < 0 || tmp > T.max)
-		{
-			outOfBounds = true;
-			outOfBoundsValue = tmp;
-		}
-		tmp = tmp.clamp(0, T.max);
-		output[i] = tmp.to!T;
-	}
-
-	writefln("Warning, some values out of bounds: %f", outOfBoundsValue);
-	writefln("Range: %d, %d", output.minElement, output.maxElement);
-
-	Image image;
-	image.createViewFromData(output.ptr, width, height, PT, width * T.sizeof.to!int);
-	image.flipVertical();
-	image.saveToFile(path);
-}
-
 int main(string[] args)
 {
 	if (args.length < 2)
@@ -71,8 +31,7 @@ int main(string[] args)
 		writeln("Exporting");
 		if (map.conf.exportSVG) exportSVG(map, path ~ ".svg");
 		if (map.conf.exportOBJ) exportOBJ(map, path ~ ".obj");
-		outputHeightmap(map.heightmap, map.width, map.height, path ~ ".png");
-		outputHeightmap(map.waterLevel, map.width, map.height, path ~ "-w.png");
+		map.exportHeightmaps(path ~ ".png", path ~ "-w.png");
 	}
 
 	if (interactive)

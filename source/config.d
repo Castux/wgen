@@ -45,6 +45,7 @@ class Config
 
 	bool exportOBJ;
 	bool exportSVG;
+	bool png16;
 
 	this(string jsonPath)
 	{
@@ -60,17 +61,21 @@ class Config
 		erosionMinFlow = json["erosionMinFlow"].get!int;
 		erosionFactor = json["erosionFactor"].get!double;
 
+		if ("maxHeight" in json)
+			maxHeight = json["maxHeight"].get!double;
+
+		if ("blurRadius" in json)
+			blurRadius = json["blurRadius"].get!int;
+
 		if ("exportOBJ" in json)
 			exportOBJ = json["exportOBJ"].get!bool;
 
 		if ("exportSVG" in json)
 			exportSVG = json["exportSVG"].get!bool;
 
-		if ("maxHeight" in json)
-			maxHeight = json["maxHeight"].get!double;
+		if ("png16" in json)
+		png16 = json["png16"].get!bool;
 
-		if ("blurRadius" in json)
-			blurRadius = json["blurRadius"].get!int;
 
 		foreach(string name, t; json["terrains"])
 		{
