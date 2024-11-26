@@ -16,7 +16,7 @@ import viewer;
 void outputHeightmap(T)(T[] data, int width, int height, string path)
 {
 	import gamut;
-	writeln("Exporting heightmap");
+	writeln("Exporting heightmap: ", path);
 
 	alias T = ubyte;
 	auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
@@ -27,6 +27,13 @@ void outputHeightmap(T)(T[] data, int width, int height, string path)
 
 	foreach(i, v; data)
 	{
+		if (v.isNaN)
+		{
+			v = 0.0;
+			outOfBounds = true;
+			outOfBoundsValue = v;
+		}
+
 		auto tmp = v.floor;
 		if (tmp < 0 || tmp > T.max)
 		{
