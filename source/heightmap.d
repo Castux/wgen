@@ -150,6 +150,7 @@ class Heightmap
 
 	bool interactive;
 	int changeCount;
+	bool loading;
 
 	this(string path)
 	{
@@ -169,6 +170,8 @@ class Heightmap
 
 	void checkConfigUpdate()
 	{
+		loading = true;
+
 		foreach (event; configWatcher.getEvents())
 		if (event.type == FileChangeEventType.modify)
 		{
@@ -183,15 +186,13 @@ class Heightmap
 			int oldHeight = outline.height;
 
 			writeln("=================");
-			writeln("Loading " ~ conf.path);
-			outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
-			if (outline.isError)
-				throw new Exception("Could not load " ~ conf.path);
-			outline.flipVertical();
+			loadOutline();
 
 			auto sameSize = oldWidth == outline.width && oldHeight == outline.height;
 			updateConfig(conf, skipImageLoad: true, skipMesh: sameSize);
 		}
+
+		loading = false;
 	}
 
 	private enum Phase
@@ -202,6 +203,15 @@ class Heightmap
 		NewErosion,
 		Rasterize,
 		None
+	}
+
+	private void loadOutline()
+	{
+		writeln("Loading " ~ conf.path);
+		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
+		if (outline.isError)
+			throw new Exception("Could not load " ~ conf.path);
+		outline.flipVertical();
 	}
 
 	private void updateConfig(Config newConf, bool skipImageLoad = false, bool skipMesh = false)
@@ -235,16 +245,9 @@ class Heightmap
 		else if (conf.blurRadius != old.blurRadius)
 			phase = Phase.Rasterize;
 
-		if (phase <= Phase.NewImage)
+		if (phase <= Phase.NewImage && !skipImageLoad)
 		{
-			if (!skipImageLoad)
-			{
-				writeln("Loading " ~ conf.path);
-				outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
-				if (outline.isError)
-					throw new Exception("Could not load " ~ conf.path);
-				outline.flipVertical();
-			}
+			loadOutline();
 		}
 
 		if (phase <= Phase.NewMesh)
@@ -269,17 +272,6 @@ class Heightmap
 			}
 		}
 
-		auto updateTask = task(&updateConfig2, phase);
-		updateTask.executeInNewThread();
-
-		if (!interactive)
-		{
-			updateTask.yieldForce();
-		}
-	}
-
-	void updateConfig2(Phase phase)
-	{
 		if (phase <= Phase.NewTerrain)
 		{
 			vertices.each!(v => v.reset);

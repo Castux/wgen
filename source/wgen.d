@@ -5,6 +5,7 @@ import std.regex;
 import std.algorithm;
 import std.math;
 import std.array;
+import std.parallelism;
 
 import config;
 import heightmap;
@@ -41,9 +42,13 @@ int main(string[] args)
 
 		while (true)
 		{
-			map.checkConfigUpdate();
-			viewer.update(map);
+			if (!map.loading)
+			{
+				auto updateTask = task(&map.checkConfigUpdate);
+				updateTask.executeInNewThread();
+			}
 
+			viewer.update(map);
 			auto shouldClose = viewer.draw();
 			if (shouldClose)
 				break;
