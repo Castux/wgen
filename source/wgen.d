@@ -37,12 +37,11 @@ int main(string[] args)
 	if (interactive)
 	{
 		Viewer viewer = new Viewer(map, "wgen");
+		map.interactive = true;
 
 		while (true)
 		{
-			auto changed = map.checkConfigUpdate();
-			if (changed)
-				viewer.onMapChanged();
+			map.checkConfigUpdate();
 
 			auto shouldClose = viewer.draw();
 			if (shouldClose)

@@ -148,6 +148,9 @@ class Heightmap
 	double[] heightmap;
 	double[] waterLevel;
 
+	bool interactive;
+	int changeCount;
+
 	this(string path)
 	{
 		loadConfig(path);
@@ -155,6 +158,8 @@ class Heightmap
 
 	private void loadConfig(string path)
 	{
+		writeln("Loading ", path);
+
 		auto config = new Config(path);
 		updateConfig(config);
 
@@ -162,13 +167,13 @@ class Heightmap
 		imageWatcher = FileWatch(config.path);
 	}
 
-	bool checkConfigUpdate()
+	void checkConfigUpdate()
 	{
 		foreach (event; configWatcher.getEvents())
 		if (event.type == FileChangeEventType.modify)
 		{
+			writeln("=================");
 			loadConfig(event.path);
-			return true;
 		}
 
 		foreach (event; imageWatcher.getEvents())
@@ -177,6 +182,8 @@ class Heightmap
 			int oldWidth = outline.width;
 			int oldHeight = outline.height;
 
+			writeln("=================");
+			writeln("Loading " ~ conf.path);
 			outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
 			if (outline.isError)
 				throw new Exception("Could not load " ~ conf.path);
@@ -184,11 +191,17 @@ class Heightmap
 
 			auto sameSize = oldWidth == outline.width && oldHeight == outline.height;
 			updateConfig(conf, skipImageLoad: true, skipMesh: sameSize);
-
-			return true;
 		}
+	}
 
-		return false;
+	private enum Phase
+	{
+		NewImage,
+		NewMesh,
+		NewTerrain,
+		NewErosion,
+		Rasterize,
+		None
 	}
 
 	private void updateConfig(Config newConf, bool skipImageLoad = false, bool skipMesh = false)
@@ -196,94 +209,117 @@ class Heightmap
 		auto old = conf;
 		conf = newConf;
 
+		Phase phase = Phase.None;
 		Triangulation triangulation;
 
 		if (old is null ||
 			old is conf ||
-			conf.path != old.path ||
-			conf.resolution != old.resolution ||
+			conf.path != old.path)
+			phase = Phase.NewImage;
+
+		else if (conf.resolution != old.resolution ||
 			conf.relax != old.relax ||
 			conf.grid != old.grid ||
 			conf.jitter != old.jitter)
-			goto NewMesh;
+			phase = Phase.NewMesh;
 
-		if (conf.terrains != old.terrains ||
+		else if (conf.terrains != old.terrains ||
 			conf.smoothingRadius != old.smoothingRadius ||
 			conf.maxHeight != old.maxHeight)
-			goto NewTerrain;
+			phase = Phase.NewTerrain;
 
-		if (conf.erosionMinFlow != old.erosionMinFlow ||
+		else if (conf.erosionMinFlow != old.erosionMinFlow ||
 			conf.erosionFactor != old.erosionFactor)
-			goto NewErosion;
+			phase = Phase.NewErosion;
 
-		if (conf.blurRadius != old.blurRadius)
-			goto Default;
+		else if (conf.blurRadius != old.blurRadius)
+			phase = Phase.Rasterize;
 
-		NewMesh:
-
-		if (!skipImageLoad)
+		if (phase <= Phase.NewImage)
 		{
-			writeln("Loading " ~ conf.path);
-			outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
-			if (outline.isError)
-				throw new Exception("Could not load " ~ conf.path);
-			outline.flipVertical();
-		}
-
-		width = outline.width;
-		height = outline.height;
-		resolution = conf.resolution;
-
-		if (!skipMesh)
-		{
-			writeln("Triangulating");
-			triangulation = generateTriangulation();
-
-			writeln("Building graph");
-			createGraph(triangulation.edges);
-
-			if (conf.relax)
+			if (!skipImageLoad)
 			{
-				writeln("Relaxing");
-				relaxGraph();
+				writeln("Loading " ~ conf.path);
+				outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
+				if (outline.isError)
+					throw new Exception("Could not load " ~ conf.path);
+				outline.flipVertical();
 			}
 		}
 
-		NewTerrain:
-
-		vertices.each!(v => v.reset);
-		triangles.each!(t => t.reset);
-		shores = [];
-
-		writeln("Assigning terrain types");
-		assignTerrainTypes();
-
-		writeln("Computing elevation");
-		computeElevation();
-
-		writeln("Computing river flow");
-		computeRiverFlow();
-
-		NewErosion:
-
-		writeln("Eroding");
-		computeElevation(erosionPass: true);
-
-		writeln("Computing water depth");
-		computeWaterDepth();
-		finalizeElevation();
-		writefln("Range %f %f", lowest, highest);
-
-		Default:
-
-		writeln("Rasterizing");
-		rasterize();
-
-		if (conf.blurRadius > 0)
+		if (phase <= Phase.NewMesh)
 		{
-			writeln("Applying blur");
-			blurHeightmap();
+			width = outline.width;
+			height = outline.height;
+			resolution = conf.resolution;
+
+			if (!skipMesh)
+			{
+				writeln("Triangulating");
+				triangulation = generateTriangulation();
+
+				writeln("Building graph");
+				createGraph(triangulation.edges);
+
+				if (conf.relax)
+				{
+					writeln("Relaxing");
+					relaxGraph();
+				}
+			}
 		}
+
+		auto updateTask = task(&updateConfig2, phase);
+		updateTask.executeInNewThread();
+
+		if (!interactive)
+		{
+			updateTask.yieldForce();
+		}
+	}
+
+	void updateConfig2(Phase phase)
+	{
+		if (phase <= Phase.NewTerrain)
+		{
+			vertices.each!(v => v.reset);
+			triangles.each!(t => t.reset);
+			shores = [];
+
+			writeln("Assigning terrain types");
+			assignTerrainTypes();
+
+			writeln("Computing elevation");
+			computeElevation();
+
+			writeln("Computing river flow");
+			computeRiverFlow();
+		}
+
+		if (phase <= Phase.NewErosion)
+		{
+			writeln("Eroding");
+			computeElevation(erosionPass: true);
+
+			writeln("Computing water depth");
+			computeWaterDepth();
+			finalizeElevation();
+			writefln("Range %f %f", lowest, highest);
+		}
+
+		if (phase <= Phase.Rasterize)
+		{
+			writeln("Rasterizing");
+			rasterize();
+
+			if (conf.blurRadius > 0)
+			{
+				writeln("Applying blur");
+				blurHeightmap();
+			}
+		}
+
+		changeCount++;
 	}
 
 	double margin() const
@@ -730,8 +766,8 @@ class Heightmap
 
 	private void rasterize()
 	{
-		heightmap = new double[height * width];
-		waterLevel = new double[height * width];
+		auto heightmap = new double[height * width];
+		auto waterLevel = new double[height * width];
 
 		foreach(tri; triangles.parallel)
 		{
@@ -760,6 +796,9 @@ class Heightmap
 				}
 			}
 		}
+
+		this.heightmap = heightmap;
+		this.waterLevel = waterLevel;
 	}
 
 	private static int[] binomialCoefs(int order) pure

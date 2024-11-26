@@ -159,6 +159,8 @@ class Viewer
 
 	Heightmap map;
 	Model mainMesh;
+	double[] heightmap;
+	double[] waterLevel;
 
 	int shadingMode;
 	int viewMode;
@@ -172,6 +174,8 @@ class Viewer
 	int cubeMode;
 	Model cubeMesh;
 	int cubesRadius = 100;
+
+	int changeCount;
 
 	StopWatch sw;
 
@@ -224,7 +228,6 @@ class Viewer
 		makeCubeMesh();
 
 		mainMesh = new Model(program);
-		onMapChanged();
 
 		sw.start();
 		lastFpsUpdate = time;
@@ -359,7 +362,7 @@ class Viewer
 		return a * (1-x) + b * x;
 	}
 
-	double getZ(Vec2 pos, bool waterLevel = false)
+	double getZ(Vec2 pos, bool getWaterLevel = false)
 	{
 		real x, y;
 		real xfrac = modf(pos.x, x);
@@ -368,7 +371,7 @@ class Viewer
 		auto xint = x.lrint.clamp(0, map.width - 2);
 		auto yint = y.lrint.clamp(0, map.height - 2);
 
-		const array = waterLevel ? map.waterLevel : map.heightmap;
+		const array = getWaterLevel ? waterLevel : heightmap;
 
 		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
 		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
@@ -470,6 +473,12 @@ class Viewer
 
 	bool draw()
 	{
+		if (map.changeCount != changeCount)
+		{
+			onMapChanged();
+			changeCount = map.changeCount;
+		}
+
 		sfEvent event;
 		while (sfRenderWindow_pollEvent(window, &event))
 		{
@@ -534,7 +543,7 @@ class Viewer
 
 				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
-				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, waterLevel: true));
+				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, getWaterLevel: true));
 
 				auto color = map.getPixel(pos.y.to!int, pos.x.to!int);
 				float[3] normalized = [color.r / 255.0, color.g / 255.0, color.b / 255.0];
@@ -575,7 +584,10 @@ class Viewer
 
 	void onMapChanged()
 	{
+		writeln("Updating visuals");
 		updateMainMesh();
+		heightmap = map.heightmap;
+		waterLevel = map.waterLevel;
 	}
 
 	private static void makeSquare(Vertex[] vertices, Vec3 a, Vec3 b, Vec3 c, Vec3 d) pure
