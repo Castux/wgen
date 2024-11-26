@@ -13,12 +13,12 @@ import obj;
 import image;
 import viewer;
 
-void outputHeightmap(float[] data, int width, int height, string path)
+void outputHeightmap(T)(T[] data, int width, int height, string path)
 {
 	import gamut;
 	writeln("Exporting heightmap");
 
-	alias T = ushort;
+	alias T = ubyte;
 	auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
 
 	T[] output = new T[data.length];
@@ -50,40 +50,46 @@ int main(string[] args)
 {
 	if (args.length < 2)
 	{
-		writeln("Usage: wgen <path>");
+		writeln("Usage: wgen <path> [--interactive]");
 		return 1;
 	}
 
 	auto path = args[1];
+	bool interactive = args.length >= 3 && args[2] == "--interactive";
+
 	Heightmap map = new Heightmap(path);
-	auto viewer = new Viewer(map, "wgen");
 
 	void doExport()
 	{
-		outputHeightmap(viewer.blurredHeightmap, map.width, map.height, path ~ ".png");
-		outputHeightmap(viewer.waterLevelHeightmap, map.width, map.height, path ~ "-w.png");
+		writeln("Exporting");
+		if (map.conf.exportSVG) exportSVG(map, path ~ ".svg");
+		if (map.conf.exportOBJ) exportOBJ(map, path ~ ".obj");
+		outputHeightmap(map.heightmap, map.width, map.height, path ~ ".png");
+		outputHeightmap(map.waterLevel, map.width, map.height, path ~ "-w.png");
 	}
 
-	while (true)
+	if (interactive)
 	{
-		auto changed = map.checkConfigUpdate();
-		if (changed)
-			viewer.onMapChanged();
+		Viewer viewer = new Viewer(map, "wgen");
 
-		auto shouldClose = viewer.draw();
-		if (shouldClose)
-			break;
-
-		if (viewer.requestExport)
+		while (true)
 		{
-			viewer.requestExport = false;
-			doExport();
+			auto changed = map.checkConfigUpdate();
+			if (changed)
+				viewer.onMapChanged();
+
+			auto shouldClose = viewer.draw();
+			if (shouldClose)
+				break;
+
+			if (viewer.requestExport)
+			{
+				viewer.requestExport = false;
+				doExport();
+			}
 		}
 	}
 
-	writeln("Exporting");
-	if (map.conf.exportSVG) exportSVG(map, path ~ ".svg");
-	if (map.conf.exportOBJ) exportOBJ(map, path ~ ".obj");
 	doExport();
 
 	return 0;

@@ -6,6 +6,7 @@ import std.conv;
 import std.range;
 import std.typecons;
 import std.stdio;
+import std.parallelism;
 
 import fswatch;
 import dplug.math;
@@ -144,8 +145,8 @@ class Heightmap
 	Vertex[] shores;
 	double lowest, highest;
 
-	Triangle[][][] spatialIndex;
-	double binSize;
+	double[] heightmap;
+	double[] waterLevel;
 
 	this(string path)
 	{
@@ -232,7 +233,6 @@ class Heightmap
 		width = outline.width;
 		height = outline.height;
 		resolution = conf.resolution;
-		binSize = conf.resolution * 4;
 
 		if (!skipMesh)
 		{
@@ -276,6 +276,14 @@ class Heightmap
 
 		Default:
 
+		writeln("Rasterizing");
+		rasterize();
+
+		if (conf.blurRadius > 0)
+		{
+			writeln("Applying blur");
+			blurHeightmap();
+		}
 	}
 
 	double margin() const
@@ -705,107 +713,109 @@ class Heightmap
 		return (x - a) / (b - a) * (v - u) + u;
 	}
 
-	private void indexTriangles()
+	static double cross2d(Vec2 a, Vec2 b) pure
 	{
-		auto numBinsH = ceil(height / binSize).to!int;
-		auto numBinsW = ceil(width / binSize).to!int;
-
-		auto index = new Triangle[][][numBinsH];
-		foreach(ref row; index)
-			row = new Triangle[][numBinsW];
-
-		foreach(triangle; triangles)
-		{
-			if (!inBounds(triangle.pos)) continue;
-
-			auto row = floor(triangle.y / binSize).to!int;
-			auto col = floor(triangle.x / binSize).to!int;
-
-			index[row][col] ~= triangle;
-		}
-
-		spatialIndex = index;
+		return a.x * b.y - a.y * b.x;
 	}
 
-	alias BinResult = Tuple!(Triangle,double[3]);
-
-	private static BinResult findTriangleInBin(Vec2 p, Triangle[] bin)
+	static Vec3 barycentricCoordinates(Vec2 a, Vec2 b, Vec2 c, Vec2 p) pure
 	{
-		foreach(triangle; bin)
+		auto x = cross2d(b - p, c - p);
+		auto y = cross2d(c - p, a - p);
+		auto z = cross2d(a - p, b - p);
+		auto s = x + y + z;
+
+		return Vec3(x / s, y / s, z / s);
+	}
+
+	private void rasterize()
+	{
+		heightmap = new double[height * width];
+		waterLevel = new double[height * width];
+
+		foreach(tri; triangles.parallel)
 		{
-			auto bary = barycentricCoordinates(triangle.vertices[0].xy, triangle.vertices[1].xy, triangle.vertices[2].xy, p);
-			if (bary[0] >= 0 && bary[1] >= 0 && bary[2] >= 0)
+			auto p0 = tri.vertices[0];
+			auto p1 = tri.vertices[1];
+			auto p2 = tri.vertices[2];
+
+			auto z = Vec3(p0.z, p1.z, p2.z);
+			auto water = tri.vertices.all!"a.isWater" ? tri.vertices[0].waterLevel : lowest;
+
+			auto minx = min(p0.x, p1.x, p2.x).floor.to!int;
+			auto miny = min(p0.y, p1.y, p2.y).floor.to!int;
+			auto maxx = max(p0.x, p1.x, p2.x).ceil.to!int;
+			auto maxy = max(p0.y, p1.y, p2.y).ceil.to!int;
+
+			foreach(x; minx .. maxx + 1)
+			foreach(y; miny .. maxy + 1)
 			{
-				return tuple(triangle, bary);
+				if (x < 0 || x >= width || y < 0 || y >= height) continue;
+
+				auto coords = barycentricCoordinates(p0.xy, p1.xy, p2.xy, Vec2(x, y));
+				if (coords.x >= 0 && coords.y >= 0 && coords.z >= 0)
+				{
+					heightmap[y * width + x] = dot(z, coords);
+					waterLevel[y * width + x] = water;
+				}
 			}
 		}
-
-		return BinResult.init;
 	}
 
-	private BinResult findTriangle(Vec2 p)
+	private static int[] binomialCoefs(int order) pure
 	{
-		if (!inBounds(p)) return BinResult.init;
+		int[] coefs = [1];
+		foreach(k; 1 .. order + 1)
+			coefs ~= coefs[$ - 1] * (order + 1 - k) / k;
 
-		auto row = floor(p.y / binSize).to!int;
-		auto col = floor(p.x / binSize).to!int;
+		return coefs;
+	}
 
-		// First check the bin itself
+	private void blurHeightmap()
+	{
+		const radius = conf.blurRadius;
+		if (radius == 0)
+			return;
 
-		auto res = findTriangleInBin(p, spatialIndex[row][col]);
-		if (res[0])
-			return res;
+		auto tmp = new double[heightmap.length];
+		auto output = new double[heightmap.length];
 
-		// Then the ones around
+		auto coefs = binomialCoefs(2 * radius)[radius .. $];
 
-		auto numBinsH = spatialIndex.length;
-		auto numBinsW = spatialIndex[0].length;
-
-		for(int r = row - 1; r <= row + 1; r++)
-		for(int c = col - 1; c <= col + 1; c++)
+		foreach(row; iota(0, height).array.parallel)
+		foreach(col; 0 .. width)
 		{
-			if (r == row && c == col) continue;
-			if (c < 0 || c >= numBinsW) continue;
-			if (r < 0 || r >= numBinsH) continue;
+			double sum = 0.0;
+			int coefsum = 0;
 
-			res = findTriangleInBin(p, spatialIndex[r][c]);
-			if (res[0])
-				return res;
+			foreach(dcol; -radius .. radius + 1)
+			{
+				auto c = col + dcol;
+				if (c < 0 || c >= width) continue;
+				sum += heightmap[row * width + c] * coefs[dcol.abs];
+				coefsum += coefs[dcol.abs];
+			}
+
+			tmp[row * width + col] = sum / coefsum;
 		}
 
-		return BinResult.init;
-	}
-
-	private static double interpolateElevation(BinResult res)
-	{
-		auto c = res[0];
-		auto coords = res[1];
-
-		return
-			c.vertices[0].z * coords[0] +
-			c.vertices[1].z * coords[1] +
-			c.vertices[2].z * coords[2];
-	}
-
-	double[][] rasterize()
-	{
-		import std.stdio;
-
-		indexTriangles();
-
-		auto data = new double[][height];
-		foreach (ref row; data)
-			row = new double[width];
-
-		foreach(row; 0..height)
-		foreach(col; 0..width)
+		foreach(col; iota(0, width).array.parallel)
+		foreach(row; 0 .. height)
 		{
-			auto p = Vec2(col, row);
-			auto res = findTriangle(p);
-			if (res[0])
-				data[row][col] = interpolateElevation(res);
+			double sum = 0.0;
+			int coefsum = 0;
+
+			foreach(drow; -radius .. radius + 1)
+			{
+				auto r = row + drow;
+				if (r < 0 || r >= height) continue;
+				sum += tmp[r * width + col] * coefs[drow.abs];
+				coefsum += coefs[drow.abs];
+			}
+
+			output[row * width + col] = sum / coefsum;
 		}
 
-		return data;
+		heightmap = output;
 	}
 }
