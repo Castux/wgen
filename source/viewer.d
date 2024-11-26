@@ -155,6 +155,9 @@ class Viewer
 	static Viewer singleton;
 
 	sfRenderWindow* window;
+	sfFont* font;
+	sfText* text;
+
 	GLuint program;
 	bool requestExport;
 
@@ -198,6 +201,16 @@ class Viewer
 			throw new Exception("Could not open SFML window");
 		sfRenderWindow_setVerticalSyncEnabled(window, true);
 
+		font = sfFont_createFromFile("CascadiaMono.ttf");
+		if (!font)
+			throw new Exception("Could not load font");
+
+		text = sfText_create();
+		sfText_setFont(text, font);
+		sfText_setPosition(text, sfVector2f(20, 20));
+		sfText_setCharacterSize(text, 20);
+		sfText_setFillColor(text, sfBlack);
+
 		if(loadOpenGL() != GLSupport.gl33)
 		{
 			bindbcError();
@@ -229,6 +242,9 @@ class Viewer
 	~this()
 	{
 		singleton = null;
+
+		sfText_destroy(text);
+		sfFont_destroy(font);
 		sfRenderWindow_destroy(window);
 	}
 
@@ -338,8 +354,8 @@ class Viewer
 		real xfrac = modf(pos.x, x);
 		real yfrac = modf(pos.y, y);
 
-		auto xint = x.lrint;
-		auto yint = y.lrint;
+		auto xint = x.lrint.clamp(0, map.width - 2);
+		auto yint = y.lrint.clamp(0, map.height - 2);
 
 		const array = waterLevel ? map.waterLevel : map.heightmap;
 
@@ -433,6 +449,12 @@ class Viewer
 
 		auto model = Mat4.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
+
+		sfText_setString(text, "%d %d %d".format(
+			firstPersonPos.x.roundTo!int,
+			firstPersonPos.y.roundTo!int,
+			firstPersonPos.z.roundTo!int)
+		.toStringz);
 	}
 
 	bool draw()
@@ -459,6 +481,8 @@ class Viewer
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(program);
+
+		sfText_setString(text, "");
 
 		if (viewMode == 0)
 			setTurntableView(ratio);
@@ -508,6 +532,10 @@ class Viewer
 				cubeMesh.draw();
 			}
 		}
+
+		sfRenderWindow_pushGLStates(window);
+		sfRenderWindow_drawText(window, text, null);
+		sfRenderWindow_popGLStates(window);
 
 		sfRenderWindow_display(window);
 		return sfRenderWindow_isOpen(window) == sfFalse;
@@ -635,6 +663,7 @@ class Model
 
 		glGenVertexArrays(1, &vertexArray);
 		glBindVertexArray(vertexArray);
+
 		glEnableVertexAttribArray(vposLocation);
 		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
 		glEnableVertexAttribArray(vnormLocation);
@@ -645,6 +674,9 @@ class Model
 		glVertexAttribPointer(vcolorLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.color.offsetof);
 		glEnableVertexAttribArray(vwaterLevelLocation);
 		glVertexAttribPointer(vwaterLevelLocation, 1, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.waterLevel.offsetof);
+
+		glBindVertexArray(0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
 	~this()
@@ -657,11 +689,13 @@ class Model
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
 		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 
 	void draw()
 	{
 		glBindVertexArray(vertexArray);
 		glDrawArrays(GL_TRIANGLES, 0, cast(int) vertices.length);
+		glBindVertexArray(0);
 	}
 }

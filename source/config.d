@@ -76,7 +76,6 @@ class Config
 		if ("png16" in json)
 		png16 = json["png16"].get!bool;
 
-
 		foreach(string name, t; json["terrains"])
 		{
 			auto terrain = new Terrain();
