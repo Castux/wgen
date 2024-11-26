@@ -21,9 +21,23 @@ void outputHeightmap(float[] data, int width, int height, string path)
 	alias T = ushort;
 	auto PT = (typeid(T) == typeid(ushort)) ? PixelType.l16 : PixelType.l8;
 
-	auto floored = data.map!("a.floor.lrint");
-	T[] output = floored.map!(v => v.to!T).array;
+	T[] output = new T[data.length];
+	bool outOfBounds;
+	float outOfBoundsValue;
 
+	foreach(i, v; data)
+	{
+		auto tmp = v.floor;
+		if (tmp < 0 || tmp > T.max)
+		{
+			outOfBounds = true;
+			outOfBoundsValue = tmp;
+		}
+		tmp = tmp.clamp(0, T.max);
+		output[i] = tmp.to!T;
+	}
+
+	writefln("Warning, some values out of bounds: %f", outOfBoundsValue);
 	writefln("Range: %d, %d", output.minElement, output.maxElement);
 
 	Image image;

@@ -473,7 +473,7 @@ class Heightmap
 		createGraph(triangulation.edges);
 	}
 
-	private Pixel getPixel(int row, int col)
+	Pixel getPixel(int row, int col)
 	{
 		row = clamp(row, 0, height - 1);
 		col = clamp(col, 0, width - 1);

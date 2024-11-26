@@ -22,6 +22,7 @@ struct Vertex
 	Vec3 pos;
 	Vec3 norm;
 	Vec3 coord;
+	Vec3 color;
 	float waterLevel;
 }
 
@@ -51,13 +52,16 @@ static const char* vertex_shader_text = `
 uniform mat4 PV;
 uniform mat4 M;
 uniform float waterLevelOverride;
+uniform vec3 colorOverride;
 in vec3 vNorm;
 in vec3 vPos;
 in vec3 vCoord;
+in vec3 vColor;
 in float vWaterLevel;
 out vec3 worldPos;
 out vec3 normal;
 out vec3 coord;
+out vec3 terrainColor;
 out float waterLevel;
 void main()
 {
@@ -65,6 +69,7 @@ void main()
 	gl_Position = PV * pos;
 	normal = vNorm;
 	coord = vCoord;
+	terrainColor = vColor.x < 0 ? colorOverride : vColor;
 	worldPos = pos.xyz;
 	waterLevel = max(waterLevelOverride, vWaterLevel);
 }`;
@@ -81,6 +86,7 @@ uniform vec4 fpsCenter;
 in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
+in vec3 terrainColor;
 in float waterLevel;
 out vec4 fragment;
 
@@ -123,6 +129,10 @@ void main()
 		{
 			color = mix(vec3(42, 84, 25), vec3(200, 255, 200), f) / 255.0;
 		}
+	}
+	else if (mode == 3)
+	{
+		color = terrainColor;
 	}
 
 	float shading = 1.0;
@@ -472,6 +482,10 @@ class Viewer
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, waterLevel: true));
 
+				auto color = map.getPixel(pos.y.to!int, pos.x.to!int);
+				float[3] normalized = [color.r / 255.0, color.g / 255.0, color.b / 255.0];
+				glUniform3fv(glGetUniformLocation(program, "colorOverride"), 1, normalized.ptr);
+
 				cubeMesh.draw();
 			}
 		}
@@ -593,13 +607,13 @@ class Viewer
 	{
 		auto normal = cross(b - a, c - a).normalized;
 
-		vertices[0] = Vertex(a, normal, Vec3(1,0,0), float.nan);
-		vertices[1] = Vertex(b, normal, Vec3(0,1,0), float.nan);
-		vertices[2] = Vertex(d, normal, Vec3(0,0,1), float.nan);
+		vertices[0] = Vertex(a, normal, coord: Vec3(1,0,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
+		vertices[1] = Vertex(b, normal, coord: Vec3(0,1,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
+		vertices[2] = Vertex(d, normal, coord: Vec3(0,0,1), color: Vec3(-1,-1,-1), waterLevel: float.nan);
 
-		vertices[3] = Vertex(b, normal, Vec3(1,0,0), float.nan);
-		vertices[4] = Vertex(c, normal, Vec3(0,1,0), float.nan);
-		vertices[5] = Vertex(d, normal, Vec3(0,0,1), float.nan);
+		vertices[3] = Vertex(b, normal, coord: Vec3(1,0,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
+		vertices[4] = Vertex(c, normal, coord: Vec3(0,1,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
+		vertices[5] = Vertex(d, normal, coord: Vec3(0,0,1), color: Vec3(-1,-1,-1), waterLevel: float.nan);
 	}
 
 	private void makeCubeMesh()
@@ -635,10 +649,14 @@ class Viewer
 
 			foreach (j, vertex; triangle.vertices)
 			{
+				import config;
+				auto color = vertex.terrain ? vertex.terrain.color : Pixel(0,255,255);
+
 				mainMesh.vertices[i * 3 + j] = Vertex(
 					Vec3(vertex.pos),
 					Vec3(triangle.normal),
 					coords[j],
+					Vec3(color.r, color.g, color.b) / 255.0,
 					waterTri ? vertex.waterLevel : map.lowest
 				);
 			}
@@ -659,7 +677,7 @@ class Viewer
 				break;
 
 			case GLFW_KEY_TAB:
-				shadingMode = (shadingMode + 1) % 3;
+				shadingMode = (shadingMode + 1) % 4;
 				break;
 
 			case GLFW_KEY_V:
@@ -704,6 +722,7 @@ class Model
 		GLint vposLocation = glGetAttribLocation(program, "vPos");
 		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
 		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
+		GLint vcolorLocation = glGetAttribLocation(program, "vColor");
 		GLint vwaterLevelLocation = glGetAttribLocation(program, "vWaterLevel");
 
 		glGenVertexArrays(1, &vertexArray);
@@ -714,6 +733,8 @@ class Model
 		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
 		glEnableVertexAttribArray(vcoordLocation);
 		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
+		glEnableVertexAttribArray(vcolorLocation);
+		glVertexAttribPointer(vcolorLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.color.offsetof);
 		glEnableVertexAttribArray(vwaterLevelLocation);
 		glVertexAttribPointer(vwaterLevelLocation, 1, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.waterLevel.offsetof);
 	}
