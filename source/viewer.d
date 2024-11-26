@@ -6,8 +6,10 @@ import std.algorithm;
 import std.conv;
 import std.range;
 import std.parallelism;
+import std.datetime.stopwatch;
+import std.string;
 
-import bindbc.glfw;
+import bindbc.sfml;
 import bindbc.opengl;
 public import dplug.math;
 
@@ -24,18 +26,6 @@ struct Vertex
 	Vec3 coord;
 	Vec3 color;
 	float waterLevel;
-}
-
-extern(C) nothrow void errorCallback(int error, const(char)* description)
-{
-	import core.stdc.stdio;
-	printf("Error: %s\n", description);
-}
-
-extern(C) nothrow void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-	if (Viewer.singleton && Viewer.singleton.window == window)
-		assumeWontThrow(Viewer.singleton.onKeyEvent(key, scancode, action, mods));
 }
 
 void checkError(string error)
@@ -164,7 +154,7 @@ class Viewer
 {
 	static Viewer singleton;
 
-	GLFWwindow* window;
+	sfRenderWindow* window;
 	GLuint program;
 	bool requestExport;
 
@@ -183,33 +173,36 @@ class Viewer
 	int cubeMode;
 	Model cubeMesh;
 
+	StopWatch sw;
+
 	this(Heightmap map, string title)
 	{
 		this.map = map;
 
-		if(loadGLFW() != glfwSupport)
-			throw new Exception("Could not load GLFW library");
+		if(!loadSFML())
+		{
+			bindbcError();
+			throw new Exception("Could not load SFML library");
+		}
 
-		if (!glfwInit())
-			throw new Exception("Could not initialize GLFW");
+		auto mode = sfVideoMode(1024, 768, 32);
+		sfContextSettings settings;
+		settings.depthBits = 24;
+		settings.stencilBits = 8;
+		settings.antialiasingLevel = 2;
+		settings.majorVersion = 3;
+		settings.minorVersion = 3;
 
-		glfwSetErrorCallback(&errorCallback);
-
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		glfwWindowHint(GLFW_SAMPLES, 2);
-
-		window = glfwCreateWindow(1024, 768, title.toStringz, null, null);
+		window = sfRenderWindow_create(mode, "wgen", sfResize | sfClose, &settings);
 		if (!window)
-			throw new Exception("Could not create window");
-
-		glfwMakeContextCurrent(window);
-		glfwSetKeyCallback(window, &keyCallback);
-		glfwSwapInterval(1);
+			throw new Exception("Could not open SFML window");
+		sfRenderWindow_setVerticalSyncEnabled(window, true);
 
 		if(loadOpenGL() != GLSupport.gl33)
+		{
+			bindbcError();
 			throw new Exception("Could not load OpenGL library");
+		}
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
 
@@ -229,14 +222,23 @@ class Viewer
 
 		mainMesh = new Model(program);
 		onMapChanged();
+
+		sw.start();
 	}
 
 	~this()
 	{
 		singleton = null;
+		sfRenderWindow_destroy(window);
+	}
 
-		glfwDestroyWindow(window);
-		glfwTerminate();
+	private void bindbcError()
+	{
+		import bindbc.loader.sharedlib;
+		foreach(info; errors)
+		{
+			writefln("%s: %s", info.error.fromStringz, info.message.fromStringz);
+		}
 	}
 
 	private static void checkShader(GLint shader)
@@ -284,6 +286,11 @@ class Viewer
 		checkProgram(program);
 	}
 
+	private double time()
+	{
+		return sw.peek.total!"msecs" / 1000.0;
+	}
+
 	private void setTurntableView(double ratio)
 	{
 		auto model = Mat4.translation(Vec3(-map.width / 2, -map.height / 2, 0));
@@ -291,7 +298,7 @@ class Viewer
 		model = model.transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
-		auto angle = glfwGetTime() / 5.0;
+		auto angle = time / 5.0;
 
 		auto view = Mat4.lookAt(
 			Vec3(map.width / 2.0 * cos(angle), map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
@@ -362,19 +369,30 @@ class Viewer
 		auto speed = 4.0;
 		const mouseSpeed = 0.15;
 
-		auto now = glfwGetTime();
+		auto now = time;
 		if (lastUpdate.isNaN) lastUpdate = now;
 
 		auto dt = now - lastUpdate;
 		lastUpdate = now;
 
-		if (glfwGetWindowAttrib(window, GLFW_FOCUSED))
+		if (sfRenderWindow_hasFocus(window))
 		{
 			double xpos, ypos;
 			int width, height;
-			glfwGetCursorPos(window, &xpos, &ypos);
-			glfwGetWindowSize(window, &width, &height);
-			glfwSetCursorPos(window, width / 2, height / 2);
+
+			with (sfRenderWindow_getSize(window))
+			{
+				width = x;
+				height = y;
+			}
+
+			with (sfMouse_getPosition(cast(sfWindow*) window))
+			{
+				xpos = x;
+				ypos = y;
+			}
+
+			sfMouse_setPosition(sfVector2i(width / 2, height / 2), cast(sfWindow*) window);
 
 			firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2);
 			firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2);
@@ -384,14 +402,14 @@ class Viewer
 
 			auto previousPos = firstPersonPos;
 
-			if (glfwGetKey(window, GLFW_KEY_LSHIFT) == GLFW_PRESS)
+			if (sfKeyboard_isKeyPressed(sfKeyLShift))
 				speed *= 10.0;
-			if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS)
+			if (sfKeyboard_isKeyPressed(sfKeyZ))
 				speed *= 10.0;
 
-			if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+			if (sfKeyboard_isKeyPressed(sfKeyW))
 				firstPersonPos += forward * speed * dt;
-			if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+			if (sfKeyboard_isKeyPressed(sfKeyS))
 				firstPersonPos -= forward * speed * dt;
 
 			if (!map.inBounds(firstPersonPos))
@@ -419,8 +437,21 @@ class Viewer
 
 	bool draw()
 	{
+		sfEvent event;
+		while (sfRenderWindow_pollEvent(window, &event))
+		{
+			if (event.type == sfEvtClosed)
+				sfRenderWindow_close(window);
+			else if (event.type == sfEvtKeyPressed)
+				onKeyPressed(event.key.code);
+		}
+
 		int width, height;
-		glfwGetFramebufferSize(window, &width, &height);
+		with(sfRenderWindow_getSize(window))
+		{
+			width = x;
+			height = y;
+		}
 		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
@@ -478,10 +509,8 @@ class Viewer
 			}
 		}
 
-		glfwSwapBuffers(window);
-		glfwPollEvents();
-
-		return glfwWindowShouldClose(window) == GLFW_TRUE;
+		sfRenderWindow_display(window);
+		return sfRenderWindow_isOpen(window) == sfFalse;
 	}
 
 	void onMapChanged()
@@ -551,35 +580,32 @@ class Viewer
 		mainMesh.updateData();
 	}
 
-	private void onKeyEvent(int key, int scancode, int action, int mods)
+	private void onKeyPressed(sfKeyCode code)
 	{
-		if (action != GLFW_PRESS)
-			return;
-
-		switch (key)
+		switch (code)
 		{
-			case GLFW_KEY_ESCAPE:
-				glfwSetWindowShouldClose(window, GLFW_TRUE);
+			case sfKeyEscape:
+				sfRenderWindow_close(window);
 				break;
 
-			case GLFW_KEY_TAB:
+			case sfKeyTab:
 				shadingMode = (shadingMode + 1) % 4;
 				break;
 
-			case GLFW_KEY_V:
+			case sfKeyV:
 				viewMode = (viewMode + 1) % 3;
-				glfwSetInputMode(window, GLFW_CURSOR, viewMode == 2 ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+				sfRenderWindow_setMouseCursorVisible(window, viewMode != 2);
 				break;
 
-			case GLFW_KEY_L:
+			case sfKeyL:
 				lineMode = (lineMode + 1) % 4;
 				break;
 
-			case GLFW_KEY_M:
+			case sfKeyM:
 				cubeMode = (cubeMode + 1) % 3;
 				break;
 
-			case GLFW_KEY_ENTER:
+			case sfKeyEnter:
 				requestExport = true;
 				break;
 
