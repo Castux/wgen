@@ -24,6 +24,7 @@ class Terrain
 		return name == o.name &&
 			color == o.color &&
 			gradient == o.gradient &&
+			fixedShore == o.fixedShore &&
 			smoothing == o.smoothing &&
 			erosion == o.erosion;
 	}
