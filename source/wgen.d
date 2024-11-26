@@ -44,8 +44,7 @@ int main(string[] args)
 		{
 			if (!map.loading)
 			{
-				auto updateTask = task(&map.checkConfigUpdate);
-				updateTask.executeInNewThread();
+				task(&map.checkConfigUpdate).executeInNewThread();
 			}
 
 			viewer.update(map);
@@ -56,7 +55,7 @@ int main(string[] args)
 			if (viewer.requestExport)
 			{
 				viewer.requestExport = false;
-				doExport();
+				task(&doExport).executeInNewThread();
 			}
 		}
 	}

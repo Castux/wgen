@@ -3,6 +3,8 @@ import std.array;
 import std.conv;
 import std.algorithm;
 import std.math;
+import std.parallelism;
+import std.range;
 
 import gamut;
 
@@ -16,7 +18,7 @@ void exportHeightmap(double[][] data, string path)
 
 	Image image = Image(width, height, PixelType.l16);
 
-	foreach(int r; 0 .. height)
+	foreach(int r; iota(0, height).parallel)
 	{
 		auto scanline = cast(ushort[]) image.scanline(r);
 		foreach(c, value; data[r])
