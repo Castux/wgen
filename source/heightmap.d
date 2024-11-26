@@ -55,22 +55,22 @@ class Vertex
 		flow = 0;
 	}
 
-	bool isWater()
+	bool isWater() const
 	{
 		return terrain !is null && gradient < 0;
 	}
 
-	bool isLand()
+	bool isLand() const
 	{
 		return terrain !is null && gradient >= 0;
 	}
 
-	bool isLake()
+	bool isLake() const
 	{
 		return isWater && terrain.fixedShore.isNaN;
 	}
 
-	bool isSea()
+	bool isSea() const
 	{
 		return isWater && !terrain.fixedShore.isNaN;
 	}
@@ -517,7 +517,7 @@ class Heightmap
 		createGraph(triangulation.edges);
 	}
 
-	Pixel getPixel(int row, int col)
+	Pixel getPixel(int row, int col) const
 	{
 		row = clamp(row, 0, height - 1);
 		col = clamp(col, 0, width - 1);

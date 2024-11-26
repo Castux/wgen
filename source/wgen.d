@@ -42,6 +42,7 @@ int main(string[] args)
 		while (true)
 		{
 			map.checkConfigUpdate();
+			viewer.update(map);
 
 			auto shouldClose = viewer.draw();
 			if (shouldClose)

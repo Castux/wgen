@@ -141,6 +141,50 @@ void main()
 }`;
 // `
 
+private struct Map
+{
+	int width;
+	int height;
+	double lowest;
+	double highest;
+	const(double)[] heightmap;
+	const(double)[] waterLevel;
+
+	Vec3[] outline;
+
+	int changeCount = -1;
+
+	bool inBounds(V)(V p) const
+	{
+		return p.x >= 0 && p.x < width && p.y >= 0 && p.y < width;
+	}
+
+	void update(const(Heightmap) hmap)
+	{
+		width = hmap.width;
+		height = hmap.height;
+		lowest = hmap.lowest;
+		highest = hmap.highest;
+		heightmap = hmap.heightmap;
+		waterLevel = hmap.waterLevel;
+
+		outline.length = width * height;
+		foreach(row; 0 .. height)
+		foreach(col; 0 .. width)
+		{
+			auto pixel = hmap.getPixel(row, col);
+			outline[row * width + col] = Vec3(pixel.r, pixel.g, pixel.b) / 255.0;
+		}
+	}
+
+	Vec3 getPixel(int row, int col)
+	{
+		row = clamp(row, 0, height - 1);
+		col = clamp(col, 0, width - 1);
+		return outline[row * width + col];
+	}
+}
+
 class Viewer
 {
 	static Viewer singleton;
@@ -157,10 +201,8 @@ class Viewer
 	GLuint program;
 	bool requestExport;
 
-	Heightmap map;
+	Map map;
 	Model mainMesh;
-	double[] heightmap;
-	double[] waterLevel;
 
 	int shadingMode;
 	int viewMode;
@@ -175,14 +217,10 @@ class Viewer
 	Model cubeMesh;
 	int cubesRadius = 100;
 
-	int changeCount;
-
 	StopWatch sw;
 
-	this(Heightmap map, string title)
+	this(Heightmap hmap, string title)
 	{
-		this.map = map;
-
 		if(!loadSFML())
 		{
 			bindbcError();
@@ -219,15 +257,17 @@ class Viewer
 
 		setupShaders();
 
-		firstPersonPos.x = map.width / 2.0;
-		firstPersonPos.y = map.height / 2.0;
-		firstPersonHDir = 0.0;
-		firstPersonVDir = 0.0;
-
 		cubeMesh = new Model(program);
 		makeCubeMesh();
 
 		mainMesh = new Model(program);
+
+		update(hmap);
+
+		firstPersonPos.x = map.width / 2.0;
+		firstPersonPos.y = map.height / 2.0;
+		firstPersonHDir = 0.0;
+		firstPersonVDir = 0.0;
 
 		sw.start();
 		lastFpsUpdate = time;
@@ -241,6 +281,19 @@ class Viewer
 		sfFont_destroy(font);
 		sfView_destroy(view);
 		sfRenderWindow_destroy(window);
+	}
+
+	void update(const(Heightmap) hmap)
+	{
+		if (hmap.changeCount == map.changeCount)
+			return;
+
+		writeln("Updating visuals");
+
+		map.update(hmap);
+		updateMainMesh(hmap);
+
+		map.changeCount = hmap.changeCount;
 	}
 
 	private void bindbcError()
@@ -371,7 +424,7 @@ class Viewer
 		auto xint = x.lrint.clamp(0, map.width - 2);
 		auto yint = y.lrint.clamp(0, map.height - 2);
 
-		const array = getWaterLevel ? waterLevel : heightmap;
+		const array = getWaterLevel ? map.waterLevel : map.heightmap;
 
 		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
 		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
@@ -473,12 +526,6 @@ class Viewer
 
 	bool draw()
 	{
-		if (map.changeCount != changeCount)
-		{
-			onMapChanged();
-			changeCount = map.changeCount;
-		}
-
 		sfEvent event;
 		while (sfRenderWindow_pollEvent(window, &event))
 		{
@@ -546,8 +593,7 @@ class Viewer
 				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, getWaterLevel: true));
 
 				auto color = map.getPixel(pos.y.to!int, pos.x.to!int);
-				float[3] normalized = [color.r / 255.0, color.g / 255.0, color.b / 255.0];
-				glUniform3fv(glGetUniformLocation(program, "colorOverride"), 1, normalized.ptr);
+				glUniform3fv(glGetUniformLocation(program, "colorOverride"), 1, cast(float*) &color);
 
 				cubeMesh.draw();
 
@@ -582,14 +628,6 @@ class Viewer
 		return sfRenderWindow_isOpen(window) == sfFalse;
 	}
 
-	void onMapChanged()
-	{
-		writeln("Updating visuals");
-		updateMainMesh();
-		heightmap = map.heightmap;
-		waterLevel = map.waterLevel;
-	}
-
 	private static void makeSquare(Vertex[] vertices, Vec3 a, Vec3 b, Vec3 c, Vec3 d) pure
 	{
 		auto normal = cross(b - a, c - a).normalized;
@@ -621,10 +659,10 @@ class Viewer
 		cubeMesh.updateData();
 	}
 
-	private void updateMainMesh()
+	private void updateMainMesh(const(Heightmap) hmap)
 	{
-		mainMesh.vertices.length = map.triangles.length * 3;
-		foreach(i, triangle; map.triangles)
+		mainMesh.vertices.length = hmap.triangles.length * 3;
+		foreach(i, triangle; hmap.triangles)
 		{
 			const Vec3[3] coords = [
 				Vec3(1,0,0),
@@ -632,7 +670,7 @@ class Viewer
 				Vec3(0,0,1)
 			];
 
-			auto waterTri = triangle.vertices.all!"a.isWater";
+			auto waterTri = triangle.vertices.all!(v => v.isWater);
 
 			foreach (j, vertex; triangle.vertices)
 			{
@@ -644,7 +682,7 @@ class Viewer
 					Vec3(triangle.normal),
 					coords[j],
 					Vec3(color.r, color.g, color.b) / 255.0,
-					waterTri ? vertex.waterLevel : map.lowest
+					waterTri ? vertex.waterLevel : hmap.lowest
 				);
 			}
 		}
