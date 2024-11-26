@@ -150,6 +150,9 @@ class Viewer
 	sfFont* font;
 	sfText* text;
 	string[] currentText;
+	double lastFpsUpdate = 0;
+	int framesCount;
+	double fps = 0;
 
 	GLuint program;
 	bool requestExport;
@@ -168,6 +171,7 @@ class Viewer
 
 	int cubeMode;
 	Model cubeMesh;
+	int cubesRadius = 100;
 
 	StopWatch sw;
 
@@ -223,6 +227,7 @@ class Viewer
 		onMapChanged();
 
 		sw.start();
+		lastFpsUpdate = time;
 	}
 
 	~this()
@@ -308,8 +313,8 @@ class Viewer
 
 		text = sfText_create();
 		sfText_setFont(text, font);
-		sfText_setPosition(text, sfVector2f(20, 20));
-		sfText_setCharacterSize(text, 20);
+		sfText_setPosition(text, sfVector2f(16, 16));
+		sfText_setCharacterSize(text, 16);
 		sfText_setFillColor(text, sfBlack);
 	}
 
@@ -489,9 +494,8 @@ class Viewer
 		glClearColor(156.0/255, 196.0/255, 240.0/255, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glUseProgram(program);
-
 		currentText = [];
+		glUseProgram(program);
 
 		if (viewMode == 0)
 			setTurntableView(ratio);
@@ -499,8 +503,6 @@ class Viewer
 			setTopView(ratio);
 		else if (viewMode == 2)
 			setFirstPersonView(ratio);
-
-		auto cubesRadius = 175;
 
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
@@ -539,13 +541,28 @@ class Viewer
 				glUniform3fv(glGetUniformLocation(program, "colorOverride"), 1, normalized.ptr);
 
 				cubeMesh.draw();
+
 			}
+
+			currentText ~= "cubesradius=%d".format(cubesRadius);
 		}
 
 		currentText ~= "width=%d height=%d minz=%.2f maxz=%.2f".format(
 			map.width, map.height,
 			map.lowest, map.highest
 		);
+
+		framesCount++;
+		auto now = time;
+		auto diff = now - lastFpsUpdate;
+		if (diff >= 1.0)
+		{
+			fps = framesCount / diff;
+			lastFpsUpdate = now;
+			framesCount = 0;
+		}
+
+		currentText ~= "%.1f fps".format(fps);
 
 		sfRenderWindow_pushGLStates(window);
 		sfText_setString(text, currentText.join("\n").toStringz);
@@ -650,6 +667,15 @@ class Viewer
 
 			case sfKeyEnter:
 				requestExport = true;
+				break;
+
+			case sfKeyUp:
+				cubesRadius += 10;
+				break;
+
+			case sfKeyDown:
+				if (cubesRadius >= 10)
+					cubesRadius -= 10;
 				break;
 
 			default:
