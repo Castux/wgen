@@ -204,6 +204,7 @@ class Viewer
 	double firstPersonHDir;
 	double firstPersonVDir;
 	double lastUpdate;
+	bool walking;
 
 	int cubeMode;
 	Model cubeMesh;
@@ -256,6 +257,7 @@ class Viewer
 
 		firstPersonPos.x = map.width / 2.0;
 		firstPersonPos.y = map.height / 2.0;
+		firstPersonPos.z = map.getZ(firstPersonPos.xy, smooth: true);
 		firstPersonHDir = 0.0;
 		firstPersonVDir = 0.0;
 
@@ -402,15 +404,21 @@ class Viewer
 
 			auto previousPos = firstPersonPos;
 
-			if (sfKeyboard_isKeyPressed(sfKeyLShift))
+			if (sfMouse_isButtonPressed(sfMouseLeft))
 				speed *= 10.0;
-			if (sfKeyboard_isKeyPressed(sfKeyZ))
-				speed *= 10.0;
+			if (sfMouse_isButtonPressed(sfMouseRight))
+				speed *= 100.0;
+
+			auto right = cross(forward, vec3f(0,0,1));
 
 			if (sfKeyboard_isKeyPressed(sfKeyW))
 				firstPersonPos += forward * speed * dt;
 			if (sfKeyboard_isKeyPressed(sfKeyS))
 				firstPersonPos -= forward * speed * dt;
+			if (sfKeyboard_isKeyPressed(sfKeyA))
+				firstPersonPos -= right * speed * dt;
+			if (sfKeyboard_isKeyPressed(sfKeyD))
+				firstPersonPos += right * speed * dt;
 
 			if (!map.inBounds(firstPersonPos))
 				firstPersonPos = previousPos;
@@ -419,9 +427,11 @@ class Viewer
 				firstPersonPos = vec3f(map.width / 2.0, map.height / 2.0, 0.0);
 		}
 
-		firstPersonPos.z = map.getZ(firstPersonPos.xy, smooth: true);
-		auto camera = firstPersonPos + vec3f(0, 0, 1.63);
+		auto pos = firstPersonPos;
+		if (walking)
+			pos.z = map.getZ(pos.xy, smooth: true);
 
+		auto camera = pos + vec3f(0, 0, 1.63);
 		auto view = mat4f.lookAt(
 			camera,
 			camera + forward,
@@ -436,9 +446,9 @@ class Viewer
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
 		currentText ~= "x=%d y=%d z=%d".format(
-			firstPersonPos.x.roundTo!int,
-			firstPersonPos.y.roundTo!int,
-			firstPersonPos.z.roundTo!int);
+			pos.x.roundTo!int,
+			pos.y.roundTo!int,
+			pos.z.roundTo!int);
 	}
 
 	bool draw()
@@ -612,6 +622,10 @@ class Viewer
 			case sfKeyDown:
 				if (cubesRadius >= 10)
 					cubesRadius -= 10;
+				break;
+
+			case sfKeySpace:
+				walking = !walking;
 				break;
 
 			default:
