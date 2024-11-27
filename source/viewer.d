@@ -52,7 +52,7 @@ uniform float lowest;
 uniform float highest;
 uniform int mode;
 uniform int lineMode;
-uniform vec4 fpsCenter;
+uniform vec4 camera;
 in vec3 worldPos;
 in vec3 normal;
 in vec3 coord;
@@ -71,7 +71,7 @@ void main()
 {
 	float z = worldPos.z;
 
-	if (length(worldPos - fpsCenter.xyz) < fpsCenter.w)
+	if (length(worldPos - camera.xyz) < camera.w)
 		discard;
 
 	vec3 color = vec3(1.0, 0.0, 1.0);
@@ -366,7 +366,7 @@ class Viewer
 		);
 	}
 
-	private void setFirstPersonView(double ratio)
+	private vec3f setFirstPersonView(double ratio)
 	{
 		auto speed = 4.0;
 		const mouseSpeed = 0.15;
@@ -428,8 +428,11 @@ class Viewer
 		}
 
 		auto pos = firstPersonPos;
+		auto ground = map.getZ(pos.xy, smooth: true);
 		if (walking)
-			pos.z = map.getZ(pos.xy, smooth: true);
+			pos.z = ground;
+		else
+			pos.z = max(pos.z, ground);
 
 		auto camera = pos + vec3f(0, 0, 1.63);
 		auto view = mat4f.lookAt(
@@ -438,7 +441,7 @@ class Viewer
 			vec3f(0.0, 0.0, 1.0)
 		);
 
-		auto proj = mat4f.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
+		auto proj = mat4f.perspective(60.0 / 180.0 * PI, ratio, 0.1, 1e6);
 		auto PV = (proj * view).transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
 
@@ -449,6 +452,8 @@ class Viewer
 			pos.x.roundTo!int,
 			pos.y.roundTo!int,
 			pos.z.roundTo!int);
+
+		return camera;
 	}
 
 	bool draw()
@@ -480,12 +485,14 @@ class Viewer
 		currentText = [];
 		glUseProgram(program);
 
+		vec3f camera;
+
 		if (viewMode == 0)
 			setTurntableView(ratio);
 		else if (viewMode == 1)
 			setTopView(ratio);
 		else if (viewMode == 2)
-			setFirstPersonView(ratio);
+			camera = setFirstPersonView(ratio);
 
 		glUniform1f(glGetUniformLocation(program, "lowest"), map.lowest);
 		glUniform1f(glGetUniformLocation(program, "highest"), map.highest);
@@ -493,29 +500,30 @@ class Viewer
 		glUniform1i(glGetUniformLocation(program, "lineMode"), lineMode);
 		glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), map.lowest);
 
-		glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z,
+		glUniform4f(glGetUniformLocation(program, "camera"), camera.x, camera.y, camera.z,
 			viewMode == 2 && cubeMode != 0 ? cubesRadius - 2.0 : 0.0);
 		mainMesh.draw();
 
 		if (viewMode == 2 && cubeMode != 0)
 		{
-			glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
+			glUniform4f(glGetUniformLocation(program, "camera"), camera.x, camera.y, camera.z, 0.0);
 
 			auto c = vec2f(firstPersonPos.x.round, firstPersonPos.y.round);
 			foreach(dx; - cubesRadius .. cubesRadius)
 			foreach(dy; - cubesRadius .. cubesRadius)
 			{
 				auto pos = c + vec2f(dx, dy);
-				if (!map.inBounds(pos) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
-					continue;
-
-				if (dot(forward, vec3f(dx, dy, 0)) < 0)
-					continue;
+				if (!map.inBounds(pos))
+						continue;
 
 				float z = map.getZ(pos);
 				if (cubeMode == 2) z = z.floor;
 
-				auto translation = mat4f.translation(vec3f(pos.xy, z)).transposed;
+				auto pos3d = vec3f(pos, z);
+				if (dot(forward, pos3d - camera) < 0 || pos3d.squaredDistanceTo(camera) >= cubesRadius * cubesRadius)
+					continue;
+
+				auto translation = mat4f.translation(pos3d).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), map.getWaterLevel(pos));
 
@@ -523,7 +531,6 @@ class Viewer
 				glUniform3fv(glGetUniformLocation(program, "colorOverride"), 1, cast(float*) &color);
 
 				cubeMesh.draw();
-
 			}
 
 			currentText ~= "cubesradius=%d".format(cubesRadius);
