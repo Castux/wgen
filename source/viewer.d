@@ -166,11 +166,22 @@ private struct Map
 		}
 	}
 
-	vec3f getPixel(int row, int col)
+	auto getOutline(vec2f pos)
 	{
-		row = clamp(row, 0, height - 1);
-		col = clamp(col, 0, width - 1);
-		return outline[row * width + col];
+		return safeGet(outline, width, height, pos);
+	}
+
+	auto getZ(vec2f pos, bool smooth = false)
+	{
+		if (smooth)
+			return safeGetInterpolated(heightmap, width, height, pos);
+		else
+			return safeGet(heightmap, width, height, pos);
+	}
+
+	auto getWaterLevel(vec2f pos)
+	{
+		return safeGetInterpolated(waterLevel, width, height, pos);
 	}
 }
 
@@ -352,29 +363,6 @@ class Viewer
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
 	}
 
-	double getZ(vec2f pos, bool getWaterLevel = false)
-	{
-		real x, y;
-		real xfrac = modf(pos.x, x);
-		real yfrac = modf(pos.y, y);
-
-		auto xint = x.lrint.clamp(0, map.width - 2);
-		auto yint = y.lrint.clamp(0, map.height - 2);
-
-		const array = getWaterLevel ? map.waterLevel : map.heightmap;
-
-		auto z00 = array[(yint + 0) * map.width + (xint + 0)];
-		auto z01 = array[(yint + 0) * map.width + (xint + 1)];
-		auto z10 = array[(yint + 1) * map.width + (xint + 0)];
-		auto z11 = array[(yint + 1) * map.width + (xint + 1)];
-
-		return lerp(
-			lerp(z00, z01, xfrac),
-			lerp(z10, z11, xfrac),
-			yfrac
-		);
-	}
-
 	private vec3f forward() const
 	{
 		return vec3f(
@@ -439,7 +427,7 @@ class Viewer
 				firstPersonPos = vec3f(map.width / 2.0, map.height / 2.0, 0.0);
 		}
 
-		firstPersonPos.z = getZ(firstPersonPos.xy);
+		firstPersonPos.z = map.getZ(firstPersonPos.xy, smooth: true);
 		auto camera = firstPersonPos + vec3f(0, 0, 1.63);
 
 		auto view = mat4f.lookAt(
@@ -522,14 +510,14 @@ class Viewer
 				if (dot(forward, vec3f(dx, dy, 0)) < 0)
 					continue;
 
-				auto z = getZ(pos);
+				float z = map.getZ(pos);
 				if (cubeMode == 2) z = z.floor;
 
 				auto translation = mat4f.translation(vec3f(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
-				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, getWaterLevel: true));
+				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), map.getWaterLevel(pos));
 
-				auto color = map.getPixel(pos.y.to!int, pos.x.to!int);
+				auto color = map.getOutline(pos);
 				glUniform3fv(glGetUniformLocation(program, "colorOverride"), 1, cast(float*) &color);
 
 				cubeMesh.draw();
