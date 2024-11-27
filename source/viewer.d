@@ -14,21 +14,10 @@ import bindbc.opengl;
 public import dplug.math;
 
 import heightmap;
+import utils;
+import viewerutils;
 
-alias Vec2 = vec2f;
-alias Vec3 = vec3f;
-alias Mat4 = mat4x4f;
-
-struct Vertex
-{
-	Vec3 pos;
-	Vec3 norm;
-	Vec3 coord;
-	Vec3 color;
-	float waterLevel;
-}
-
-static const char* vertex_shader_text = `
+static const char* vertexShader = `
 #version 330
 uniform mat4 PV;
 uniform mat4 M;
@@ -57,7 +46,7 @@ void main()
 // `
 
 
-static const char* fragment_shader_text = `
+static const char* fragmentShader = `
 #version 330
 uniform float lowest;
 uniform float highest;
@@ -150,7 +139,7 @@ private struct Map
 	const(double)[] heightmap;
 	const(double)[] waterLevel;
 
-	Vec3[] outline;
+	vec3f[] outline;
 
 	int changeCount = -1;
 
@@ -173,11 +162,11 @@ private struct Map
 		foreach(col; 0 .. width)
 		{
 			auto pixel = hmap.getPixel(row, col);
-			outline[row * width + col] = Vec3(pixel.r, pixel.g, pixel.b) / 255.0;
+			outline[row * width + col] = vec3f(pixel.r, pixel.g, pixel.b) / 255.0;
 		}
 	}
 
-	Vec3 getPixel(int row, int col)
+	vec3f getPixel(int row, int col)
 	{
 		row = clamp(row, 0, height - 1);
 		col = clamp(col, 0, width - 1);
@@ -208,7 +197,7 @@ class Viewer
 	int viewMode;
 	int lineMode;
 
-	Vec3 firstPersonPos;
+	vec3f firstPersonPos;
 	double firstPersonHDir;
 	double firstPersonVDir;
 	double lastUpdate;
@@ -255,11 +244,9 @@ class Viewer
 			throw new Exception("Multiple viewer instances");
 		singleton = this;
 
-		setupShaders();
+		program = setupShaders(vertexShader, fragmentShader);
 
-		cubeMesh = new Model(program);
-		makeCubeMesh();
-
+		cubeMesh = Model.makeCubeMesh(program);
 		mainMesh = new Model(program);
 
 		update(hmap);
@@ -305,51 +292,6 @@ class Viewer
 		}
 	}
 
-	private static void checkShader(GLint shader)
-	{
-		GLint compiled;
-		glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-		if (compiled != GL_TRUE)
-		{
-			GLsizei logLength = 0;
-			GLchar[1024] message;
-			glGetShaderInfoLog(shader, 1024, &logLength, message.ptr);
-			throw new Exception("Shader error: %s".format(message[0 .. logLength]));
-		}
-	}
-
-	private static void checkProgram(GLint program)
-	{
-		GLint programLinked;
-		glGetProgramiv(program, GL_LINK_STATUS, &programLinked);
-		if (programLinked != GL_TRUE)
-		{
-			GLsizei logLength = 0;
-			GLchar[1024] message;
-			glGetProgramInfoLog(program, 1024, &logLength, message.ptr);
-			throw new Exception("Program error: %s".format(message[0 .. logLength]));
-		}
-	}
-
-	private void setupShaders()
-	{
-		GLuint vertex_shader = glCreateShader(GL_VERTEX_SHADER);
-		glShaderSource(vertex_shader, 1, &vertex_shader_text, null);
-		glCompileShader(vertex_shader);
-		checkShader(vertex_shader);
-
-		GLuint fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
-		glShaderSource(fragment_shader, 1, &fragment_shader_text, null);
-		glCompileShader(fragment_shader);
-		checkShader(fragment_shader);
-
-		program = glCreateProgram();
-		glAttachShader(program, vertex_shader);
-		glAttachShader(program, fragment_shader);
-		glLinkProgram(program);
-		checkProgram(program);
-	}
-
 	private double time()
 	{
 		return sw.peek.total!"msecs" / 1000.0;
@@ -371,25 +313,25 @@ class Viewer
 		sfText_setFont(text, font);
 		sfText_setPosition(text, sfVector2f(16, 16));
 		sfText_setCharacterSize(text, 16);
-		sfText_setFillColor(text, sfBlack);
+		sfText_setColor(text, sfBlack);
 	}
 
 	private void setTurntableView(double ratio)
 	{
-		auto model = Mat4.translation(Vec3(-map.width / 2, -map.height / 2, 0));
+		auto model = mat4f.translation(vec3f(-map.width / 2, -map.height / 2, 0));
 
 		model = model.transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
 		auto angle = time / 5.0;
 
-		auto view = Mat4.lookAt(
-			Vec3(map.width / 2.0 * cos(angle), map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
-			Vec3(0, 0, 0),
-			Vec3(0.0, 0.0, 1.0)
+		auto view = mat4f.lookAt(
+			vec3f(map.width / 2.0 * cos(angle), map.height / 2.0 * sin(angle), max(map.width, map.height) / 2.0),
+			vec3f(0, 0, 0),
+			vec3f(0.0, 0.0, 1.0)
 		);
 
-		auto proj = Mat4.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
+		auto proj = mat4f.perspective(60.0 / 180.0 * PI, ratio, 100.0, max(map.width, map.height) * 2.0);
 
 		auto PV = (proj * view).transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
@@ -397,10 +339,10 @@ class Viewer
 
 	private void setTopView(double ratio)
 	{
-		auto model = Mat4.identity;
+		auto model = mat4f.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
-		auto proj = Mat4.orthographic(
+		auto proj = mat4f.orthographic(
 				map.width / 2.0 - map.height * ratio / 2.0, map.width / 2.0 + map.height * ratio / 2.0,
 				0.0, map.height,
 				-1e6,
@@ -410,12 +352,7 @@ class Viewer
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &proj);
 	}
 
-	private double lerp(double a, double b, double x)
-	{
-		return a * (1-x) + b * x;
-	}
-
-	double getZ(Vec2 pos, bool getWaterLevel = false)
+	double getZ(vec2f pos, bool getWaterLevel = false)
 	{
 		real x, y;
 		real xfrac = modf(pos.x, x);
@@ -438,9 +375,9 @@ class Viewer
 		);
 	}
 
-	private Vec3 forward() const
+	private vec3f forward() const
 	{
-		return Vec3(
+		return vec3f(
 			cos(firstPersonVDir) * cos(firstPersonHDir),
 			cos(firstPersonVDir) * sin(firstPersonHDir),
 			sin(firstPersonVDir)
@@ -499,23 +436,23 @@ class Viewer
 				firstPersonPos = previousPos;
 
 			if (!map.inBounds(previousPos))		// The map probably changed size with a config reload
-				firstPersonPos = Vec3(map.width / 2.0, map.height / 2.0, 0.0);
+				firstPersonPos = vec3f(map.width / 2.0, map.height / 2.0, 0.0);
 		}
 
 		firstPersonPos.z = getZ(firstPersonPos.xy);
-		auto camera = firstPersonPos + Vec3(0, 0, 1.63);
+		auto camera = firstPersonPos + vec3f(0, 0, 1.63);
 
-		auto view = Mat4.lookAt(
+		auto view = mat4f.lookAt(
 			camera,
 			camera + forward,
-			Vec3(0.0, 0.0, 1.0)
+			vec3f(0.0, 0.0, 1.0)
 		);
 
-		auto proj = Mat4.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
+		auto proj = mat4f.perspective(60.0 / 180.0 * PI, ratio, 0.1, max(map.width, map.height) * 2.0);
 		auto PV = (proj * view).transposed;
 		glUniformMatrix4fv(glGetUniformLocation(program, "PV"), 1, GL_FALSE, cast(const(GLfloat*)) &PV);
 
-		auto model = Mat4.identity;
+		auto model = mat4f.identity;
 		glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &model);
 
 		currentText ~= "x=%d y=%d z=%d".format(
@@ -574,21 +511,21 @@ class Viewer
 		{
 			glUniform4f(glGetUniformLocation(program, "fpsCenter"), firstPersonPos.x, firstPersonPos.y, firstPersonPos.z, 0.0);
 
-			auto c = Vec2(firstPersonPos.x.round, firstPersonPos.y.round);
+			auto c = vec2f(firstPersonPos.x.round, firstPersonPos.y.round);
 			foreach(dx; - cubesRadius .. cubesRadius)
 			foreach(dy; - cubesRadius .. cubesRadius)
 			{
-				auto pos = c + Vec2(dx, dy);
+				auto pos = c + vec2f(dx, dy);
 				if (!map.inBounds(pos) || pos.squaredDistanceTo(c) >= cubesRadius * cubesRadius)
 					continue;
 
-				if (dot(forward, Vec3(dx, dy, 0)) < 0)
+				if (dot(forward, vec3f(dx, dy, 0)) < 0)
 					continue;
 
 				auto z = getZ(pos);
 				if (cubeMode == 2) z = z.floor;
 
-				auto translation = Mat4.translation(Vec3(pos.xy, z)).transposed;
+				auto translation = mat4f.translation(vec3f(pos.xy, z)).transposed;
 				glUniformMatrix4fv(glGetUniformLocation(program, "M"), 1, GL_FALSE, cast(const(GLfloat*)) &translation);
 				glUniform1f(glGetUniformLocation(program, "waterLevelOverride"), getZ(pos, getWaterLevel: true));
 
@@ -628,46 +565,15 @@ class Viewer
 		return sfRenderWindow_isOpen(window) == sfFalse;
 	}
 
-	private static void makeSquare(Vertex[] vertices, Vec3 a, Vec3 b, Vec3 c, Vec3 d) pure
-	{
-		auto normal = cross(b - a, c - a).normalized;
-
-		vertices[0] = Vertex(a, normal, coord: Vec3(1,0,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
-		vertices[1] = Vertex(b, normal, coord: Vec3(0,1,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
-		vertices[2] = Vertex(d, normal, coord: Vec3(0,0,1), color: Vec3(-1,-1,-1), waterLevel: float.nan);
-
-		vertices[3] = Vertex(b, normal, coord: Vec3(1,0,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
-		vertices[4] = Vertex(c, normal, coord: Vec3(0,1,0), color: Vec3(-1,-1,-1), waterLevel: float.nan);
-		vertices[5] = Vertex(d, normal, coord: Vec3(0,0,1), color: Vec3(-1,-1,-1), waterLevel: float.nan);
-	}
-
-	private void makeCubeMesh()
-	{
-		cubeMesh.vertices.length = 6 * 5;
-
-		auto d = Vec3(-0.5, -0.5, 0.0);
-		auto c = Vec3(-0.5, +0.5, 0.0);
-		auto b = Vec3(+0.5, +0.5, 0.0);
-		auto a = Vec3(+0.5, -0.5, 0.0);
-
-		makeSquare(cubeMesh.vertices[ 0 ..  6], a, b, c, d);
-		makeSquare(cubeMesh.vertices[ 6 .. 12], b, a, Vec3(a.xy, -10.0), Vec3(b.xy, -10.0));
-		makeSquare(cubeMesh.vertices[12 .. 18], c, b, Vec3(b.xy, -10.0), Vec3(c.xy, -10.0));
-		makeSquare(cubeMesh.vertices[18 .. 24], d, c, Vec3(c.xy, -10.0), Vec3(d.xy, -10.0));
-		makeSquare(cubeMesh.vertices[24 .. 30], a, d, Vec3(d.xy, -10.0), Vec3(a.xy, -10.0));
-
-		cubeMesh.updateData();
-	}
-
 	private void updateMainMesh(const(Heightmap) hmap)
 	{
 		mainMesh.vertices.length = hmap.triangles.length * 3;
 		foreach(i, triangle; hmap.triangles)
 		{
-			const Vec3[3] coords = [
-				Vec3(1,0,0),
-				Vec3(0,1,0),
-				Vec3(0,0,1)
+			const vec3f[3] coords = [
+				vec3f(1,0,0),
+				vec3f(0,1,0),
+				vec3f(0,0,1)
 			];
 
 			auto waterTri = triangle.vertices.all!(v => v.isWater);
@@ -677,11 +583,11 @@ class Viewer
 				import config;
 				auto color = vertex.terrain ? vertex.terrain.color : Pixel(0,255,255);
 
-				mainMesh.vertices[i * 3 + j] = Vertex(
-					Vec3(vertex.pos),
-					Vec3(triangle.normal),
+				mainMesh.vertices[i * 3 + j] = VertexData(
+					vec3f(vertex.pos),
+					vec3f(triangle.normal),
 					coords[j],
-					Vec3(color.r, color.g, color.b) / 255.0,
+					vec3f(color.r, color.g, color.b) / 255.0,
 					waterTri ? vertex.waterLevel : hmap.lowest
 				);
 			}
@@ -731,62 +637,5 @@ class Viewer
 			default:
 				break;
 		}
-	}
-}
-
-class Model
-{
-	Vertex[] vertices;
-
-	GLuint vertexBuffer;
-	GLuint vertexArray;
-
-	this(GLuint program)
-	{
-		glGenBuffers(1, &vertexBuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-
-		GLint vposLocation = glGetAttribLocation(program, "vPos");
-		GLint vnormLocation = glGetAttribLocation(program, "vNorm");
-		GLint vcoordLocation = glGetAttribLocation(program, "vCoord");
-		GLint vcolorLocation = glGetAttribLocation(program, "vColor");
-		GLint vwaterLevelLocation = glGetAttribLocation(program, "vWaterLevel");
-
-		glGenVertexArrays(1, &vertexArray);
-		glBindVertexArray(vertexArray);
-
-		glEnableVertexAttribArray(vposLocation);
-		glVertexAttribPointer(vposLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.pos.offsetof);
-		glEnableVertexAttribArray(vnormLocation);
-		glVertexAttribPointer(vnormLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.norm.offsetof);
-		glEnableVertexAttribArray(vcoordLocation);
-		glVertexAttribPointer(vcoordLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.coord.offsetof);
-		glEnableVertexAttribArray(vcolorLocation);
-		glVertexAttribPointer(vcolorLocation, 3, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.color.offsetof);
-		glEnableVertexAttribArray(vwaterLevelLocation);
-		glVertexAttribPointer(vwaterLevelLocation, 1, GL_FLOAT, GL_FALSE, Vertex.sizeof, cast(void*) Vertex.waterLevel.offsetof);
-
-		glBindVertexArray(0);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-	}
-
-	~this()
-	{
-		glDeleteVertexArrays(1, &vertexArray);
-		glDeleteBuffers(1, &vertexBuffer);
-	}
-
-	void updateData()
-	{
-		glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-		glBufferData(GL_ARRAY_BUFFER, Vertex.sizeof * vertices.length, cast(void*) vertices.ptr, GL_STATIC_DRAW);
-		glBindBuffer(GL_ARRAY_BUFFER, 0);
-	}
-
-	void draw()
-	{
-		glBindVertexArray(vertexArray);
-		glDrawArrays(GL_TRIANGLES, 0, cast(int) vertices.length);
-		glBindVertexArray(0);
 	}
 }

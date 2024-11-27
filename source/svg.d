@@ -6,11 +6,7 @@ import std.algorithm;
 import std.math;
 
 import heightmap;
-
-double lerp(double a, double b, double x)
-{
-	return a * (1-x) + b * x;
-}
+import utils;
 
 void exportSVG(Heightmap m, string path)
 {
