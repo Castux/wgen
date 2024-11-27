@@ -17,12 +17,10 @@ import config;
 import utils;
 
 alias HalfEdge = delaunator.Edge;
-alias Vec2 = vec2d;
-alias Vec3 = vec3d;
 
 class Vertex
 {
-	Vec3 pos;
+	vec3d pos;
 	alias pos this;
 
 	Vertex[] neighbours;
@@ -39,9 +37,9 @@ class Vertex
 	Vertex[] uphill;
 	int flow;
 
-	this(Vec2 pos)
+	this(vec2d pos)
 	{
-		this.pos = Vec3(pos, double.nan);
+		this.pos = vec3d(pos, double.nan);
 	}
 
 	void reset()
@@ -107,24 +105,24 @@ class Edge
 
 class Triangle
 {
-	Vec3 pos;
+	vec3d pos;
 	alias pos this;
 
 	Triangle[] neighbours;
 	Edge[] edges;
 	Vertex[] vertices;
 
-	Vec3 normal;
+	vec3d normal;
 
-	this(Vec2 pos)
+	this(vec2d pos)
 	{
-		this.pos = Vec3(pos, double.nan);
+		this.pos = vec3d(pos, double.nan);
 	}
 
 	void reset()
 	{
 		z = double.infinity;
-		normal = Vec3();
+		normal = vec3d();
 	}
 }
 
@@ -348,14 +346,14 @@ class Heightmap
 
 	private Triangulation generateTriangulation()
 	{
-		Vec2[] points;
+		vec2d[] points;
 		auto resolution = conf.resolution;
 
 		if (conf.grid == "square")
 		{
 			for(auto x = -margin; x < width + margin; x += resolution)
 			for(auto y = -margin; y < height + margin; y += resolution)
-				points ~= Vec2(
+				points ~= vec2d(
 					x + uniform(-resolution, resolution) * conf.jitter,
 					y + uniform(-resolution, resolution) * conf.jitter
 				);
@@ -368,7 +366,7 @@ class Heightmap
 				for(auto y = -margin; y < height + margin; y += resolution * sqrt(3.0) / 2.0)
 				{
 					row++;
-					points ~= Vec2(
+					points ~= vec2d(
 						x + ((row % 2) * 0.5 * resolution) + uniform(-resolution, resolution) * conf.jitter,
 						y + uniform(-resolution, resolution) * conf.jitter
 					);
@@ -514,7 +512,7 @@ class Heightmap
 
 	private void relaxGraph()
 	{
-		Vec2[] points;
+		vec2d[] points;
 
 		foreach(vertex; vertices)
 		{
@@ -566,7 +564,7 @@ class Heightmap
 
 				foreach(i; 0 .. numSamples)
 				{
-					Vec2 p = vertex.xy + Vec2(uniform(-r, r), uniform(-r, +r));
+					vec2d p = vertex.xy + vec2d(uniform(-r, r), uniform(-r, +r));
 
 					if (inBounds(p))
 					{
@@ -740,19 +738,19 @@ class Heightmap
 		return (x - a) / (b - a) * (v - u) + u;
 	}
 
-	static double cross2d(Vec2 a, Vec2 b) pure
+	static double cross2d(vec2d a, vec2d b) pure
 	{
 		return a.x * b.y - a.y * b.x;
 	}
 
-	static Vec3 barycentricCoordinates(Vec2 a, Vec2 b, Vec2 c, Vec2 p) pure
+	static vec3d barycentricCoordinates(vec2d a, vec2d b, vec2d c, vec2d p) pure
 	{
 		auto x = cross2d(b - p, c - p);
 		auto y = cross2d(c - p, a - p);
 		auto z = cross2d(a - p, b - p);
 		auto s = x + y + z;
 
-		return Vec3(x / s, y / s, z / s);
+		return vec3d(x / s, y / s, z / s);
 	}
 
 	private void rasterize()
@@ -766,7 +764,7 @@ class Heightmap
 			auto p1 = tri.vertices[1];
 			auto p2 = tri.vertices[2];
 
-			auto z = Vec3(p0.z, p1.z, p2.z);
+			auto z = vec3d(p0.z, p1.z, p2.z);
 			auto water = tri.vertices.all!"a.isWater" ? tri.vertices[0].waterLevel : lowest;
 
 			auto minx = min(p0.x, p1.x, p2.x).floor.to!int;
@@ -779,7 +777,7 @@ class Heightmap
 			{
 				if (x < 0 || x >= width || y < 0 || y >= height) continue;
 
-				auto coords = barycentricCoordinates(p0.xy, p1.xy, p2.xy, Vec2(x, y));
+				auto coords = barycentricCoordinates(p0.xy, p1.xy, p2.xy, vec2d(x, y));
 				if (coords.x >= 0 && coords.y >= 0 && coords.z >= 0)
 				{
 					heightmap[y * width + x] = dot(z, coords);
