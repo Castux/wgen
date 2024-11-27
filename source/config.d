@@ -2,15 +2,12 @@ import std.json;
 import std.stdio;
 import std.file;
 
-struct Pixel
-{
-	ubyte r,g,b;
-}
+import dplug.math;
 
 class Terrain
 {
 	string name;
-	Pixel color;
+	vec3d color;
 	double gradient;
 	double fixedShore;
 	bool smoothing = true;
@@ -37,7 +34,7 @@ class Config
 	string grid;
 	double jitter;
 	bool relax;
-	Terrain[Pixel] terrains;
+	Terrain[vec3d] terrains;
 	double smoothingRadius;
 	int erosionMinFlow;
 	double erosionFactor;
@@ -81,7 +78,7 @@ class Config
 		{
 			auto terrain = new Terrain();
 			terrain.name = name;
-			terrain.color = Pixel(t["r"].get!ubyte, t["g"].get!ubyte, t["b"].get!ubyte);
+			terrain.color = vec3d(t["r"].get!ubyte, t["g"].get!ubyte, t["b"].get!ubyte);
 			terrain.gradient = t["gradient"].get!double;
 
 			if ("fixedShore" in t)

@@ -59,7 +59,7 @@ void exportSVG(Heightmap m, string path)
 	{
 		if (vertex.downhill)
 		{
-			auto width = pow(vertex.flow, 0.5) * pow(m.resolution / 30, 2);
+			auto width = pow(vertex.flow, 0.5) * pow(m.conf.resolution / 30, 2);
 			lines ~= format(`<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="#0E443D" stroke-width="%f" />`,
 	 			vertex.x, -vertex.y,
 	 			vertex.downhill.x, -vertex.downhill.y,

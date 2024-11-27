@@ -138,7 +138,6 @@ private struct Map
 	double highest;
 	const(double)[] heightmap;
 	const(double)[] waterLevel;
-
 	vec3f[] outline;
 
 	int changeCount = -1;
@@ -156,19 +155,12 @@ private struct Map
 		highest = hmap.highest;
 		heightmap = hmap.heightmap;
 		waterLevel = hmap.waterLevel;
-
-		outline.length = width * height;
-		foreach(row; 0 .. height)
-		foreach(col; 0 .. width)
-		{
-			auto pixel = hmap.getPixel(row, col);
-			outline[row * width + col] = vec3f(pixel.r, pixel.g, pixel.b) / 255.0;
-		}
+		outline = hmap.outline.to!(vec3f[]);
 	}
 
 	auto getOutline(vec2f pos)
 	{
-		return safeGet(outline, width, height, pos);
+		return safeGet(outline, width, height, pos) / 255.0;
 	}
 
 	auto getZ(vec2f pos, bool smooth = false)
@@ -569,7 +561,7 @@ class Viewer
 			foreach (j, vertex; triangle.vertices)
 			{
 				import config;
-				auto color = vertex.terrain ? vertex.terrain.color : Pixel(0,255,255);
+				auto color = vertex.terrain ? vertex.terrain.color : vec3d(0,255,255);
 
 				mainMesh.vertices[i * 3 + j] = VertexData(
 					vec3f(vertex.pos),

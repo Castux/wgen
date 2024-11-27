@@ -1,6 +1,9 @@
 import std.math;
 import std.algorithm;
 import std.conv;
+import std.format;
+
+import dplug.math;
 
 double lerp(double a, double b, double x)
 {
@@ -34,4 +37,14 @@ T safeGetInterpolated(T, Pos)(T[] array, int width, int height, Pos pos)
 		lerp(z10, z11, yfrac),
 		xfrac
 	);
+}
+
+string toString(T)(Vector!(T,2) vec)
+{
+	return "(%f,%f)".format(vec.x, vec.y);
+}
+
+string toString(T)(Vector!(T,3) vec)
+{
+	return "(%f,%f,%f)".format(vec.x, vec.y, vec.z);
 }

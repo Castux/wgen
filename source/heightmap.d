@@ -14,6 +14,7 @@ import gamut;
 
 import delaunator;
 import config;
+import utils;
 
 alias HalfEdge = delaunator.Edge;
 alias Vec2 = vec2d;
@@ -137,10 +138,9 @@ class Heightmap
 	Triangle[] triangles;
 	Edge[] edges;
 
-	Image outline;
+	vec3d[] outline;
 	int width;
 	int height;
-	double resolution;
 
 	Vertex[] shores;
 	double lowest, highest;
@@ -182,13 +182,13 @@ class Heightmap
 		foreach (event; imageWatcher.getEvents())
 		if (event.type == FileChangeEventType.modify)
 		{
-			int oldWidth = outline.width;
-			int oldHeight = outline.height;
+			int oldWidth = width;
+			int oldHeight = height;
 
 			writeln("=================");
 			loadOutline();
 
-			auto sameSize = oldWidth == outline.width && oldHeight == outline.height;
+			auto sameSize = oldWidth == width && oldHeight == height;
 			updateConfig(conf, skipImageLoad: true, skipMesh: sameSize);
 		}
 
@@ -208,10 +208,30 @@ class Heightmap
 	private void loadOutline()
 	{
 		writeln("Loading " ~ conf.path);
-		outline.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
-		if (outline.isError)
+
+		Image image;
+		image.loadFromFile(conf.path, LOAD_RGB | LOAD_8BIT | LOAD_NO_ALPHA);
+		if (image.isError)
 			throw new Exception("Could not load " ~ conf.path);
-		outline.flipVertical();
+		image.flipVertical();
+
+		width = image.width;
+		height = image.height;
+
+		outline = new vec3d[width * height];
+
+		foreach(row; 0 .. height)
+		{
+			auto scanline = cast(ubyte[]) image.scanline(row);
+			foreach(col; 0 .. width)
+			{
+				outline[row * image.width + col] = vec3d(
+					scanline[col * 3 + 0],
+					scanline[col * 3 + 1],
+					scanline[col * 3 + 2]
+				);
+			}
+		}
 	}
 
 	private void updateConfig(Config newConf, bool skipImageLoad = false, bool skipMesh = false)
@@ -252,10 +272,6 @@ class Heightmap
 
 		if (phase <= Phase.NewMesh)
 		{
-			width = outline.width;
-			height = outline.height;
-			resolution = conf.resolution;
-
 			if (!skipMesh)
 			{
 				writeln("Triangulating");
@@ -316,7 +332,7 @@ class Heightmap
 
 	double margin() const
 	{
-		return resolution * 4;
+		return conf.resolution * 4;
 	}
 
 	bool inBounds(V)(V p) const
@@ -333,6 +349,7 @@ class Heightmap
 	private Triangulation generateTriangulation()
 	{
 		Vec2[] points;
+		auto resolution = conf.resolution;
 
 		if (conf.grid == "square")
 		{
@@ -358,6 +375,8 @@ class Heightmap
 				}
 			}
 		}
+		else
+			throw new Exception("Unknown grid type: " ~ conf.grid);
 
 		return new Triangulation(points);
 	}
@@ -509,23 +528,6 @@ class Heightmap
 		createGraph(triangulation.edges);
 	}
 
-	Pixel getPixel(int row, int col) const
-	{
-		row = clamp(row, 0, height - 1);
-		col = clamp(col, 0, width - 1);
-
-		assert(outline.type == PixelType.rgb8);
-  		assert(outline.hasData());
-
-		auto scanline = cast(ubyte[]) outline.scanline(row);
-
-		return Pixel(
-			scanline[col * 3 + 0],
-			scanline[col * 3 + 1],
-			scanline[col * 3 + 2]
-		);
-	}
-
 	private void assignTerrainTypes()
 	{
 		import fast_noise;
@@ -545,15 +547,12 @@ class Heightmap
 				continue;
 			}
 
-			int row = vertex.y.to!int;
-			int col = vertex.x.to!int;
-
-			auto pixel = getPixel(row, col);
+			vec3d pixel = safeGet(outline, width, height, vertex.xy);
 			vertex.terrain = conf.terrains.get(pixel, null);
 
 			if (vertex.terrain is null)
 			{
-				writefln("Bad pixel %s at %d,%d", pixel, col, row);
+				writefln("Bad pixel %s at %d,%d", pixel.toString, vertex.y.to!int, vertex.x.to!int);
 				continue;
 			}
 
@@ -571,7 +570,7 @@ class Heightmap
 
 					if (inBounds(p))
 					{
-						pixel = getPixel(p.y.to!int, p.x.to!int);
+						pixel = safeGet(outline, width, height, p);
 						auto terrain = conf.terrains.get(pixel, null);
 						if (terrain && terrain.gradient * vertex.terrain.gradient > 0)		// Only consider same sign gradients
 						{
