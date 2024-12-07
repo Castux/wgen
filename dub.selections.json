@@ -1,14 +1,15 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"bindbc-glfw": "1.1.0",
+		"bindbc-common": "1.0.3",
 		"bindbc-loader": "1.1.5",
 		"bindbc-opengl": "1.1.1",
-		"bindbc-sfml": "1.1.0",
+		"bindbc-sdl": "1.5.1",
 		"dplug": "14.5.0",
+		"dsdl": "~main",
 		"fast_noise": "1.0.5",
 		"fswatch": "0.6.1",
-		"gamut": "3.1.1",
-		"intel-intrinsics": "1.11.21"
+		"gamut": "3.1.2",
+		"intel-intrinsics": "1.11.22"
 	}
 }

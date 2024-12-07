@@ -9,7 +9,8 @@ import std.parallelism;
 import std.datetime.stopwatch;
 import std.string;
 
-import bindbc.sfml;
+import dsdl;
+import dsdl.ttf;
 import bindbc.opengl;
 public import dplug.math;
 
@@ -181,10 +182,8 @@ class Viewer
 {
 	static Viewer singleton;
 
-	sfRenderWindow* window;
-	sfView* view;
-	sfFont* font;
-	sfText* text;
+	Window* window;
+	Font* font;
 	string[] currentText;
 	double lastFpsUpdate = 0;
 	int framesCount;
@@ -214,27 +213,25 @@ class Viewer
 
 	this(Heightmap hmap, string title)
 	{
-		if(!loadSFML())
-		{
-			bindbcError();
-			throw new Exception("Could not load SFML library");
-		}
+		if (singleton)
+			throw new Exception("Multiple viewer instances");
+		singleton = this;
 
-		auto mode = sfVideoMode(1024, 768, 32);
-		sfContextSettings settings;
-		settings.depthBits = 24;
-		settings.stencilBits = 8;
-		settings.antialiasingLevel = 2;
-		settings.majorVersion = 3;
-		settings.minorVersion = 3;
+		// SDL initialization
 
-		window = sfRenderWindow_create(mode, "wgen", sfResize | sfClose, &settings);
-		if (!window)
-			throw new Exception("Could not open SFML window");
-		sfRenderWindow_setVerticalSyncEnabled(window, true);
-		view = sfView_createFromRect(sfFloatRect(0, 0, mode.width, mode.height));
+		dsdl.loadSO();
+		dsdl.init(everything : true);
+	    setGLAttribute(GLAttribute.contextProfileMask, GLProfile.core);
+	    setGLAttribute(GLAttribute.contextMajorVersion, 3);
+	    setGLAttribute(GLAttribute.contextMinorVersion, 3);
 
-		resetText();
+		dsdl.ttf.loadSO();
+		dsdl.ttf.init();
+
+		auto window = new Window("wgen", [WindowPos.centered, WindowPos.centered], [1024, 768], resizable: true, openGL: true);
+		auto font = new Font("CascadiaMono.ttf", 18);
+
+		// GL initialization
 
 		if(loadOpenGL() != GLSupport.gl33)
 		{
@@ -243,10 +240,6 @@ class Viewer
 		}
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_CULL_FACE);
-
-		if (singleton)
-			throw new Exception("Multiple viewer instances");
-		singleton = this;
 
 		program = setupShaders(vertexShader, fragmentShader);
 
@@ -269,10 +262,8 @@ class Viewer
 	{
 		singleton = null;
 
-		sfText_destroy(text);
-		sfFont_destroy(font);
-		sfView_destroy(view);
-		sfRenderWindow_destroy(window);
+		dsdl.ttf.quit();
+		dsdl.quit();
 	}
 
 	void update(const(Heightmap) hmap)
@@ -302,24 +293,24 @@ class Viewer
 		return sw.peek.total!"msecs" / 1000.0;
 	}
 
-	private void resetText()
-	{
-		if (font)
-			sfFont_destroy(font);
-
-		font = sfFont_createFromFile("CascadiaMono.ttf");
-		if (!font)
-			throw new Exception("Could not load font");
-
-		if (text)
-			sfText_destroy(text);
-
-		text = sfText_create();
-		sfText_setFont(text, font);
-		sfText_setPosition(text, sfVector2f(16, 16));
-		sfText_setCharacterSize(text, 16);
-		sfText_setColor(text, sfBlack);
-	}
+	// private void resetText()
+	// {
+	// 	if (font)
+	// 		sfFont_destroy(font);
+	//
+	// 	font = sfFont_createFromFile("CascadiaMono.ttf");
+	// 	if (!font)
+	// 		throw new Exception("Could not load font");
+	//
+	// 	if (text)
+	// 		sfText_destroy(text);
+	//
+	// 	text = sfText_create();
+	// 	sfText_setFont(text, font);
+	// 	sfText_setPosition(text, sfVector2f(16, 16));
+	// 	sfText_setCharacterSize(text, 16);
+	// 	sfText_setColor(text, sfBlack);
+	// }
 
 	private void setTurntableView(double ratio)
 	{
@@ -377,24 +368,20 @@ class Viewer
 		auto dt = now - lastUpdate;
 		lastUpdate = now;
 
-		if (sfRenderWindow_hasFocus(window))
+		if (window.mouseFocused)
 		{
 			double xpos, ypos;
 			int width, height;
 
-			with (sfRenderWindow_getSize(window))
-			{
-				width = x;
-				height = y;
-			}
+			auto size = window.size;
+			width = size[0];
+			height = size[1];
 
-			with (sfMouse_getPosition(cast(sfWindow*) window))
-			{
-				xpos = x;
-				ypos = y;
-			}
+			auto pos = getMousePosition();
+			xpos = pos[0];
+			ypos = pos[1];
 
-			sfMouse_setPosition(sfVector2i(width / 2, height / 2), cast(sfWindow*) window);
+			setMousePosition([width / 2, height / 2]);
 
 			firstPersonHDir -= mouseSpeed * dt * (xpos - width / 2);
 			firstPersonVDir -= mouseSpeed * dt * (ypos - height / 2);
@@ -404,20 +391,21 @@ class Viewer
 
 			auto previousPos = firstPersonPos;
 
-			if (sfMouse_isButtonPressed(sfMouseLeft))
+			if (getMouseState().left)
 				speed *= 10.0;
-			if (sfMouse_isButtonPressed(sfMouseRight))
+			if (getMouseState().right)
 				speed *= 100.0;
 
 			auto right = cross(forward, vec3f(0,0,1));
 
-			if (sfKeyboard_isKeyPressed(sfKeyW))
+			auto kstate = getKeyboardState();
+			if (kstate[Scancode.w])
 				firstPersonPos += forward * speed * dt;
-			if (sfKeyboard_isKeyPressed(sfKeyS))
+			if (kstate[Scancode.s])
 				firstPersonPos -= forward * speed * dt;
-			if (sfKeyboard_isKeyPressed(sfKeyA))
+			if (kstate[Scancode.a])
 				firstPersonPos -= right * speed * dt;
-			if (sfKeyboard_isKeyPressed(sfKeyD))
+			if (kstate[Scancode.d])
 				firstPersonPos += right * speed * dt;
 
 			if (!map.inBounds(firstPersonPos))
@@ -458,26 +446,22 @@ class Viewer
 
 	bool draw()
 	{
-		sfEvent event;
-		while (sfRenderWindow_pollEvent(window, &event))
+		bool running = true;
+
+		while (auto event = pollEvent())
 		{
-			if (event.type == sfEvtClosed)
-				sfRenderWindow_close(window);
-			else if (event.type == sfEvtKeyPressed)
-				onKeyPressed(event.key.code);
+			if (auto e = cast(KeyDownKeyboardEvent) event)
+				onKeyPressed(e.scancode);
+			else if (cast(QuitEvent) event)
+				running = false;
 		}
 
-		int width, height;
-		with(sfRenderWindow_getSize(window))
-		{
-			width = x;
-			height = y;
-		}
+		auto size = window.size;
+		auto width = size[0];
+		auto height = size[1];
 		auto ratio = width * 1.0 / height;
 
 		glViewport(0, 0, width, height);
-		sfView_reset(view, sfFloatRect(0, 0, width, height));
-		sfRenderWindow_setView(window, view);
 
 		glClearColor(156.0/255, 196.0/255, 240.0/255, 1.0);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -553,13 +537,13 @@ class Viewer
 
 		currentText ~= "%.1f fps".format(fps);
 
-		sfRenderWindow_pushGLStates(window);
-		sfText_setString(text, currentText.join("\n").toStringz);
-		sfRenderWindow_drawText(window, text, null);
-		sfRenderWindow_popGLStates(window);
+		// sfRenderWindow_pushGLStates(window);
+		// sfText_setString(text, currentText.join("\n").toStringz);
+		// sfRenderWindow_drawText(window, text, null);
+		// sfRenderWindow_popGLStates(window);
 
-		sfRenderWindow_display(window);
-		return sfRenderWindow_isOpen(window) == sfFalse;
+		window.update();
+		return running;
 	}
 
 	private void updateMainMesh(const(Heightmap) hmap)
@@ -593,45 +577,41 @@ class Viewer
 		mainMesh.updateData();
 	}
 
-	private void onKeyPressed(sfKeyCode code)
+	private void onKeyPressed(Scancode code)
 	{
 		switch (code)
 		{
-			case sfKeyEscape:
-				sfRenderWindow_close(window);
-				break;
-
-			case sfKeyTab:
+			case Scancode.tab:
 				shadingMode = (shadingMode + 1) % 4;
 				break;
 
-			case sfKeyV:
+			case Scancode.v:
 				viewMode = (viewMode + 1) % 3;
-				sfRenderWindow_setMouseCursorVisible(window, viewMode != 2);
+				setCursorVisibility(viewMode != 2);
 				break;
 
-			case sfKeyL:
+			case Scancode.l:
 				lineMode = (lineMode + 1) % 4;
 				break;
 
-			case sfKeyM:
+			case Scancode.m:
 				cubeMode = (cubeMode + 1) % 3;
 				break;
 
-			case sfKeyEnter:
+			case Scancode.return1:
 				requestExport = true;
 				break;
 
-			case sfKeyUp:
+			case Scancode.up:
 				cubesRadius += 10;
 				break;
 
-			case sfKeyDown:
+			case Scancode.down:
 				if (cubesRadius >= 10)
 					cubesRadius -= 10;
 				break;
 
-			case sfKeySpace:
+			case Scancode.space:
 				walking = !walking;
 				break;
 

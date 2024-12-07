@@ -5,8 +5,8 @@
 	"copyright": "Copyright © 2024, Noé Falzon",
 	"dependencies": {
 		"bindbc-opengl": "~>1.1.1",
-		"bindbc-sfml": "~>1.1.0",
 		"dplug:math": "~>14.5.0",
+		"dsdl": "~main",
 		"fast_noise": "~>1.0.5",
 		"fswatch": "~>0.6.1",
 		"gamut": "~>3.1.1"
@@ -17,8 +17,8 @@
 	"name": "wgen",
 	"targetType": "executable",
 	"versions": [
+		"SDL_2_30",
 		"GL_33",
-		"SFML_240",
-		"SFML_Graphics"
+		"SDL_TTF_2_22"
 	]
 }
