@@ -881,7 +881,7 @@ class Heightmap
 		writefln("Range: %d, %d", output.minElement, output.maxElement);
 
 		Image image;
-		image.createViewFromData(output.ptr, width, height, PT, width * T.sizeof.to!int);
+		image.createView(output.ptr, width, height, PT, width * T.sizeof.to!int);
 		image.flipVertical();
 		image.saveToFile(path);
 	}
