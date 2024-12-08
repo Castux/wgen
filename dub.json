@@ -9,7 +9,8 @@
 		"dsdl": "~main",
 		"fast_noise": "~>1.0.5",
 		"fswatch": "~>0.6.1",
-		"gamut": "~>3.1.1"
+		"gamut": "~>3.1.1",
+		"handy-httpd": "~>8.4.2"
 	},
 	"description": "A minimal D application.",
 	"license": "MIT",

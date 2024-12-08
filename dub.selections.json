@@ -10,6 +10,11 @@
 		"fast_noise": "1.0.5",
 		"fswatch": "0.6.1",
 		"gamut": "3.1.2",
-		"intel-intrinsics": "1.11.22"
+		"handy-httpd": "8.4.2",
+		"httparsed": "1.2.1",
+		"intel-intrinsics": "1.11.22",
+		"path-matcher": "1.2.0",
+		"slf4d": "3.0.1",
+		"streams": "3.5.0"
 	}
 }
