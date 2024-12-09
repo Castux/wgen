@@ -1,5 +1,5 @@
 {
-	"path": "Chasers.tga",
+	"path": "test/Chasers.png",
 	"resolution": 32,
 	"grid": "hex",
 	"jitter": 1.0,

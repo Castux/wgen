@@ -13,3 +13,4 @@ wgen
 *.png
 *.tga
 .DS_Store
+dub.selections.json
