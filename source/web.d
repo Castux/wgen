@@ -30,10 +30,7 @@ class Server: HttpRequestHandler
 		PathHandler pathHandler = new PathHandler();
 
 		pathHandler.addMapping(Method.GET, "/dummy", this);
-
-		// auto staticFiles = new FileResolvingHandler("static", DirectoryResolutionStrategies.none);
-		auto staticFiles = new FileResolvingHandler("static");
-		pathHandler.addMapping(Method.GET, "**", staticFiles);
+		pathHandler.addMapping(Method.GET, "**", new FileResolvingHandler("static"));
 
 		server = new HttpServer(pathHandler, cfg);
 		serverThread = server.startInNewThread();

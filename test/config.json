@@ -1,6 +1,6 @@
 {
 	"path": "Chasers.tga",
-	"resolution": 4,
+	"resolution": 32,
 	"grid": "hex",
 	"jitter": 1.0,
 	"relax": false,

@@ -6,7 +6,6 @@
 	"dependencies": {
 		"bindbc-opengl": "~>1.1.1",
 		"dplug:math": "~>14.5.0",
-		"dsdl": "~main",
 		"fast_noise": "~>1.0.5",
 		"fswatch": "~>0.6.1",
 		"gamut": "~>3.1.1",
@@ -16,10 +15,5 @@
 	"license": "MIT",
 	"mainSourceFile": "source/wgen.d",
 	"name": "wgen",
-	"targetType": "executable",
-	"versions": [
-		"SDL_2_30",
-		"GL_33",
-		"SDL_TTF_2_22"
-	]
+	"targetType": "executable"
 }

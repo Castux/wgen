@@ -11,7 +11,6 @@ import heightmap;
 import svg;
 import obj;
 import image;
-//import viewer;
 import web;
 
 int main(string[] args)
