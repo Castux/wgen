@@ -10,7 +10,7 @@ var mainMesh;
 function setupThree()
 {
 	scene = new THREE.Scene();
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 100000 );
+	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
 	camera.position.x = 1000;
 	camera.position.y = 1000;
 	camera.position.z = 1000;
@@ -23,8 +23,11 @@ function setupThree()
 
 	controls = new OrbitControls( camera, renderer.domElement );
 
-	const directionalLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
-	directionalLight.position.set( - 1, 0, 1 ).normalize();
+	const light = new THREE.AmbientLight(0x404040);
+	scene.add(light);
+
+	const directionalLight = new THREE.DirectionalLight( 0xffffff, 1 );
+	directionalLight.position.set(-1, 1, 1).normalize();
 	scene.add( directionalLight );
 
 	window.addEventListener( 'resize', onWindowResize, false );
@@ -46,12 +49,17 @@ async function getMesh()
 
 	geometry.setIndex( indices );
 	geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
+	geometry.doubleSided = true;
+	geometry.computeVertexNormals();
 
-	const material = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
-	material.wireframe = true;
-	mainMesh = new THREE.Mesh( geometry, material );
+	const material = new THREE.MeshPhongMaterial({color: 0xffffff, side: THREE.DoubleSide});
+	material.flatShading = true;
+	material.wireframe = false;
+
+	mainMesh = new THREE.Mesh(geometry, material);
 	mainMesh.translateX(-json.width / 2.0);
 	mainMesh.translateY(-json.height / 2.0);
+
 
 	scene.add(mainMesh);
 	console.log("Updated main mesh");
@@ -60,7 +68,7 @@ async function getMesh()
 function animate()
 {
 	controls.update();
-	renderer.render( scene, camera );
+	renderer.render(scene, camera);
 }
 
 setupThree();
