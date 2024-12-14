@@ -23,6 +23,8 @@ class Vertex
 	vec3d pos;
 	alias pos this;
 
+	ulong index;
+
 	Vertex[] neighbours;
 	Edge[] edges;
 	Triangle[] triangles;
@@ -174,7 +176,7 @@ class Heightmap
 		if (event.type == FileChangeEventType.modify)
 		{
 			writeln("=================");
-			loadConfig(event.path);
+			loadConfig(conf.configPath);
 		}
 
 		foreach (event; imageWatcher.getEvents())
@@ -459,6 +461,7 @@ class Heightmap
 				}
 			}
 
+			vertex.index = vertices.length;
 			vertices ~= vertex;
 		}
 
@@ -898,5 +901,40 @@ class Heightmap
 			writeImage!ubyte(heightmap, heightmapPath);
 			writeImage!ubyte(waterLevel, waterLevelPath);
 		}
+	}
+
+	string toJson()
+	{
+		import std.format;
+
+		auto json = appender!string;
+		json.put(`{"vertices":[`);
+
+		foreach(v, vertex; vertices)
+		{
+			json.put("%s,%s,%s".format(
+				vertex[0].isNaN ? `"nan"` : "%.2f".format(vertex[0]),
+				vertex[1].isNaN ? `"nan"` : "%.2f".format(vertex[1]),
+				vertex[2].isNaN ? `"nan"` : "%.2f".format(vertex[2])
+			));
+			if (v < vertices.length - 1)
+				json.put(',');
+		}
+
+		json.put(`], "triangles":[`);
+
+		foreach(t, tri; triangles)
+		{
+			json.put("%d,%d,%d".format(
+				tri.vertices[0].index,
+				tri.vertices[1].index,
+				tri.vertices[2].index
+			));
+			if (t < triangles.length - 1)
+				json.put(',');
+		}
+
+		json.put(`]}`);
+		return json[];
 	}
 }

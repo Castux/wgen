@@ -29,6 +29,7 @@ class Terrain
 
 class Config
 {
+	string configPath;
 	string path;
 	double resolution;
 	string grid;
@@ -50,6 +51,7 @@ class Config
 		auto txt = readText(jsonPath);
 		auto json = parseJSON(txt);
 
+		configPath = jsonPath;
 		path = json["path"].get!string;
 		resolution = json["resolution"].get!double;
 		grid = json["grid"].get!string;

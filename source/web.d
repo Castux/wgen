@@ -11,7 +11,20 @@ import handy_httpd.handlers.file_resolving_handler;
 
 import heightmap;
 
-class Server: HttpRequestHandler
+private HttpRequestHandler toHandler(void delegate(ref HttpRequestContext ctx) fun)
+{
+	class Handler: HttpRequestHandler
+	{
+		void handle(ref HttpRequestContext ctx)
+		{
+			fun(ctx);
+		}
+	}
+
+	return new Handler();
+}
+
+class Server
 {
 	HttpServer server;
 	Thread serverThread;
@@ -19,9 +32,16 @@ class Server: HttpRequestHandler
 	Heightmap heightmap;
 	int lastVersion;
 
-	void handle(ref HttpRequestContext ctx)
+	void handleHeightmap(ref HttpRequestContext ctx)
 	{
-		ctx.response.writeBodyString("Hello dummy " ~ lastVersion.to!string);
+		import std.zlib;
+
+		auto json = heightmap.toJson;
+
+		auto compressed = compress(json);
+
+		ctx.response.addHeader("Content-Encoding", "deflate");
+		ctx.response.writeBodyBytes(compressed, "application/json");
 	}
 
 	void run(string path)
@@ -29,7 +49,7 @@ class Server: HttpRequestHandler
 		ServerConfig cfg;
 		PathHandler pathHandler = new PathHandler();
 
-		pathHandler.addMapping(Method.GET, "/dummy", this);
+		pathHandler.addMapping(Method.GET, "/heightmap", toHandler(&handleHeightmap));
 		pathHandler.addMapping(Method.GET, "**", new FileResolvingHandler("static"));
 
 		server = new HttpServer(pathHandler, cfg);
