@@ -908,14 +908,16 @@ class Heightmap
 		import std.format;
 
 		auto json = appender!string;
-		json.put(`{"vertices":[`);
+		json.put("{");
+		json.put(`"width": %f, "height": %f,`.format(width, height));
+		json.put(`"vertices":[`);
 
 		foreach(v, vertex; vertices)
 		{
 			json.put("%s,%s,%s".format(
-				vertex[0].isNaN ? `"nan"` : "%.2f".format(vertex[0]),
-				vertex[1].isNaN ? `"nan"` : "%.2f".format(vertex[1]),
-				vertex[2].isNaN ? `"nan"` : "%.2f".format(vertex[2])
+				vertex[0].isNaN ? `"0"` : "%.2f".format(vertex[0]),
+				vertex[1].isNaN ? `"0"` : "%.2f".format(vertex[1]),
+				vertex[2].isNaN ? `"0"` : "%.2f".format(vertex[2])
 			));
 			if (v < vertices.length - 1)
 				json.put(',');
