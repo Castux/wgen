@@ -17,9 +17,10 @@ function setupThree()
 	camera.up.set(0,0,1);
 
 	renderer = new THREE.WebGLRenderer();
-	renderer.setSize( window.innerWidth, window.innerHeight );
-	renderer.setAnimationLoop( animate );
-	document.body.appendChild( renderer.domElement );
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.setAnimationLoop(animate);
+	renderer.localClippingEnabled = true;
+	document.body.appendChild(renderer.domElement);
 
 	controls = new OrbitControls( camera, renderer.domElement );
 
@@ -55,11 +56,16 @@ async function getMesh()
 	const material = new THREE.MeshPhongMaterial({color: 0xffffff, side: THREE.DoubleSide});
 	material.flatShading = true;
 	material.wireframe = false;
+	material.clippingPlanes = [
+		new THREE.Plane( new THREE.Vector3(1, 0, 0), json.width / 2.0),
+		new THREE.Plane( new THREE.Vector3(-1, 0, 0), json.width / 2.0),
+		new THREE.Plane( new THREE.Vector3(0, 1, 0), json.height / 2.0),
+		new THREE.Plane( new THREE.Vector3(0, -1, 0), json.height / 2.0)
+	];
 
 	mainMesh = new THREE.Mesh(geometry, material);
 	mainMesh.translateX(-json.width / 2.0);
 	mainMesh.translateY(-json.height / 2.0);
-
 
 	scene.add(mainMesh);
 	console.log("Updated main mesh");
