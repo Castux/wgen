@@ -9,13 +9,14 @@ var controls;
 var mainMesh;
 
 var config = {
-	wireframe: false,
-	flatShading: true
+	wireframe: false
 };
 
 function setupThree()
 {
 	scene = new THREE.Scene();
+	scene.background = new THREE.Color(156.0/255, 196.0/255, 240.0/255);
+
 	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
 	camera.up.set(0,0,1);
 
@@ -27,12 +28,12 @@ function setupThree()
 
 	controls = new OrbitControls(camera, renderer.domElement);
 
-	const light = new THREE.AmbientLight(0x404040);
+	const light = new THREE.AmbientLight(0xffffff, 1);
 	scene.add(light);
 
-	const directionalLight = new THREE.DirectionalLight( 0xffffff, 1 );
+	const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
 	directionalLight.position.set(-1, 1, 1).normalize();
-	scene.add( directionalLight );
+	scene.add(directionalLight);
 
 	window.addEventListener( 'resize', onWindowResize, false );
 	function onWindowResize(){
@@ -49,29 +50,37 @@ function setupGui()
 	gui.add(config, 'wireframe').onChange(function(value) {
 		mainMesh.material.wireframe = value;
 	});
-	gui.add(config, 'flatShading').name('flat shading').onChange(function(value) {
-		mainMesh.material.flatShading = value;
-		mainMesh.material.needsUpdate = true;
-	});
 }
 
 async function getMesh()
 {
-	let response = await fetch("/heightmap");
-	let json = await response.json();
+	let responses = await Promise.all([
+		fetch("/heightmap"),
+		fetch("/colors")
+	]);
+	let json = await responses[0].json();
+	let colorsJson = await responses[1].json();
 
 	const geometry = new THREE.BufferGeometry();
-	const vertices = new Float32Array(json.vertices);
-	const indices = json.triangles;
 
-	geometry.setIndex( indices );
-	geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
-	geometry.doubleSided = true;
+	var colors = [];
+	for(var i = 0; i < colorsJson.length ; i++)
+	{
+		var color = new THREE.Color(colorsJson[i]);
+		colors.push(color.r);
+		colors.push(color.g);
+		colors.push(color.b);
+	}
+
+	geometry.setIndex(json.triangles);
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(json.vertices, 3));
+	geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 	geometry.computeVertexNormals();
 
-	const material = new THREE.MeshPhongMaterial({color: 0xffffff, side: THREE.DoubleSide});
+	const material = new THREE.MeshLambertMaterial();
 	material.flatShading = true;
 	material.wireframe = false;
+	material.vertexColors = true;
 	material.clippingPlanes = [
 		new THREE.Plane( new THREE.Vector3(1, 0, 0), json.width / 2.0),
 		new THREE.Plane( new THREE.Vector3(-1, 0, 0), json.width / 2.0),

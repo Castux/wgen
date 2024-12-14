@@ -3,6 +3,11 @@ import std.concurrency;
 import core.thread;
 import std.datetime;
 import std.conv;
+import std.algorithm;
+import std.array;
+import std.format;
+
+import dplug.math;
 
 import handy_httpd;
 import handy_httpd.components.websocket;
@@ -32,16 +37,29 @@ class Server
 	Heightmap heightmap;
 	int lastVersion;
 
-	void handleHeightmap(ref HttpRequestContext ctx)
+	private static respond(ref HttpRequestContext ctx, string json)
 	{
 		import std.zlib;
 
-		auto json = heightmap.toJson;
-
 		auto compressed = compress(json);
-
 		ctx.response.addHeader("Content-Encoding", "deflate");
 		ctx.response.writeBodyBytes(compressed, "application/json");
+	}
+
+	void handleHeightmap(ref HttpRequestContext ctx)
+	{
+		auto json = heightmap.toJson;
+		respond(ctx, json);
+	}
+
+	void handleVertexColors(ref HttpRequestContext ctx)
+	{
+		auto colors = heightmap.vertices.map!((Vertex v) {
+			auto color = v.terrain ? v.terrain.color : vec3d(0,0,0);
+			return "%d".format(color[0].to!int << 16 | color[1].to!int << 8 | color[2].to!int);
+		});
+		auto json = "[" ~ colors.join(",") ~ "]";
+		respond(ctx, json);
 	}
 
 	void run(string path)
@@ -50,6 +68,7 @@ class Server
 		PathHandler pathHandler = new PathHandler();
 
 		pathHandler.addMapping(Method.GET, "/heightmap", toHandler(&handleHeightmap));
+		pathHandler.addMapping(Method.GET, "/colors", toHandler(&handleVertexColors));
 		pathHandler.addMapping(Method.GET, "**", new FileResolvingHandler("static"));
 
 		server = new HttpServer(pathHandler, cfg);
