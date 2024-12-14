@@ -1,11 +1,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
 var scene;
 var renderer;
 var camera;
 var controls;
 var mainMesh;
+
+var config = {
+	wireframe: false,
+	flatShading: true
+};
 
 function setupThree()
 {
@@ -19,7 +25,7 @@ function setupThree()
 	renderer.localClippingEnabled = true;
 	document.body.appendChild(renderer.domElement);
 
-	controls = new OrbitControls( camera, renderer.domElement );
+	controls = new OrbitControls(camera, renderer.domElement);
 
 	const light = new THREE.AmbientLight(0x404040);
 	scene.add(light);
@@ -34,6 +40,19 @@ function setupThree()
 		camera.updateProjectionMatrix();
 		renderer.setSize( window.innerWidth, window.innerHeight );
 	}
+}
+
+function setupGui()
+{
+	const gui = new GUI();
+
+	gui.add(config, 'wireframe').onChange(function(value) {
+		mainMesh.material.wireframe = value;
+	});
+	gui.add(config, 'flatShading').name('flat shading').onChange(function(value) {
+		mainMesh.material.flatShading = value;
+		mainMesh.material.needsUpdate = true;
+	});
 }
 
 async function getMesh()
@@ -72,8 +91,14 @@ async function getMesh()
 function animate()
 {
 	controls.update();
+	render();
+}
+
+function render()
+{
 	renderer.render(scene, camera);
 }
 
 setupThree();
+setupGui();
 getMesh();
