@@ -11,9 +11,6 @@ function setupThree()
 {
 	scene = new THREE.Scene();
 	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
-	camera.position.x = 1000;
-	camera.position.y = 1000;
-	camera.position.z = 1000;
 	camera.up.set(0,0,1);
 
 	renderer = new THREE.WebGLRenderer();
@@ -66,8 +63,9 @@ async function getMesh()
 	mainMesh = new THREE.Mesh(geometry, material);
 	mainMesh.translateX(-json.width / 2.0);
 	mainMesh.translateY(-json.height / 2.0);
-
 	scene.add(mainMesh);
+
+	camera.position.set(json.width / 2.0, json.height / 2.0, json.width / 2.0);
 	console.log("Updated main mesh");
 }
 
