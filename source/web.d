@@ -65,6 +65,7 @@ class Server
 	void run(string path)
 	{
 		ServerConfig cfg;
+		cfg.hostname = "0.0.0.0";
 		PathHandler pathHandler = new PathHandler();
 
 		pathHandler.addMapping(Method.GET, "/heightmap", toHandler(&handleHeightmap));
