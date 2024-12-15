@@ -910,6 +910,7 @@ class Heightmap
 		auto json = appender!string;
 		json.put("{");
 		json.put(`"width": %f, "height": %f,`.format(width, height));
+		json.put(`"lowest": %f, "highest": %f,`.format(lowest, highest));
 		json.put(`"vertices":[`);
 
 		foreach(v, vertex; vertices)
