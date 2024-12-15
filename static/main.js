@@ -35,7 +35,7 @@ function setupThree()
 	renderer.localClippingEnabled = true;
 	document.body.appendChild(renderer.domElement);
 
-//	controls = new OrbitControls(orthoCamera, renderer.domElement);
+	controls = new OrbitControls(camera, renderer.domElement);
 
 	const light = new THREE.AmbientLight(0xffffff, 1);
 	scene.add(light);
@@ -130,13 +130,13 @@ async function getMesh()
 
 function animate()
 {
-//	controls.update();
+	controls.update();
 	render();
 }
 
 function render()
 {
-	renderer.render(scene, orthoCamera);
+	renderer.render(scene, camera);
 }
 
 setupThree();
