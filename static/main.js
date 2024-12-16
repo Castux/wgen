@@ -147,6 +147,14 @@ async function getMesh()
 	console.log("Updated main mesh");
 }
 
+function setColorBuffer(index, f32buffer)
+{
+	if (colorBuffers[index] == undefined)
+		colorBuffers[index] = new THREE.BufferAttribute(f32buffer, 3);
+	else
+		colorBuffers[index].array = f32buffer;
+}
+
 function updateTerrainColors(colorsJson)
 {
 	var colors = [];
@@ -158,13 +166,7 @@ function updateTerrainColors(colorsJson)
 		colors.push(color.b);
 	}
 
-	var f32buffer = new Float32Array(colors);
-	var index = colorOptions.terrain;
-
-	if (colorBuffers[index] == undefined)
-		colorBuffers[index] = new THREE.BufferAttribute(f32buffer, 3);
-	else
-		colorBuffers[index].array = f32buffer;
+	setColorBuffer(colorOptions.terrain, new Float32Array(colors));
 }
 
 function updateHeightColors()
@@ -178,13 +180,7 @@ function updateHeightColors()
 		normalizedZ.push(z);
 	}
 
-	var f32buffer = new Float32Array(normalizedZ);
-	var index = colorOptions.height;
-
-	if (colorBuffers[index] == undefined)
-		colorBuffers[index] = new THREE.BufferAttribute(f32buffer, 3);
-	else
-		colorBuffers[index].array = f32Buffer;
+	setColorBuffer(colorOptions.height, new Float32Array(normalizedZ));
 }
 
 function animate()
