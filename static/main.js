@@ -107,19 +107,10 @@ async function getMesh()
 		fetch("/colors")
 	]);
 	map = await responses[0].json();
-	let colorsJson = await responses[1].json();
+	updateColors(await responses[1].json());
 
 	const geometry = new THREE.BufferGeometry();
 
-	var colors = [];
-	for(var i = 0; i < colorsJson.length ; i++)
-	{
-		var color = new THREE.Color(colorsJson[i]);
-		colors.push(color.r);
-		colors.push(color.g);
-		colors.push(color.b);
-	}
-	terrainColors = new THREE.Float32BufferAttribute(colors, 3);
 
 	var normalizedZ = [];
 	for(var i = 2; i < map.vertices.length; i += 3)
@@ -164,6 +155,25 @@ async function getMesh()
 	cameras[1].updateProjectionMatrix();
 
 	console.log("Updated main mesh");
+}
+
+function updateColors(colorsJson)
+{
+	var colors = [];
+	for(var i = 0; i < colorsJson.length ; i++)
+	{
+		var color = new THREE.Color(colorsJson[i]);
+		colors.push(color.r);
+		colors.push(color.g);
+		colors.push(color.b);
+	}
+
+	var f32buffer = new Float32Array(colors);
+
+	if (terrainColors == undefined)
+		terrainColors = new THREE.BufferAttribute(f32buffer, 3);
+	else
+		terrainColors.array = f32buffer;
 }
 
 function animate()
