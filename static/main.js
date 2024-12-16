@@ -9,8 +9,7 @@ var renderer;
 var cameras;
 var controls;
 var mainMesh;
-var terrainColors;
-var heightColors;
+var colorBuffers = [null, null];
 
 var config = {
 	wireframe: false,
@@ -90,7 +89,7 @@ function setupGui()
 	});
 
 	gui.add(config, 'color', colorOptions).onChange(function(value) {
-		mainMesh.geometry.setAttribute('color', value == 0 ? terrainColors : heightColors);
+		mainMesh.geometry.setAttribute('color', colorBuffers[value]);
 	});
 
 	gui.add(config, 'camera', cameraOptions).onChange(function(value) {
@@ -107,24 +106,15 @@ async function getMesh()
 		fetch("/colors")
 	]);
 	map = await responses[0].json();
-	updateColors(await responses[1].json());
+
+	updateTerrainColors(await responses[1].json());
+	updateHeightColors();
 
 	const geometry = new THREE.BufferGeometry();
 
-
-	var normalizedZ = [];
-	for(var i = 2; i < map.vertices.length; i += 3)
-	{
-		const z = (map.vertices[i] - map.lowest) / (map.highest - map.lowest);
-		normalizedZ.push(z);
-		normalizedZ.push(z);
-		normalizedZ.push(z);
-	}
-	heightColors = new THREE.Float32BufferAttribute(normalizedZ, 3);
-
 	geometry.setIndex(map.triangles);
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(map.vertices, 3));
-	geometry.setAttribute('color', terrainColors);
+	geometry.setAttribute('color', colorBuffers[config.color]);
 	geometry.computeVertexNormals();
 
 	const material = new THREE.MeshLambertMaterial();
@@ -157,7 +147,7 @@ async function getMesh()
 	console.log("Updated main mesh");
 }
 
-function updateColors(colorsJson)
+function updateTerrainColors(colorsJson)
 {
 	var colors = [];
 	for(var i = 0; i < colorsJson.length ; i++)
@@ -169,11 +159,32 @@ function updateColors(colorsJson)
 	}
 
 	var f32buffer = new Float32Array(colors);
+	var index = colorOptions.terrain;
 
-	if (terrainColors == undefined)
-		terrainColors = new THREE.BufferAttribute(f32buffer, 3);
+	if (colorBuffers[index] == undefined)
+		colorBuffers[index] = new THREE.BufferAttribute(f32buffer, 3);
 	else
-		terrainColors.array = f32buffer;
+		colorBuffers[index].array = f32buffer;
+}
+
+function updateHeightColors()
+{
+	var normalizedZ = [];
+	for(var i = 2; i < map.vertices.length; i += 3)
+	{
+		const z = (map.vertices[i] - map.lowest) / (map.highest - map.lowest);
+		normalizedZ.push(z);
+		normalizedZ.push(z);
+		normalizedZ.push(z);
+	}
+
+	var f32buffer = new Float32Array(normalizedZ);
+	var index = colorOptions.height;
+
+	if (colorBuffers[index] == undefined)
+		colorBuffers[index] = new THREE.BufferAttribute(f32buffer, 3);
+	else
+		colorBuffers[index].array = f32Buffer;
 }
 
 function animate()
