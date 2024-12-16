@@ -55,6 +55,7 @@ function setupThree()
 	scene.add(directionalLight);
 
 	window.addEventListener('resize', onWindowResize, false);
+	document.addEventListener('keydown', onKeyDown);
 }
 
 function activateControl(index)
@@ -70,17 +71,20 @@ function setupGui()
 {
 	const gui = new GUI();
 
-	gui.add(config, 'wireframe').onChange(function(value) {
-		mainMesh.material.wireframe = value;
-	});
+	gui.add(config, 'wireframe')
+		.name("Wireframe (w)")
+		.onChange(updateWireframe)
+		.listen();
 
-	gui.add(config, 'color', colorOptions).onChange(function(value) {
-		mainMesh.geometry.setAttribute('color', colorBuffers[value]);
-	});
+	gui.add(config, 'color', colorOptions)
+		.name("Color (shift)")
+		.onChange(updateColors)
+		.listen();
 
-	gui.add(config, 'view', viewOptions).onChange(function(value) {
-		activateControl(value);
-	});
+	gui.add(config, 'view', viewOptions)
+		.name("View (tab)")
+		.onChange(activateControl)
+		.listen();
 }
 
 async function getMesh()
@@ -167,6 +171,16 @@ function updateHeightColors()
 	setColorBuffer(colorOptions.height, new Float32Array(normalizedZ));
 }
 
+function updateColors()
+{
+	mainMesh.geometry.setAttribute('color', colorBuffers[config.color]);
+}
+
+function updateWireframe()
+{
+	mainMesh.material.wireframe = config.wireframe;
+}
+
 function animate()
 {
 	controls[config.view]?.update();
@@ -191,6 +205,25 @@ function onWindowResize()
 	cameras[1].updateProjectionMatrix();
 
 	renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function onKeyDown(event)
+{
+	switch(event.key)
+	{
+		case "Tab":
+			config.view = (config.view + 1) % Object.keys(viewOptions).length;
+			event.preventDefault();
+			break;
+		case "Shift":
+			config.color = (config.color + 1) % Object.keys(colorOptions).length;
+			updateColors();
+			break;
+		case "w":
+			config.wireframe = !config.wireframe;
+			updateWireframe();
+			break;
+	}
 }
 
 setupThree();
