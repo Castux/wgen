@@ -15,7 +15,9 @@ var heightColors;
 var config = {
 	wireframe: false,
 	color: 0,
-	camera: 0
+	camera: 0,
+
+	topView: resetTopView
 };
 
 const colorOptions = {terrain: 0, height: 1};
@@ -46,6 +48,7 @@ function setupThree()
 		new OrbitControls(perspCamera, renderer.domElement),
 		new OrbitControls(orthoCamera, renderer.domElement)
 	];
+	activateControl(config.camera);
 
 	const light = new THREE.AmbientLight(0xffffff, 1);
 	scene.add(light);
@@ -70,6 +73,14 @@ function setupThree()
 	}
 }
 
+function activateControl(index)
+{
+	for(var i = 0; i < controls.length; i++)
+	{
+		controls[i].enabled = (i == index);
+	}
+}
+
 function setupGui()
 {
 	const gui = new GUI();
@@ -77,18 +88,16 @@ function setupGui()
 	gui.add(config, 'wireframe').onChange(function(value) {
 		mainMesh.material.wireframe = value;
 	});
+
 	gui.add(config, 'color', colorOptions).onChange(function(value) {
 		mainMesh.geometry.setAttribute('color', value == 0 ? terrainColors : heightColors);
 	});
+
 	gui.add(config, 'camera', cameraOptions).onChange(function(value) {
-		for(var i = 0; i < controls.length; i++)
-		{
-			if (i == value)
-				controls[i].reset();
-			else
-				controls[i].saveState();
-		}
+		activateControl(value);
 	});
+
+	gui.add(config, 'topView').name("Top view");
 }
 
 async function getMesh()
@@ -145,8 +154,9 @@ async function getMesh()
 
 	const aspect = window.innerWidth / window.innerHeight;
 
-	cameras[0].position.set(0.0, -map.height, map.width);
+	cameras[0].position.set(0.0, -map.height, Math.max(map.width, map.height));
 
+	cameras[1].position.set(0.0, 0.0, Math.max(map.width, map.height));
 	cameras[1].left = -map.width / 2.0 * aspect;
 	cameras[1].right = map.width / 2.0 * aspect;
 	cameras[1].bottom = -map.height / 2.0;
@@ -165,6 +175,17 @@ function animate()
 function render()
 {
 	renderer.render(scene, cameras[config.camera]);
+}
+
+function resetTopView()
+{
+	cameras[config.camera].position.set(0, 0, Math.max(map.width, map.height));
+	cameras[config.camera].zoom = 1.0;
+	cameras[config.camera].updateWorldMatrix();
+	cameras[config.camera].updateProjectionMatrix();
+
+	controls[config.camera].target = new THREE.Vector3(0,0,0);
+	controls[config.camera].update();
 }
 
 setupThree();
