@@ -84,6 +84,7 @@ function activateControl(index)
 function setupGui()
 {
 	const gui = new GUI();
+	gui.title("Settings");
 
 	gui.add(config, 'wireframe')
 		.name("Wireframe (w)")
