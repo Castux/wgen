@@ -14,13 +14,11 @@ var colorBuffers = [null, null];
 var config = {
 	wireframe: false,
 	color: 0,
-	camera: 0,
-
-	topView: resetTopView
+	view: 0
 };
 
 const colorOptions = {terrain: 0, height: 1};
-const cameraOptions = {perspective: 0, orthographic: 1};
+const viewOptions = {orbit: 0, top: 1};
 
 function setupThree()
 {
@@ -32,7 +30,7 @@ function setupThree()
 
 	var orthoCamera = new THREE.OrthographicCamera( -1000, 1000, 1000, -1000, 0, 100000 );
 	orthoCamera.position.set(0,0,1000);
-	orthoCamera.up.set(0,0,1);
+	orthoCamera.up.set(0,1,0);
 	orthoCamera.lookAt(0,0,0);
 
 	cameras = [perspCamera, orthoCamera];
@@ -45,9 +43,9 @@ function setupThree()
 
 	controls = [
 		new OrbitControls(perspCamera, renderer.domElement),
-		new OrbitControls(orthoCamera, renderer.domElement)
+		null
 	];
-	activateControl(config.camera);
+	activateControl(config.view);
 
 	const light = new THREE.AmbientLight(0xffffff, 1);
 	scene.add(light);
@@ -56,27 +54,15 @@ function setupThree()
 	directionalLight.position.set(-1, 1, 1).normalize();
 	scene.add(directionalLight);
 
-	window.addEventListener( 'resize', onWindowResize, false );
-	function onWindowResize() {
-		const aspect = window.innerWidth / window.innerHeight;
-		cameras[0].aspect = aspect;
-		cameras[0].updateProjectionMatrix();
-
-		cameras[1].left = -map.width / 2.0 * aspect;
-		cameras[1].right = map.width / 2.0 * aspect;
-		cameras[1].bottom = -map.height / 2.0;
-		cameras[1].top = map.height / 2.0;
-		cameras[1].updateProjectionMatrix();
-
-		renderer.setSize( window.innerWidth, window.innerHeight );
-	}
+	window.addEventListener('resize', onWindowResize, false);
 }
 
 function activateControl(index)
 {
 	for(var i = 0; i < controls.length; i++)
 	{
-		controls[i].enabled = (i == index);
+		if (controls[i])
+			controls[i].enabled = (i == index);
 	}
 }
 
@@ -92,11 +78,9 @@ function setupGui()
 		mainMesh.geometry.setAttribute('color', colorBuffers[value]);
 	});
 
-	gui.add(config, 'camera', cameraOptions).onChange(function(value) {
+	gui.add(config, 'view', viewOptions).onChange(function(value) {
 		activateControl(value);
 	});
-
-	gui.add(config, 'topView').name("Top view");
 }
 
 async function getMesh()
@@ -149,7 +133,7 @@ async function getMesh()
 
 function setColorBuffer(index, f32buffer)
 {
-	if (colorBuffers[index] == undefined)
+	if (!colorBuffers[index])
 		colorBuffers[index] = new THREE.BufferAttribute(f32buffer, 3);
 	else
 		colorBuffers[index].array = f32buffer;
@@ -185,24 +169,29 @@ function updateHeightColors()
 
 function animate()
 {
-	controls[config.camera].update();
+	if (controls[config.view])
+		controls[config.view].update();
 	render();
 }
 
 function render()
 {
-	renderer.render(scene, cameras[config.camera]);
+	renderer.render(scene, cameras[config.view]);
 }
 
-function resetTopView()
+function onWindowResize()
 {
-	cameras[config.camera].position.set(0, 0, Math.max(map.width, map.height));
-	cameras[config.camera].zoom = 1.0;
-	cameras[config.camera].updateWorldMatrix();
-	cameras[config.camera].updateProjectionMatrix();
+	const aspect = window.innerWidth / window.innerHeight;
+	cameras[0].aspect = aspect;
+	cameras[0].updateProjectionMatrix();
 
-	controls[config.camera].target = new THREE.Vector3(0,0,0);
-	controls[config.camera].update();
+	cameras[1].left = -map.width / 2.0 * aspect;
+	cameras[1].right = map.width / 2.0 * aspect;
+	cameras[1].bottom = -map.height / 2.0;
+	cameras[1].top = map.height / 2.0;
+	cameras[1].updateProjectionMatrix();
+
+	renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
 setupThree();
