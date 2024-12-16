@@ -10,15 +10,18 @@ var cameras;
 var controls;
 var mainMesh;
 var colorBuffers = [null, null];
+var materials;
 
 var config = {
 	wireframe: false,
 	color: 0,
-	view: 0
+	view: 0,
+	shading: 0
 };
 
 const colorOptions = {terrain: 0, height: 1};
 const viewOptions = {orbit: 0, top: 1};
+const shadingOptions = {lit: 0, unlit: 1};
 
 function setupThree()
 {
@@ -54,6 +57,17 @@ function setupThree()
 	directionalLight.position.set(-1, 1, 1).normalize();
 	scene.add(directionalLight);
 
+	materials = [
+		new THREE.MeshLambertMaterial(),
+		new THREE.MeshBasicMaterial()
+	];
+
+	materials.forEach(material => {
+		material.flatShading = true;
+		material.wireframe = false;
+		material.vertexColors = true;
+	});
+
 	window.addEventListener('resize', onWindowResize, false);
 	document.addEventListener('keydown', onKeyDown);
 }
@@ -85,6 +99,11 @@ function setupGui()
 		.name("View (tab)")
 		.onChange(activateControl)
 		.listen();
+
+	gui.add(config, 'shading', shadingOptions)
+		.name("Shading (q)")
+		.onChange(updateShading)
+		.listen();
 }
 
 async function getMesh()
@@ -105,18 +124,7 @@ async function getMesh()
 	geometry.setAttribute('color', colorBuffers[config.color]);
 	geometry.computeVertexNormals();
 
-	const material = new THREE.MeshLambertMaterial();
-	material.flatShading = true;
-	material.wireframe = false;
-	material.vertexColors = true;
-	material.clippingPlanes = [
-		new THREE.Plane( new THREE.Vector3(1, 0, 0), map.width / 2.0),
-		new THREE.Plane( new THREE.Vector3(-1, 0, 0), map.width / 2.0),
-		new THREE.Plane( new THREE.Vector3(0, 1, 0), map.height / 2.0),
-		new THREE.Plane( new THREE.Vector3(0, -1, 0), map.height / 2.0)
-	];
-
-	mainMesh = new THREE.Mesh(geometry, material);
+	mainMesh = new THREE.Mesh(geometry, materials[0]);
 	mainMesh.translateX(-map.width / 2.0);
 	mainMesh.translateY(-map.height / 2.0);
 	scene.add(mainMesh);
@@ -131,6 +139,15 @@ async function getMesh()
 	cameras[1].bottom = -map.height / 2.0;
 	cameras[1].top = map.height / 2.0;
 	cameras[1].updateProjectionMatrix();
+
+	materials.forEach(material =>
+		material.clippingPlanes = [
+			new THREE.Plane( new THREE.Vector3(1, 0, 0), map.width / 2.0),
+			new THREE.Plane( new THREE.Vector3(-1, 0, 0), map.width / 2.0),
+			new THREE.Plane( new THREE.Vector3(0, 1, 0), map.height / 2.0),
+			new THREE.Plane( new THREE.Vector3(0, -1, 0), map.height / 2.0)
+		]
+	);
 
 	console.log("Updated main mesh");
 }
@@ -178,7 +195,12 @@ function updateColors()
 
 function updateWireframe()
 {
-	mainMesh.material.wireframe = config.wireframe;
+	materials.forEach(m => m.wireframe = config.wireframe);
+}
+
+function updateShading()
+{
+	mainMesh.material = materials[config.shading];
 }
 
 function animate()
@@ -222,6 +244,10 @@ function onKeyDown(event)
 		case "w":
 			config.wireframe = !config.wireframe;
 			updateWireframe();
+			break;
+		case "q":
+			config.shading = (config.shading + 1) % Object.keys(shadingOptions).length;
+			updateShading();
 			break;
 	}
 }
