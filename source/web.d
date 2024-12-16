@@ -6,6 +6,7 @@ import std.conv;
 import std.algorithm;
 import std.array;
 import std.format;
+import std.math;
 
 import dplug.math;
 
@@ -29,6 +30,15 @@ private HttpRequestHandler toHandler(void delegate(ref HttpRequestContext ctx) f
 	return new Handler();
 }
 
+private void respond(ref HttpRequestContext ctx, string json)
+{
+	import std.zlib;
+
+	auto compressed = compress(json);
+	ctx.response.addHeader("Content-Encoding", "deflate");
+	ctx.response.writeBodyBytes(compressed, "application/json");
+}
+
 class Server
 {
 	HttpServer server;
@@ -37,29 +47,67 @@ class Server
 	Heightmap heightmap;
 	int lastVersion;
 
-	private static respond(ref HttpRequestContext ctx, string json)
-	{
-		import std.zlib;
-
-		auto compressed = compress(json);
-		ctx.response.addHeader("Content-Encoding", "deflate");
-		ctx.response.writeBodyBytes(compressed, "application/json");
-	}
-
 	void handleHeightmap(ref HttpRequestContext ctx)
 	{
-		auto json = heightmap.toJson;
-		respond(ctx, json);
+		if (!heightmap)
+		{
+			ctx.respond(`{"width": 0, "height": 0, "lowest": 0, "highest": 0, "vertices": [], "triangles": []}`);
+			return;
+		}
+
+		auto json = appender!string;
+
+		with (heightmap)
+		{
+			json.put("{");
+			json.put(`"width": %f, "height": %f,`.format(width, height));
+			json.put(`"lowest": %f, "highest": %f,`.format(lowest, highest));
+			json.put(`"vertices":[`);
+
+			foreach(v, vertex; vertices)
+			{
+				json.put("%s,%s,%s".format(
+					vertex[0].isNaN ? `"0"` : "%.2f".format(vertex[0]),
+					vertex[1].isNaN ? `"0"` : "%.2f".format(vertex[1]),
+					vertex[2].isNaN ? `"0"` : "%.2f".format(vertex[2])
+				));
+				if (v < vertices.length - 1)
+					json.put(',');
+			}
+
+			json.put(`], "triangles":[`);
+
+			foreach(t, tri; triangles)
+			{
+				json.put("%d,%d,%d".format(
+					tri.vertices[0].index,
+					tri.vertices[1].index,
+					tri.vertices[2].index
+				));
+				if (t < triangles.length - 1)
+					json.put(',');
+			}
+
+			json.put(`]}`);
+		}
+
+		ctx.respond(json[]);
 	}
 
 	void handleVertexColors(ref HttpRequestContext ctx)
 	{
+		if (!heightmap)
+		{
+			ctx.respond("[]");
+			return;
+		}
+
 		auto colors = heightmap.vertices.map!((Vertex v) {
 			auto color = v.terrain ? v.terrain.color : vec3d(0,0,0);
 			return "%d".format(color[0].to!int << 16 | color[1].to!int << 8 | color[2].to!int);
 		});
 		auto json = "[" ~ colors.join(",") ~ "]";
-		respond(ctx, json);
+		ctx.respond(json);
 	}
 
 	void run(string path)

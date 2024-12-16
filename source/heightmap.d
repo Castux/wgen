@@ -902,42 +902,4 @@ class Heightmap
 			writeImage!ubyte(waterLevel, waterLevelPath);
 		}
 	}
-
-	string toJson()
-	{
-		import std.format;
-
-		auto json = appender!string;
-		json.put("{");
-		json.put(`"width": %f, "height": %f,`.format(width, height));
-		json.put(`"lowest": %f, "highest": %f,`.format(lowest, highest));
-		json.put(`"vertices":[`);
-
-		foreach(v, vertex; vertices)
-		{
-			json.put("%s,%s,%s".format(
-				vertex[0].isNaN ? `"0"` : "%.2f".format(vertex[0]),
-				vertex[1].isNaN ? `"0"` : "%.2f".format(vertex[1]),
-				vertex[2].isNaN ? `"0"` : "%.2f".format(vertex[2])
-			));
-			if (v < vertices.length - 1)
-				json.put(',');
-		}
-
-		json.put(`], "triangles":[`);
-
-		foreach(t, tri; triangles)
-		{
-			json.put("%d,%d,%d".format(
-				tri.vertices[0].index,
-				tri.vertices[1].index,
-				tri.vertices[2].index
-			));
-			if (t < triangles.length - 1)
-				json.put(',');
-		}
-
-		json.put(`]}`);
-		return json[];
-	}
 }
