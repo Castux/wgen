@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
+var map;
+
 var scene;
 var renderer;
-var camera;
-var orthoCamera;
+var cameras;
 var controls;
 var mainMesh;
 var terrainColors;
@@ -13,21 +14,27 @@ var heightColors;
 
 var config = {
 	wireframe: false,
-	color: 0
+	color: 0,
+	camera: 0
 };
+
+const colorOptions = {terrain: 0, height: 1};
+const cameraOptions = {perspective: 0, orthographic: 1};
 
 function setupThree()
 {
 	scene = new THREE.Scene();
 	scene.background = new THREE.Color(156.0/255, 196.0/255, 240.0/255);
 
-	camera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
-	camera.up.set(0,0,1);
+	var perspCamera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
+	perspCamera.up.set(0,0,1);
 
-	orthoCamera = new THREE.PerspectiveCamera( -1000, 1000, 1000, -1000, 0, 100000 );
-	orthoCamera.up.set(0,1,0);
-	orthoCamera.position.set(0,0,10000);
+	var orthoCamera = new THREE.OrthographicCamera( -1000, 1000, 1000, -1000, 0, 100000 );
+	orthoCamera.position.set(0,0,1000);
+	orthoCamera.up.set(0,0,1);
 	orthoCamera.lookAt(0,0,0);
+
+	cameras = [perspCamera, orthoCamera];
 
 	renderer = new THREE.WebGLRenderer({antialias: true});
 	renderer.setSize(window.innerWidth, window.innerHeight);
@@ -35,7 +42,10 @@ function setupThree()
 	renderer.localClippingEnabled = true;
 	document.body.appendChild(renderer.domElement);
 
-	controls = new OrbitControls(camera, renderer.domElement);
+	controls = [
+		new OrbitControls(perspCamera, renderer.domElement),
+		new OrbitControls(orthoCamera, renderer.domElement)
+	];
 
 	const light = new THREE.AmbientLight(0xffffff, 1);
 	scene.add(light);
@@ -45,9 +55,17 @@ function setupThree()
 	scene.add(directionalLight);
 
 	window.addEventListener( 'resize', onWindowResize, false );
-	function onWindowResize(){
-		camera.aspect = window.innerWidth / window.innerHeight;
-		camera.updateProjectionMatrix();
+	function onWindowResize() {
+		const aspect = window.innerWidth / window.innerHeight;
+		cameras[0].aspect = aspect;
+		cameras[0].updateProjectionMatrix();
+
+		cameras[1].left = -map.width / 2.0 * aspect;
+		cameras[1].right = map.width / 2.0 * aspect;
+		cameras[1].bottom = -map.height / 2.0;
+		cameras[1].top = map.height / 2.0;
+		cameras[1].updateProjectionMatrix();
+
 		renderer.setSize( window.innerWidth, window.innerHeight );
 	}
 }
@@ -59,8 +77,17 @@ function setupGui()
 	gui.add(config, 'wireframe').onChange(function(value) {
 		mainMesh.material.wireframe = value;
 	});
-	gui.add(config, 'color', {terrain: 0, height: 1}).onChange(function(value) {
+	gui.add(config, 'color', colorOptions).onChange(function(value) {
 		mainMesh.geometry.setAttribute('color', value == 0 ? terrainColors : heightColors);
+	});
+	gui.add(config, 'camera', cameraOptions).onChange(function(value) {
+		for(var i = 0; i < controls.length; i++)
+		{
+			if (i == value)
+				controls[i].reset();
+			else
+				controls[i].saveState();
+		}
 	});
 }
 
@@ -70,7 +97,7 @@ async function getMesh()
 		fetch("/heightmap"),
 		fetch("/colors")
 	]);
-	let json = await responses[0].json();
+	map = await responses[0].json();
 	let colorsJson = await responses[1].json();
 
 	const geometry = new THREE.BufferGeometry();
@@ -86,17 +113,17 @@ async function getMesh()
 	terrainColors = new THREE.Float32BufferAttribute(colors, 3);
 
 	var normalizedZ = [];
-	for(var i = 2; i < json.vertices.length; i += 3)
+	for(var i = 2; i < map.vertices.length; i += 3)
 	{
-		const z = (json.vertices[i] - json.lowest) / (json.highest - json.lowest);
+		const z = (map.vertices[i] - map.lowest) / (map.highest - map.lowest);
 		normalizedZ.push(z);
 		normalizedZ.push(z);
 		normalizedZ.push(z);
 	}
 	heightColors = new THREE.Float32BufferAttribute(normalizedZ, 3);
 
-	geometry.setIndex(json.triangles);
-	geometry.setAttribute('position', new THREE.Float32BufferAttribute(json.vertices, 3));
+	geometry.setIndex(map.triangles);
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(map.vertices, 3));
 	geometry.setAttribute('color', terrainColors);
 	geometry.computeVertexNormals();
 
@@ -105,38 +132,39 @@ async function getMesh()
 	material.wireframe = false;
 	material.vertexColors = true;
 	material.clippingPlanes = [
-		new THREE.Plane( new THREE.Vector3(1, 0, 0), json.width / 2.0),
-		new THREE.Plane( new THREE.Vector3(-1, 0, 0), json.width / 2.0),
-		new THREE.Plane( new THREE.Vector3(0, 1, 0), json.height / 2.0),
-		new THREE.Plane( new THREE.Vector3(0, -1, 0), json.height / 2.0)
+		new THREE.Plane( new THREE.Vector3(1, 0, 0), map.width / 2.0),
+		new THREE.Plane( new THREE.Vector3(-1, 0, 0), map.width / 2.0),
+		new THREE.Plane( new THREE.Vector3(0, 1, 0), map.height / 2.0),
+		new THREE.Plane( new THREE.Vector3(0, -1, 0), map.height / 2.0)
 	];
 
 	mainMesh = new THREE.Mesh(geometry, material);
-	mainMesh.translateX(-json.width / 2.0);
-	mainMesh.translateY(-json.height / 2.0);
+	mainMesh.translateX(-map.width / 2.0);
+	mainMesh.translateY(-map.height / 2.0);
 	scene.add(mainMesh);
 
-	camera.position.set(0, 0, json.width / 2.0);
-	orthoCamera.position.set(0, 0, 1000);
-	orthoCamera.left = -json.width / 2.0;
-	orthoCamera.right = json.width / 2.0;
-	orthoCamera.bottom = json.height / 2.0;
-	orthoCamera.top = -json.height / 2.0;
-	orthoCamera.updateProjectionMatrix();
-	orthoCamera.updateMatrixWorld();
+	const aspect = window.innerWidth / window.innerHeight;
+
+	cameras[0].position.set(0.0, -map.height, map.width);
+
+	cameras[1].left = -map.width / 2.0 * aspect;
+	cameras[1].right = map.width / 2.0 * aspect;
+	cameras[1].bottom = -map.height / 2.0;
+	cameras[1].top = map.height / 2.0;
+	cameras[1].updateProjectionMatrix();
 
 	console.log("Updated main mesh");
 }
 
 function animate()
 {
-	controls.update();
+	controls[config.camera].update();
 	render();
 }
 
 function render()
 {
-	renderer.render(scene, camera);
+	renderer.render(scene, cameras[config.camera]);
 }
 
 setupThree();
