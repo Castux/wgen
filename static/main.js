@@ -169,8 +169,7 @@ function updateHeightColors()
 
 function animate()
 {
-	if (controls[config.view])
-		controls[config.view].update();
+	controls[config.view]?.update();
 	render();
 }
 
