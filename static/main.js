@@ -14,13 +14,14 @@ var controls;
 var mainMesh;
 var colorBuffers = [null, null];
 var materials;
-var rivers;
+var riverMesh;
 
 var config = {
 	wireframe: false,
 	color: 0,
 	view: 0,
-	shading: 0
+	shading: 0,
+	edgeWidth: 3
 };
 
 const colorOptions = {terrain: 0, height: 1};
@@ -32,10 +33,10 @@ function setupThree()
 	scene = new THREE.Scene();
 	scene.background = new THREE.Color(156.0/255, 196.0/255, 240.0/255);
 
-	var perspCamera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 0.1, 100000 );
+	var perspCamera = new THREE.PerspectiveCamera( 60, window.innerWidth / window.innerHeight, 1, 10000 );
 	perspCamera.up.set(0,0,1);
 
-	var orthoCamera = new THREE.OrthographicCamera( -1000, 1000, 1000, -1000, 0, 100000 );
+	var orthoCamera = new THREE.OrthographicCamera( -1000, 1000, 1000, -1000, 0, 10000 );
 	orthoCamera.position.set(0,0,1000);
 	orthoCamera.up.set(0,1,0);
 	orthoCamera.lookAt(0,0,0);
@@ -109,6 +110,10 @@ function setupGui()
 		.name("Shading (q)")
 		.onChange(updateShading)
 		.listen();
+
+	gui.add(config, 'edgeWidth', 0, 10)
+		.name("Edge width")
+		.onChange(v => riverShader.uniforms.edgeWidth.value = v);
 }
 
 async function getMesh()
@@ -138,6 +143,10 @@ async function getMesh()
 	const aspect = window.innerWidth / window.innerHeight;
 
 	cameras[0].position.set(0.0, -map.height, Math.max(map.width, map.height));
+	cameras[0].far = Math.max(map.width, map.height) * 2.25;
+	cameras[0].updateProjectionMatrix();
+
+	controls[0].maxDistance = Math.max(map.width, map.height) * 1.5;
 
 	cameras[1].position.set(0.0, 0.0, Math.max(map.width, map.height));
 	cameras[1].left = -map.width / 2.0 * aspect;
@@ -196,33 +205,81 @@ function updateHeightColors()
 	setColorBuffer(colorOptions.height, new Float32Array(normalizedZ));
 }
 
+const riverShader = new THREE.ShaderMaterial({
+	uniforms: {
+		edgeWidth: { value: 3.0 },
+	},
+
+	vertexShader:`
+		attribute vec3 distToEdge;
+		varying vec3 vEdgeDist;
+
+		void main()
+		{
+			gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+			vEdgeDist = distToEdge;
+		}`,
+
+	fragmentShader: `
+
+		uniform float edgeWidth;
+		varying vec3 vEdgeDist;
+		void main()
+		{
+			float river = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
+			if (river > edgeWidth)
+				discard;
+
+			gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+		}`
+});
+
 function updateRivers(json)
 {
-	var positions = [];
+	var position = [];
+	var distToEdge = [];
 
-	for(var i = 0; i < json.length; i += 2)
+	for (var i = 0; i < map.triangles.length; i += 3)
 	{
-		if (json[i] >= 0)
+		var vertices = [];
+		for (var v = 0; v < 3; v++)
 		{
-			positions.push(map.vertices[i / 2 * 3 + 0]);
-			positions.push(map.vertices[i / 2 * 3 + 1]);
-			positions.push(map.vertices[i / 2 * 3 + 2]);
-			positions.push(map.vertices[json[i] * 3 + 0]);
-			positions.push(map.vertices[json[i] * 3 + 1]);
-			positions.push(map.vertices[json[i] * 3 + 2]);
+			const vertexIndex = map.triangles[i + v];
+			const vertex = new THREE.Vector3(
+				map.vertices[vertexIndex * 3 + 0],
+				map.vertices[vertexIndex * 3 + 1],
+				map.vertices[vertexIndex * 3 + 2]
+			)
+
+			position.push(vertex.x, vertex.y, vertex.z);
+			vertices.push(vertex);
+		}
+
+		for (var v = 0; v < 3; v++)
+		{
+			var p = vertices[v];
+			var a = vertices[(v + 1) % 3];
+			var b = vertices[(v + 2) % 3];
+
+			const nx = b.x - a.x;
+			const ny = b.y - a.y;
+			const nd = Math.sqrt(nx * nx + ny * ny);
+			const d = ((p.y - a.y) * nx - (p.x - a.x) * ny) / nd;
+
+			distToEdge.push(v == 0 ? d : 0.0);
+			distToEdge.push(v == 1 ? d : 0.0);
+			distToEdge.push(v == 2 ? d : 0.0);
 		}
 	}
 
-	var geometry = new LineSegmentsGeometry;
-	geometry.setPositions(positions);
+	var geometry = new THREE.BufferGeometry();
+	geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+	geometry.setAttribute('distToEdge', new THREE.Float32BufferAttribute(distToEdge, 3));
 
-	var material = new LineMaterial({color: 0x0000ff, linewidth: 1});
-	material.clippingPlanes = materials[0].clippingPlanes;
-	material.worldUnits = true;
+	riverMesh = new THREE.Mesh(geometry, riverShader);
+	riverMesh.translateZ(0.75);
 
-	rivers = new LineSegments2(geometry, material);
-	rivers.translateZ(1);
-	mainMesh.add(rivers);
+	mainMesh.add(riverMesh);
 }
 
 function updateColors()
