@@ -21,7 +21,9 @@ var config = {
 	color: 0,
 	view: 0,
 	shading: 0,
-	edgeWidth: 3
+	edgeWidth: 1,
+	elevation: 0,
+	grid: 0
 };
 
 const colorOptions = {terrain: 0, height: 1};
@@ -111,9 +113,17 @@ function setupGui()
 		.onChange(updateShading)
 		.listen();
 
-	gui.add(config, 'edgeWidth', 0, 10)
+	gui.add(config, 'edgeWidth', 0, 5)
 		.name("Edge width")
 		.onChange(v => riverShader.uniforms.edgeWidth.value = v);
+
+	gui.add(config, 'elevation', 0, 100, 1)
+		.name("Elevation lines")
+		.onChange(v => riverShader.uniforms.elevation.value = v);
+
+	gui.add(config, 'grid', 0, 100, 1)
+		.name("Grid size")
+		.onChange(v => riverShader.uniforms.grid.value = v);
 }
 
 async function getMesh()
@@ -207,30 +217,53 @@ function updateHeightColors()
 
 const riverShader = new THREE.ShaderMaterial({
 	uniforms: {
-		edgeWidth: { value: 3.0 },
+		edgeWidth: { value: 1.0 },
+		elevation: { value: 0.0 },
+		grid: { value: 0.0 },
 	},
 
 	vertexShader:`
 		attribute vec3 distToEdge;
 		varying vec3 vEdgeDist;
+		varying vec3 vPos;
 
 		void main()
 		{
 			gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 			vEdgeDist = distToEdge;
+			vPos = position;
 		}`,
 
 	fragmentShader: `
 
 		uniform float edgeWidth;
+		uniform float elevation;
+		uniform float grid;
+
 		varying vec3 vEdgeDist;
+		varying vec3 vPos;
+
 		void main()
 		{
 			float river = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
-			if (river > edgeWidth)
+			vec3 color;
+			vec3 frac = mod(vPos, grid);
+			float distToGrid = min(frac.x, frac.y);
+			float zfrac = mod(vPos.z, elevation);
+
+			if (edgeWidth > 0.0 && river < edgeWidth)
+				color = vec3(0,0,1);
+
+			else if (zfrac <= 0.5)
+				color = vec3(0,1,0);
+
+			else if (distToGrid <= 0.1)
+				color = vec3(0,0,0);
+
+			else
 				discard;
 
-			gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+			gl_FragColor = vec4(color, 1.0);
 		}`
 });
 
