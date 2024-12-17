@@ -39,7 +39,7 @@ function setupThree()
 	perspCamera.up.set(0,0,1);
 
 	var orthoCamera = new THREE.OrthographicCamera( -1000, 1000, 1000, -1000, 0, 10000 );
-	orthoCamera.position.set(0,0,1000);
+	orthoCamera.position.set(0,10,1000);
 	orthoCamera.up.set(0,1,0);
 	orthoCamera.lookAt(0,0,0);
 
@@ -53,8 +53,9 @@ function setupThree()
 
 	controls = [
 		new OrbitControls(perspCamera, renderer.domElement),
-		null
+		new OrbitControls(orthoCamera, renderer.domElement)
 	];
+	controls[1].enableRotate = false;
 	activateControl(config.view);
 
 	const light = new THREE.AmbientLight(0xffffff, 1);
@@ -83,8 +84,8 @@ function activateControl(index)
 {
 	for(var i = 0; i < controls.length; i++)
 	{
-		if (controls[i])
-			controls[i].enabled = (i == index);
+		controls[i].enabled = (i == index);
+		console.log(i, index);
 	}
 }
 
@@ -367,7 +368,7 @@ function updateShading()
 
 function animate()
 {
-	controls[config.view]?.update();
+	controls[config.view].update();
 
 	if (riverMesh && cameras[config.view])
 		riverMesh.position.z = Math.max(0.1, cameras[config.view].position.z / 100.0);
@@ -400,6 +401,7 @@ function onKeyDown(event)
 	{
 		case "Tab":
 			config.view = (config.view + 1) % Object.keys(viewOptions).length;
+			activateControl(config.view);
 			event.preventDefault();
 			break;
 		case "Shift":
