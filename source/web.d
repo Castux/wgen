@@ -29,7 +29,7 @@ private void respond(ref HttpRequestContext ctx, string json)
 
 private void respond(ref HttpRequestContext ctx, JSONValue json)
 {
-	respond(ctx, json.toString(JSONOptions.specialFloatLiterals));
+	respond(ctx, json.toString);
 }
 
 class Server
@@ -43,9 +43,7 @@ class Server
 	void handleHeightmap(ref HttpRequestContext ctx)
 	{
 		if (!heightmap)
-		{
-			ctx.respond(`{"width": 0, "height": 0, "lowest": 0, "highest": 0, "vertices": [], "triangles": []}`);
-		}
+			return ctx.respond(`{"width": 0, "height": 0, "lowest": 0, "highest": 0, "vertices": [], "triangles": []}`);
 
 		with (heightmap)
 		{
@@ -68,10 +66,7 @@ class Server
 	void handleVertexColors(ref HttpRequestContext ctx)
 	{
 		if (!heightmap)
-		{
-			ctx.respond("[]");
-			return;
-		}
+			return ctx.respond("[]");
 
 		auto colors = heightmap.vertices.map!((Vertex v) {
 			auto color = v.terrain ? v.terrain.color : vec3d(0,0,0);
