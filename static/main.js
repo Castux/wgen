@@ -220,6 +220,7 @@ const riverShader = new THREE.ShaderMaterial({
 		edgeWidth: { value: 1.0 },
 		elevation: { value: 0.0 },
 		grid: { value: 0.0 },
+		clipping: { value: new THREE.Vector2() }
 	},
 
 	vertexShader:`
@@ -239,12 +240,17 @@ const riverShader = new THREE.ShaderMaterial({
 		uniform float edgeWidth;
 		uniform float elevation;
 		uniform float grid;
+		uniform vec2 clipping;
 
 		varying vec3 vEdgeDist;
 		varying vec3 vPos;
 
 		void main()
 		{
+			if (vPos.x < 0.0 || vPos.x > clipping[0] ||
+				vPos.y < 0.0 || vPos.y > clipping[1])
+				discard;
+
 			float river = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
 			vec3 color;
 			vec3 frac = mod(vPos, grid);
@@ -308,6 +314,8 @@ function updateRivers(json)
 	var geometry = new THREE.BufferGeometry();
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
 	geometry.setAttribute('distToEdge', new THREE.Float32BufferAttribute(distToEdge, 3));
+
+	riverShader.uniforms.clipping.value = new THREE.Vector2(map.width, map.height);
 
 	riverMesh = new THREE.Mesh(geometry, riverShader);
 	riverMesh.translateZ(0.75);
