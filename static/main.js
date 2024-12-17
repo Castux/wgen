@@ -251,13 +251,20 @@ const riverShader = new THREE.ShaderMaterial({
 				vPos.y < 0.0 || vPos.y > clipping[1])
 				discard;
 
-			float river = min(vEdgeDist.x, min(vEdgeDist.y, vEdgeDist.z));
+			float river = 1e10;
+			if (vEdgeDist.x > 0.0 && river > vEdgeDist.x)
+				river = vEdgeDist.x;
+			if (vEdgeDist.y > 0.0 && river > vEdgeDist.y)
+				river = vEdgeDist.y;
+			if (vEdgeDist.z > 0.0 && river > vEdgeDist.z)
+				river = vEdgeDist.z;
+
 			vec3 color;
 			vec3 frac = mod(vPos, grid);
 			float distToGrid = min(frac.x, frac.y);
 			float zfrac = mod(vPos.z, elevation);
 
-			if (edgeWidth > 0.0 && river < edgeWidth)
+			if (edgeWidth > 0.0 && (river < edgeWidth))
 				color = vec3(0,0,1);
 
 			else if (zfrac <= 0.5)
@@ -278,9 +285,21 @@ function updateRivers(json)
 	var position = [];
 	var distToEdge = [];
 
+	function riverFlow(i,j)
+	{
+		if (json[i * 2] == j)
+			return json[i * 2 + 1]
+
+		if (json[j * 2] == i)
+			return json[j * 2 + 1]
+
+		return 0.0;
+	}
+
 	for (var i = 0; i < map.triangles.length; i += 3)
 	{
 		var vertices = [];
+		var vertexIndices = [];
 		for (var v = 0; v < 3; v++)
 		{
 			const vertexIndex = map.triangles[i + v];
@@ -292,6 +311,7 @@ function updateRivers(json)
 
 			position.push(vertex.x, vertex.y, vertex.z);
 			vertices.push(vertex);
+			vertexIndices.push(vertexIndex);
 		}
 
 		for (var v = 0; v < 3; v++)
@@ -300,10 +320,17 @@ function updateRivers(json)
 			var a = vertices[(v + 1) % 3];
 			var b = vertices[(v + 2) % 3];
 
+			var flow = riverFlow(vertexIndices[(v + 1) % 3], vertexIndices[(v + 2) % 3]);
+
 			const nx = b.x - a.x;
 			const ny = b.y - a.y;
 			const nd = Math.sqrt(nx * nx + ny * ny);
-			const d = ((p.y - a.y) * nx - (p.x - a.x) * ny) / nd;
+			var d = ((p.y - a.y) * nx - (p.x - a.x) * ny) / nd;
+
+			d /= Math.sqrt(flow);
+
+			if (flow == 0.0)
+				d = -1.0;
 
 			distToEdge.push(v == 0 ? d : 0.0);
 			distToEdge.push(v == 1 ? d : 0.0);
