@@ -148,11 +148,11 @@ async function getMesh()
 	updateTerrainColors(await responses[1].json());
 	updateHeightColors();
 
-	riverTexture = new THREE.WebGLRenderTarget(map.width, map.height);
+	riverTexture = new THREE.WebGLRenderTarget(8192, 8192);
+	riverTexture.samples = 4;
 	materials.forEach(material => {
 		material.map = riverTexture.texture;
 	});
-
 
 	const geometry = new THREE.BufferGeometry();
 
@@ -395,11 +395,11 @@ function updateRivers3(json)
 
 		vertices[flow].push(map.vertices[index * 3 + 0]);
 		vertices[flow].push(map.vertices[index * 3 + 1]);
-		vertices[flow].push(map.vertices[index * 3 + 2]);
+		vertices[flow].push(0.0);
 
 		vertices[flow].push(map.vertices[downHill * 3 + 0]);
 		vertices[flow].push(map.vertices[downHill * 3 + 1]);
-		vertices[flow].push(map.vertices[downHill * 3 + 2]);
+		vertices[flow].push(0.0);
 	}
 
 	riverMeshes = new THREE.Group();
@@ -438,18 +438,17 @@ function updateRiverParams()
 function renderRiverTexture()
 {
 	const scene = new THREE.Scene();
+	scene.background = new THREE.Color(1.0, 1.0, 1.0);
 	scene.add(riverMeshes);
 
-	const camera = new THREE.OrthographicCamera(0, map.width, map.height, 0, 0, 100000);
-	camera.position.set(0, 0, 1000);
+	const camera = new THREE.OrthographicCamera(-map.width/2, map.width/2, map.height/2, -map.height/2, 0, 10000);
+	camera.position.set(map.width/2, map.height/2, 1000);
 	camera.up.set(0, 1, 0);
-	camera.lookAt(0, 0, 0);
+	camera.lookAt(map.width/2, map.height/2, 0);
 	scene.add(camera);
 
 	renderer.setRenderTarget(riverTexture);
-	renderer.setSize(map.width, map.height);
-	renderer.setClearColor(0xffffff, 1.0);
-	renderer.clear()
+	renderer.setSize(riverTexture.width, riverTexture.height);
 	renderer.render(scene, camera);
 }
 
@@ -481,7 +480,6 @@ function render()
 {
 	renderer.setRenderTarget(null);
 	renderer.setSize(window.innerWidth, window.innerHeight);
-	renderer.clear();
 	renderer.render(scene, cameras[config.view]);
 }
 
