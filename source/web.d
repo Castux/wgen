@@ -17,19 +17,6 @@ import handy_httpd.handlers.file_resolving_handler;
 
 import heightmap;
 
-private HttpRequestHandler toHandler(void delegate(ref HttpRequestContext ctx) fun)
-{
-	class Handler: HttpRequestHandler
-	{
-		void handle(ref HttpRequestContext ctx)
-		{
-			fun(ctx);
-		}
-	}
-
-	return new Handler();
-}
-
 private void respond(ref HttpRequestContext ctx, string json)
 {
 	import std.zlib;
@@ -116,8 +103,8 @@ class Server
 		cfg.hostname = "0.0.0.0";
 		PathHandler pathHandler = new PathHandler();
 
-		pathHandler.addMapping(Method.GET, "/heightmap", toHandler(&handleHeightmap));
-		pathHandler.addMapping(Method.GET, "/colors", toHandler(&handleVertexColors));
+		pathHandler.addMapping(Method.GET, "/heightmap", &handleHeightmap);
+		pathHandler.addMapping(Method.GET, "/colors", &handleVertexColors);
 		pathHandler.addMapping(Method.GET, "**", new FileResolvingHandler("static"));
 
 		server = new HttpServer(pathHandler, cfg);
