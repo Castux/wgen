@@ -7,6 +7,7 @@ import std.algorithm;
 import std.array;
 import std.format;
 import std.math;
+import std.json;
 
 import dplug.math;
 
@@ -26,6 +27,11 @@ private void respond(ref HttpRequestContext ctx, string json)
 	ctx.response.writeBodyBytes(compressed, "application/json");
 }
 
+private void respond(ref HttpRequestContext ctx, JSONValue json)
+{
+	respond(ctx, json.toString(JSONOptions.specialFloatLiterals));
+}
+
 class Server
 {
 	HttpServer server;
@@ -39,46 +45,24 @@ class Server
 		if (!heightmap)
 		{
 			ctx.respond(`{"width": 0, "height": 0, "lowest": 0, "highest": 0, "vertices": [], "triangles": []}`);
-			return;
 		}
-
-		auto json = appender!string;
 
 		with (heightmap)
 		{
-			json.put("{");
-			json.put(`"width": %f, "height": %f,`.format(width, height));
-			json.put(`"lowest": %f, "highest": %f,`.format(lowest, highest));
-			json.put(`"vertices":[`);
+			auto json = JSONValue(["width": width, "height": height, "lowest": lowest, "highest": highest]);
 
-			foreach(v, vertex; vertices)
-			{
-				json.put("%s,%s,%s".format(
-					vertex[0].isNaN ? `"0"` : "%.2f".format(vertex[0]),
-					vertex[1].isNaN ? `"0"` : "%.2f".format(vertex[1]),
-					vertex[2].isNaN ? `"0"` : "%.2f".format(vertex[2])
-				));
-				if (v < vertices.length - 1)
-					json.put(',');
-			}
+			json["vertices"] = vertices
+				.map!(v => v.pos[])
+				.join
+				.map!(f => f.isNaN ? 0.0 : f)
+				.array;
 
-			json.put(`], "triangles":[`);
+			json["triangles"] = triangles
+				.map!(t => t.vertices.map!(v => v.index))
+				.join;
 
-			foreach(t, tri; triangles)
-			{
-				json.put("%d,%d,%d".format(
-					tri.vertices[0].index,
-					tri.vertices[1].index,
-					tri.vertices[2].index
-				));
-				if (t < triangles.length - 1)
-					json.put(',');
-			}
-
-			json.put(`]}`);
+			ctx.respond(json);
 		}
-
-		ctx.respond(json[]);
 	}
 
 	void handleVertexColors(ref HttpRequestContext ctx)
@@ -91,10 +75,15 @@ class Server
 
 		auto colors = heightmap.vertices.map!((Vertex v) {
 			auto color = v.terrain ? v.terrain.color : vec3d(0,0,0);
-			return "%d".format(color[0].to!int << 16 | color[1].to!int << 8 | color[2].to!int);
+			return color[0].to!int << 16 | color[1].to!int << 8 | color[2].to!int;
 		});
-		auto json = "[" ~ colors.join(",") ~ "]";
-		ctx.respond(json);
+
+		ctx.respond(JSONValue(colors.array));
+	}
+
+	void handleRivers(ref HttpRequestContext ctx)
+	{
+
 	}
 
 	void run(string path)
