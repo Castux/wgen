@@ -15,6 +15,7 @@ var mainMesh;
 var colorBuffers = [null, null];
 var materials;
 var riverMesh;
+var riverMeshes;
 
 var config = {
 	wireframe: false,
@@ -23,7 +24,9 @@ var config = {
 	shading: 0,
 	edgeWidth: 1,
 	elevation: 0,
-	grid: 0
+	grid: 0,
+	riverPower: 0.5,
+	riverWidth: 10
 };
 
 const colorOptions = {terrain: 0, height: 1};
@@ -125,6 +128,14 @@ function setupGui()
 	gui.add(config, 'grid', 0, 100, 1)
 		.name("Grid size")
 		.onChange(v => riverShader.uniforms.grid.value = v);
+
+	gui.add(config, 'riverPower', 0, 1)
+		.name("River width growth")
+		.onChange(updateRiverParams);
+
+	gui.add(config, 'riverWidth', 0, 20)
+		.name("River max width")
+		.onChange(updateRiverParams);
 }
 
 async function getMesh()
@@ -175,7 +186,7 @@ async function getMesh()
 		]
 	);
 
-	updateRivers(await responses[2].json());
+	updateRivers3(await responses[2].json());
 
 	console.log("Updated main mesh");
 }
@@ -349,6 +360,66 @@ function updateRivers(json)
 	riverMesh.translateZ(0.75);
 
 	mainMesh.add(riverMesh);
+}
+
+function updateRivers3(json)
+{
+	var maxFlow = 0;
+	for(let i = 1; i < json.length; i += 2)
+		maxFlow = Math.max(maxFlow, json[i]);
+
+	var vertices = [];
+	for(let i = 0; i <= maxFlow; i++)
+		vertices.push([]);
+
+	for (let i = 0; i < json.length; i += 2)
+	{
+		const index = i / 2;
+		const downHill = json[i];
+		const flow = json[i + 1];
+
+		if (downHill < 0)
+			continue;
+
+		vertices[flow].push(map.vertices[index * 3 + 0]);
+		vertices[flow].push(map.vertices[index * 3 + 1]);
+		vertices[flow].push(map.vertices[index * 3 + 2]);
+
+		vertices[flow].push(map.vertices[downHill * 3 + 0]);
+		vertices[flow].push(map.vertices[downHill * 3 + 1]);
+		vertices[flow].push(map.vertices[downHill * 3 + 2]);
+	}
+
+	riverMeshes = [];
+
+	for(let flow = 1; flow <= maxFlow; flow++)
+	{
+		const width = Math.pow(flow / maxFlow, config.riverPower) * config.riverWidth;
+		const material = new LineMaterial({
+			color: "rgb(66,66,125)",
+			worldUnits: true,
+			linewidth: width
+		});
+		material.baseWidth = flow / maxFlow;
+
+		const geom = new LineSegmentsGeometry();
+		geom.setPositions(vertices[flow]);
+
+		const mesh = new LineSegments2(geom, material);
+
+		riverMeshes.push(mesh);
+		mainMesh.add(mesh);
+	}
+
+	updateRiverParams();
+}
+
+function updateRiverParams()
+{
+	riverMeshes.forEach(function(m) {
+		m.material.linewidth = Math.pow(m.material.baseWidth, config.riverPower) * config.riverWidth;
+		m.position.z = m.material.linewidth / 2.0;
+	});
 }
 
 function updateColors()
