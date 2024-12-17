@@ -16,6 +16,7 @@ var colorBuffers = [null, null];
 var materials;
 var riverMesh;
 var riverMeshes;
+var riverTexture;
 
 var config = {
 	wireframe: false,
@@ -42,7 +43,7 @@ function setupThree()
 	perspCamera.up.set(0,0,1);
 
 	var orthoCamera = new THREE.OrthographicCamera( -1000, 1000, 1000, -1000, 0, 10000 );
-	orthoCamera.position.set(0,10,1000);
+	orthoCamera.position.set(0,0,1000);
 	orthoCamera.up.set(0,1,0);
 	orthoCamera.lookAt(0,0,0);
 
@@ -86,10 +87,7 @@ function setupThree()
 function activateControl(index)
 {
 	for(var i = 0; i < controls.length; i++)
-	{
 		controls[i].enabled = (i == index);
-		console.log(i, index);
-	}
 }
 
 function setupGui()
@@ -150,10 +148,24 @@ async function getMesh()
 	updateTerrainColors(await responses[1].json());
 	updateHeightColors();
 
+	riverTexture = new THREE.WebGLRenderTarget(map.width, map.height);
+	materials.forEach(material => {
+		material.map = riverTexture.texture;
+	});
+
+
 	const geometry = new THREE.BufferGeometry();
+
+	var uv = [];
+	for(let i = 0; i < map.vertices.length; i += 3)
+	{
+		uv.push(map.vertices[i + 0] / map.width);
+		uv.push(map.vertices[i + 1] / map.height);
+	}
 
 	geometry.setIndex(map.triangles);
 	geometry.setAttribute('position', new THREE.Float32BufferAttribute(map.vertices, 3));
+	geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
 	geometry.setAttribute('color', colorBuffers[config.color]);
 	geometry.computeVertexNormals();
 
@@ -390,7 +402,7 @@ function updateRivers3(json)
 		vertices[flow].push(map.vertices[downHill * 3 + 2]);
 	}
 
-	riverMeshes = [];
+	riverMeshes = new THREE.Group();
 
 	for(let flow = 1; flow <= maxFlow; flow++)
 	{
@@ -407,8 +419,7 @@ function updateRivers3(json)
 
 		const mesh = new LineSegments2(geom, material);
 
-		riverMeshes.push(mesh);
-		mainMesh.add(mesh);
+		riverMeshes.add(mesh);
 	}
 
 	updateRiverParams();
@@ -416,10 +427,30 @@ function updateRivers3(json)
 
 function updateRiverParams()
 {
-	riverMeshes.forEach(function(m) {
+	riverMeshes.children.forEach(function(m) {
 		m.material.linewidth = Math.pow(m.material.baseWidth, config.riverPower) * config.riverWidth;
 		m.position.z = m.material.linewidth / 2.0;
 	});
+
+	renderRiverTexture();
+}
+
+function renderRiverTexture()
+{
+	const scene = new THREE.Scene();
+	scene.add(riverMeshes);
+
+	const camera = new THREE.OrthographicCamera(0, map.width, map.height, 0, 0, 100000);
+	camera.position.set(0, 0, 1000);
+	camera.up.set(0, 1, 0);
+	camera.lookAt(0, 0, 0);
+	scene.add(camera);
+
+	renderer.setRenderTarget(riverTexture);
+	renderer.setSize(map.width, map.height);
+	renderer.setClearColor(0xffffff, 1.0);
+	renderer.clear()
+	renderer.render(scene, camera);
 }
 
 function updateColors()
@@ -448,6 +479,9 @@ function animate()
 
 function render()
 {
+	renderer.setRenderTarget(null);
+	renderer.setSize(window.innerWidth, window.innerHeight);
+	renderer.clear();
 	renderer.render(scene, cameras[config.view]);
 }
 
