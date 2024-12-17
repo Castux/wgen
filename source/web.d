@@ -78,7 +78,14 @@ class Server
 
 	void handleRivers(ref HttpRequestContext ctx)
 	{
+		if (!heightmap)
+			return ctx.respond("[]");
 
+		auto rivers = heightmap.vertices
+			.map!(v => [v.downhill ? v.downhill.index.to!int : -1, v.flow])
+			.join;
+
+		ctx.respond(JSONValue(rivers));
 	}
 
 	void run(string path)
@@ -89,6 +96,7 @@ class Server
 
 		pathHandler.addMapping(Method.GET, "/heightmap", &handleHeightmap);
 		pathHandler.addMapping(Method.GET, "/colors", &handleVertexColors);
+		pathHandler.addMapping(Method.GET, "/rivers", &handleRivers);
 		pathHandler.addMapping(Method.GET, "**", new FileResolvingHandler("static"));
 
 		server = new HttpServer(pathHandler, cfg);

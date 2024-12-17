@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
+import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 
 var map;
 
@@ -11,6 +14,7 @@ var controls;
 var mainMesh;
 var colorBuffers = [null, null];
 var materials;
+var rivers;
 
 var config = {
 	wireframe: false,
@@ -111,7 +115,8 @@ async function getMesh()
 {
 	let responses = await Promise.all([
 		fetch("/heightmap"),
-		fetch("/colors")
+		fetch("/colors"),
+		fetch("/rivers")
 	]);
 	map = await responses[0].json();
 
@@ -150,6 +155,8 @@ async function getMesh()
 		]
 	);
 
+	updateRivers(await responses[2].json());
+
 	console.log("Updated main mesh");
 }
 
@@ -187,6 +194,35 @@ function updateHeightColors()
 	}
 
 	setColorBuffer(colorOptions.height, new Float32Array(normalizedZ));
+}
+
+function updateRivers(json)
+{
+	var positions = [];
+
+	for(var i = 0; i < json.length; i += 2)
+	{
+		if (json[i] >= 0)
+		{
+			positions.push(map.vertices[i / 2 * 3 + 0]);
+			positions.push(map.vertices[i / 2 * 3 + 1]);
+			positions.push(map.vertices[i / 2 * 3 + 2]);
+			positions.push(map.vertices[json[i] * 3 + 0]);
+			positions.push(map.vertices[json[i] * 3 + 1]);
+			positions.push(map.vertices[json[i] * 3 + 2]);
+		}
+	}
+
+	var geometry = new LineSegmentsGeometry;
+	geometry.setPositions(positions);
+
+	var material = new LineMaterial({color: 0x0000ff, linewidth: 1});
+	material.clippingPlanes = materials[0].clippingPlanes;
+	material.worldUnits = true;
+
+	rivers = new LineSegments2(geometry, material);
+	rivers.translateZ(1);
+	mainMesh.add(rivers);
 }
 
 function updateColors()
