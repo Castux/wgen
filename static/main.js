@@ -341,6 +341,9 @@ function updateShading()
 function animate()
 {
 	controls[config.view]?.update();
+
+	if (riverMesh && cameras[config.view])
+		riverMesh.position.z = Math.max(0.1, cameras[config.view].position.z / 100.0);
 	render();
 }
 
