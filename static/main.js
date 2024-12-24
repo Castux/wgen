@@ -183,8 +183,8 @@ async function getMesh()
 	controls[0].maxDistance = Math.max(map.width, map.height) * 1.5;
 
 	cameras[1].position.set(0.0, 0.0, Math.max(map.width, map.height));
-	cameras[1].left = -map.width / 2.0 * aspect;
-	cameras[1].right = map.width / 2.0 * aspect;
+	cameras[1].left = -map.height / 2.0 * aspect;
+	cameras[1].right = map.height / 2.0 * aspect;
 	cameras[1].bottom = -map.height / 2.0;
 	cameras[1].top = map.height / 2.0;
 	cameras[1].updateProjectionMatrix();
