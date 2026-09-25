@@ -12,8 +12,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log/slog"
 	"io/fs"
+	"log/slog"
 	"os"
 
 	"github.com/Castux/wgen/internal/config"

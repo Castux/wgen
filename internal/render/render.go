@@ -46,9 +46,9 @@ const MaxSize = 8192
 var (
 	riverColor   = color.NRGBA{66, 66, 125, 255}
 	contourColor = [3]float64{0.25, 0.18, 0.1}
-	contourAlpha = 0.45
+	contourAlpha = 0.5
 	gridColor    = [3]float64{0, 0, 0}
-	gridAlpha    = 0.35
+	gridAlpha    = 0.5
 )
 
 // Light direction, same as the 3D viewer
@@ -203,9 +203,10 @@ func shade(w *gen.World, img *image.RGBA, scale float64) {
 	})
 }
 
-// drawLines draws contour lines and the grid, about one pixel wide.
+// drawLines draws contour lines and the grid, about one world unit wide (at
+// least one pixel), so that they stay visible as a texture.
 func drawLines(w *gen.World, img *image.RGBA, o Options) {
-	pixel := 1 / o.Scale
+	lineWidth := math.Max(1, math.Round(o.Scale)) / o.Scale
 
 	blend := func(i int, c [3]float64, alpha float64) {
 		for k := range 3 {
@@ -218,19 +219,19 @@ func drawLines(w *gen.World, img *image.RGBA, o Options) {
 		if o.Grid > 0 {
 			fx := math.Mod(p.X, o.Grid)
 			fy := math.Mod(p.Y, o.Grid)
-			if fx < pixel || fy < pixel {
+			if fx < lineWidth || fy < lineWidth {
 				blend(i, gridColor, gridAlpha)
 			}
 		}
 
-		// A contour crosses this pixel if the level changes with the next
-		// pixel to the right or above
+		// A contour crosses this pixel if the level changes within a line
+		// width to the right or above
 		if o.Contours > 0 {
 			level := func(q geom.Vec2) float64 {
 				return math.Floor(Sample(w, w.Heightmap, q) / o.Contours)
 			}
 			l := level(p)
-			if l != level(geom.Vec2{X: p.X + pixel, Y: p.Y}) || l != level(geom.Vec2{X: p.X, Y: p.Y + pixel}) {
+			if l != level(geom.Vec2{X: p.X + lineWidth, Y: p.Y}) || l != level(geom.Vec2{X: p.X, Y: p.Y + lineWidth}) {
 				blend(i, contourColor, contourAlpha)
 			}
 		}

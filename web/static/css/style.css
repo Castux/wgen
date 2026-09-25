@@ -1,0 +1,54 @@
+html, body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	background: rgb(156, 196, 240);
+	font-family: system-ui, sans-serif;
+}
+
+#views, #views > * {
+	position: absolute;
+	inset: 0;
+}
+
+#views canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
+#views .map {
+	background: #2b2b3a;
+	cursor: grab;
+	touch-action: none;
+}
+
+#views .map.dragging {
+	cursor: grabbing;
+}
+
+#status {
+	position: absolute;
+	left: 8px;
+	bottom: 8px;
+	max-width: 60%;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: rgba(0, 0, 0, 0.6);
+	color: #eee;
+	font-size: 12px;
+	white-space: pre-wrap;
+	pointer-events: none;
+}
+
+#status .error {
+	color: #ff8a80;
+}
+
+#status .busy {
+	color: #ffe082;
+}
+
+#status .dirty {
+	color: #90caf9;
+}

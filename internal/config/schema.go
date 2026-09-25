@@ -11,9 +11,9 @@ type Param struct {
 	Label   string   `json:"label"`
 	Group   string   `json:"group"`
 	Type    string   `json:"type"` // number, int, bool, enum
-	Min     float64  `json:"min,omitempty"`
-	Max     float64  `json:"max,omitempty"`
-	Step    float64  `json:"step,omitempty"`
+	Min     float64  `json:"min"`
+	Max     float64  `json:"max"`
+	Step    float64  `json:"step"`
 	Options []string `json:"options,omitempty"`
 	Stage   string   `json:"stage,omitempty"`
 }
