@@ -2,7 +2,7 @@
 docs.json
 __dummy.html
 docs/
-wgen
+/wgen
 *.exe
 *.pdb
 *.o
@@ -14,3 +14,4 @@ wgen
 *.tga
 .DS_Store
 dub.selections.json
+/bin/
