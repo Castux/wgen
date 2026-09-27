@@ -31,20 +31,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Castux/wgen/internal/config"
-	"github.com/Castux/wgen/internal/export"
+	"github.com/Castux/wgen/internal/engine"
 	"github.com/Castux/wgen/internal/gen"
 	"github.com/Castux/wgen/internal/render"
 )
 
 type Server struct {
-	engine     *Engine
-	watcher    *Watcher
-	configPath string
-	static     fs.FS
+	session *engine.Session
+	engine  *engine.Engine
+	static  fs.FS
 
 	mu         sync.Mutex
-	imagePath  string // currently watched
 	meshCache  cached
 	imageCache map[string]cached
 }
@@ -57,64 +54,17 @@ type cached struct {
 const imageCacheSize = 16
 
 func New(configPath string, static fs.FS) (*Server, error) {
-	watcher, err := NewWatcher()
+	session, err := engine.Open(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	s := &Server{
-		engine:     NewEngine(),
-		watcher:    watcher,
-		configPath: configPath,
+	return &Server{
+		session:    session,
+		engine:     session.Engine,
 		static:     static,
 		imageCache: map[string]cached{},
-	}
-
-	if err := watcher.Watch(configPath, s.loadConfig); err != nil {
-		return nil, err
-	}
-	s.loadConfig()
-
-	return s, nil
-}
-
-// loadConfig (re)loads the config file. On failure, the current world is kept
-// and the error reported to clients.
-func (s *Server) loadConfig() {
-	conf, warnings, err := config.Load(s.configPath)
-	for _, w := range warnings {
-		slog.Warn(w, "config", s.configPath)
-	}
-	if err != nil {
-		slog.Error("could not load config", "err", err)
-		s.engine.SetError(err)
-		return
-	}
-
-	slog.Info("loaded config", "path", s.configPath)
-	s.watchImage(conf.Path)
-	s.engine.SetConfig(conf, true)
-}
-
-func (s *Server) watchImage(path string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if path == s.imagePath {
-		return
-	}
-	if s.imagePath != "" {
-		s.watcher.Unwatch(s.imagePath)
-	}
-
-	s.imagePath = path
-	err := s.watcher.Watch(path, func() {
-		slog.Info("outline image changed", "path", path)
-		s.engine.ReloadImage()
-	})
-	if err != nil {
-		slog.Warn("cannot watch image", "path", path, "err", err)
-	}
+	}, nil
 }
 
 func (s *Server) Handler() http.Handler {
@@ -207,56 +157,30 @@ func (s *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePatchConfig(w http.ResponseWriter, r *http.Request) {
 	conf := s.engine.Config()
-	if conf == nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("no config loaded"))
-		return
-	}
-
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
 
-	patched, err := conf.Patch(body)
-	if err != nil {
+	if err := s.session.Patch(body); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-
-	if patched.Path != conf.Path {
-		s.watchImage(patched.Path)
-	}
-
-	s.engine.SetConfig(patched, false)
-	writeJSON(w, http.StatusAccepted, map[string]string{"stage": gen.ChangedStage(conf, patched).String()})
+	writeJSON(w, http.StatusAccepted, map[string]string{"stage": gen.ChangedStage(conf, s.engine.Config()).String()})
 }
 
 func (s *Server) handleSave(w http.ResponseWriter, r *http.Request) {
-	conf := s.engine.Config()
-	if conf == nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("no config loaded"))
-		return
-	}
-
-	if err := conf.Save(); err != nil {
+	path, err := s.session.Save()
+	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-
-	slog.Info("saved config", "path", conf.ConfigPath)
-	s.engine.MarkSaved()
-	writeJSON(w, http.StatusOK, map[string]string{"path": conf.ConfigPath})
+	writeJSON(w, http.StatusOK, map[string]string{"path": path})
 }
 
 func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
-	world, _ := s.engine.Snapshot()
-	if world == nil {
-		writeError(w, http.StatusServiceUnavailable, errors.New("nothing generated yet"))
-		return
-	}
-
-	files, err := export.All(world)
+	files, err := s.session.Export()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

@@ -1,4 +1,6 @@
-package server
+// Package engine regenerates the world in the background, as the config or
+// the outline image change.
+package engine
 
 import (
 	"errors"
@@ -31,14 +33,14 @@ type Engine struct {
 	subscribers map[chan State]struct{}
 }
 
-// State is what clients are told about the engine.
+// State is what the viewer is told about the engine.
 type State struct {
-	Version int    `json:"version"`
-	Busy    bool   `json:"busy"`
-	Error   string `json:"error,omitempty"`
-	Dirty   bool   `json:"dirty"`
-	Ready   bool   `json:"ready"`
-	Stage   string `json:"stage,omitempty"`
+	Version int    // incremented by every generation that changed the world
+	Busy    bool   // generating
+	Error   string // last error, generating or loading the config
+	Dirty   bool   // the config differs from its file
+	Ready   bool   // a world was generated
+	Stage   string // first stage rerun by the last generation
 }
 
 func NewEngine() *Engine {
