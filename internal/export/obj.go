@@ -11,11 +11,16 @@ import (
 )
 
 // OBJ writes the mesh, with UVs mapping to the outline image. Triangles
-// outside the map are skipped.
+// outside the map are skipped. Elevations are converted to pixels, the
+// horizontal unit, so that the mesh has the true proportions.
 func OBJ(w *gen.World, path string) error {
 	return writeFile(path, func(out *bufio.Writer) {
 		m := w.Mesh
 		width, height := float64(w.Width), float64(w.Height)
+		scale := 1.0
+		if w.MetersPerPixel > 0 {
+			scale = 1 / w.MetersPerPixel
+		}
 
 		for v, p := range m.Points {
 			z := w.Z[v]
@@ -23,7 +28,7 @@ func OBJ(w *gen.World, path string) error {
 				z = 0
 			}
 
-			fmt.Fprintf(out, "v %.6f %.6f %.6f\n", p.X, z, -p.Y)
+			fmt.Fprintf(out, "v %.6f %.6f %.6f\n", p.X, z*scale, -p.Y)
 			fmt.Fprintf(out, "vt %.6f %.6f\n", p.X/width, 1-p.Y/height)
 		}
 

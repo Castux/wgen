@@ -38,8 +38,12 @@ func (c *Config) Schema() []Param {
 		return Param{Path: []string{key}, Label: label, Group: group, Type: "bool", Stage: stage}
 	}
 
+	uplift := c.Uplift.Model == ModelUplift
+
 	params := []Param{
-		num("resolution", "Resolution", "Mesh", "mesh", 2, 64, 0.5),
+		{Path: []string{"elevationModel"}, Label: "Elevation model", Group: "Mesh", Type: "enum",
+			Options: []string{ModelSlope, ModelUplift}, Stage: "mesh"},
+		num("resolution", "Resolution", "Mesh", "mesh", 1, 64, 0.5),
 		{Path: []string{"grid"}, Label: "Grid", Group: "Mesh", Type: "enum",
 			Options: []string{GridHex, GridSquare}, Stage: "mesh"},
 		num("jitter", "Jitter", "Mesh", "mesh", 0, 1, 0.01),
@@ -51,22 +55,41 @@ func (c *Config) Schema() []Param {
 		integer("erosionMinFlow", "Erosion min flow", "Elevation", "erosion", 0, 500),
 		num("erosionFactor", "Erosion factor", "Elevation", "erosion", 0, 1, 0.01),
 		integer("blurRadius", "Blur radius", "Elevation", "raster", 0, 20),
+	}
 
-		{Path: []string{"erosionModel"}, Label: "Model", Group: "Erosion (experimental)", Type: "enum",
+	if uplift {
+		const group = "Uplift model"
+		params = append(params,
+			num("mapWidth", "Map width (km)", group, "terrain", 10, 10000, 10),
+			integer("levels", "Refinement levels", group, "mesh", 0, 6),
+			num("upliftBlur", "Uplift blur (km)", group, "terrain", 0, 200, 1),
+			num("erodibility", "Erodibility (K)", group, "terrain", 1e-7, 1e-5, 1e-7),
+			num("streamExponent", "Area exponent (m)", group, "terrain", 0.3, 0.7, 0.01),
+			num("criticalSlope", "Critical slope (deg)", group, "terrain", 5, 60, 1),
+			num("timeStep", "Time step (kyr)", group, "terrain", 1, 500, 1),
+			integer("steps", "Steps (coarse)", group, "terrain", 1, 2000),
+			integer("refineSteps", "Steps (each refinement)", group, "terrain", 0, 1000),
+			num("erodibilityNoise", "Erodibility noise", group, "terrain", 0, 1, 0.01),
+			num("erodibilityNoiseScale", "Noise scale (km)", group, "terrain", 1, 500, 1),
+		)
+	}
+
+	params = append(params,
+		Param{Path: []string{"erosionModel"}, Label: "Model", Group: "Erosion (experimental)", Type: "enum",
 			Options: []string{ErosionStep, ErosionPower}, Stage: "erosion"},
 		num("erosionTheta", "Theta (power)", "Erosion (experimental)", "erosion", 0, 1, 0.01),
 		num("channelArea", "Channel area (power)", "Erosion (experimental)", "erosion", 100, 200000, 100),
 		num("erosionFloor", "Floor (power)", "Erosion (experimental)", "erosion", 0, 1, 0.01),
 		integer("erosionIterations", "Iterations (power)", "Erosion (experimental)", "erosion", 1, 50),
 
-		{Path: []string{"noiseType"}, Label: "Type", Group: "Slope noise (experimental)", Type: "enum",
+		Param{Path: []string{"noiseType"}, Label: "Type", Group: "Slope noise (experimental)", Type: "enum",
 			Options: []string{NoiseNone, NoiseFBM, NoiseRidged, NoiseWorley}, Stage: "terrain"},
 		num("noiseScale", "Scale", "Slope noise (experimental)", "terrain", 16, 2048, 1),
 		num("noiseAmplitude", "Amplitude", "Slope noise (experimental)", "terrain", 0, 1, 0.01),
 		integer("noiseOctaves", "Octaves", "Slope noise (experimental)", "terrain", 1, 8),
 		num("noiseStretch", "Stretch", "Slope noise (experimental)", "terrain", 1, 8, 0.1),
 		num("noiseAngle", "Angle", "Slope noise (experimental)", "terrain", -90, 90, 1),
-	}
+	)
 
 	for _, t := range c.Terrains {
 		group := "Terrain: " + t.Name
@@ -91,6 +114,17 @@ func (c *Config) Schema() []Param {
 			Param{Path: path("smoothing"), Label: "Smoothing", Group: group, Type: "bool", Stage: "terrain"},
 			Param{Path: path("erosion"), Label: "Erosion", Group: group, Type: "bool", Stage: "terrain"},
 		)
+
+		if uplift {
+			params = append(params,
+				Param{Path: path("uplift"), Label: "Uplift (mm/yr)", Group: group, Type: "number",
+					Min: 0, Max: 10, Step: 0.01, Stage: "terrain"},
+				Param{Path: path("erodibility"), Label: "Erodibility factor", Group: group, Type: "number",
+					Min: 0, Max: 10, Step: 0.01, Stage: "terrain"},
+				Param{Path: path("detail"), Label: "Detail levels (-1: auto)", Group: group, Type: "int",
+					Min: -1, Max: 6, Step: 1, Stage: "mesh"},
+			)
+		}
 	}
 
 	params = append(params,
@@ -120,13 +154,19 @@ func (c *Config) Value(path []string) (any, error) {
 			return t.Smoothing, nil
 		case "erosion":
 			return t.Erosion, nil
+		case "uplift":
+			return t.Uplift, nil
+		case "erodibility":
+			return t.Erodibility, nil
+		case "detail":
+			return float64(t.Detail), nil
 		}
 	}
 
 	if len(path) == 1 && path[0] != "terrains" {
 		// The parameter groups are only serialized when not the defaults
 		var values map[string]any
-		for _, data := range [][]byte{c.Marshal(), jsonOf(c.Erosion), jsonOf(c.Noise)} {
+		for _, data := range [][]byte{c.Marshal(), jsonOf(c.Erosion), jsonOf(c.Noise), jsonOf(c.Uplift)} {
 			if err := json.Unmarshal(data, &values); err != nil {
 				return nil, err
 			}

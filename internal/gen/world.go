@@ -45,6 +45,13 @@ type World struct {
 
 	Mesh *mesh.Mesh
 
+	// Uplift model: the meshes of all levels, the last one is Mesh
+	levels []*mesh.Mesh
+
+	// Elevation units per pixel: 1 for the slope model, meters for the
+	// uplift model
+	MetersPerPixel float64
+
 	// Per vertex data. Terrain is nil for vertices outside the map.
 	Terrain    []*config.Terrain
 	Gradient   []float64
@@ -53,7 +60,8 @@ type World struct {
 	Z          []float64
 	WaterLevel []float64
 	Downhill   []int32 // -1 if none
-	Flow       []int32
+	Flow       []int32   // vertices upstream, itself included
+	Drainage   []float64 // area upstream, itself included, square pixels
 
 	Lowest, Highest float64
 
@@ -71,6 +79,10 @@ func New(conf *config.Config) (*World, error) {
 // ChangedStage returns the first stage that must be rerun when going from the
 // old config to the new one.
 func ChangedStage(old, conf *config.Config) Stage {
+	if conf.Uplift.Model == config.ModelUplift && (old == nil || old.Uplift.Model == config.ModelUplift) {
+		return changedStageUplift(old, conf)
+	}
+
 	switch {
 	case old == nil || conf.Path != old.Path:
 		return StageImage
@@ -79,7 +91,8 @@ func ChangedStage(old, conf *config.Config) Stage {
 		conf.Relax != old.Relax ||
 		conf.Grid != old.Grid ||
 		conf.Jitter != old.Jitter ||
-		conf.Seed != old.Seed:
+		conf.Seed != old.Seed ||
+		conf.Uplift.Model != old.Uplift.Model:
 		return StageMesh
 
 	case !config.TerrainsEqual(conf, old) ||
@@ -92,6 +105,34 @@ func ChangedStage(old, conf *config.Config) Stage {
 		conf.ErosionFactor != old.ErosionFactor ||
 		conf.Erosion != old.Erosion:
 		return StageErosion
+
+	case conf.BlurRadius != old.BlurRadius:
+		return StageRaster
+	}
+
+	return StageNone
+}
+
+// changedStageUplift is ChangedStage for the uplift model: the mesh depends
+// on the terrains (their details), and the simulation (in the terrain stage)
+// does the erosion.
+func changedStageUplift(old, conf *config.Config) Stage {
+	switch {
+	case old == nil || conf.Path != old.Path:
+		return StageImage
+
+	case conf.Resolution != old.Resolution ||
+		conf.Grid != old.Grid ||
+		conf.Jitter != old.Jitter ||
+		conf.Seed != old.Seed ||
+		conf.Uplift.Levels != old.Uplift.Levels ||
+		!config.TerrainMeshesEqual(conf, old):
+		return StageMesh
+
+	case !config.TerrainsEqual(conf, old) ||
+		conf.Uplift != old.Uplift ||
+		conf.MaxHeight != old.MaxHeight:
+		return StageTerrain
 
 	case conf.BlurRadius != old.BlurRadius:
 		return StageRaster
@@ -143,9 +184,9 @@ func (w *World) run(conf *config.Config, from Stage) (*World, error) {
 		{StageImage, "loading image", n.loadOutline},
 		{StageMesh, "triangulating", n.generateMesh},
 		{StageTerrain, "assigning terrain types", n.assignTerrainTypes},
-		{StageTerrain, "computing elevation", func() error { n.computeElevation(false); return nil }},
-		{StageTerrain, "computing river flow", func() error { n.computeRiverFlow(); return nil }},
-		{StageErosion, "eroding", func() error { n.erode(); return nil }},
+		{StageTerrain, "computing elevation", n.elevation},
+		{StageTerrain, "computing river flow", func() error { n.rivers(); return nil }},
+		{StageErosion, "eroding", func() error { n.erosion(); return nil }},
 		{StageErosion, "computing water depth", func() error { n.computeWaterDepth(); n.finalizeElevation(); return nil }},
 		{StageRaster, "rasterizing", func() error { n.rasterize(); return nil }},
 		{StageRaster, "blurring", func() error { n.blurHeightmap(); return nil }},
@@ -174,7 +215,12 @@ func (w *World) run(conf *config.Config, from Stage) (*World, error) {
 	return &n, nil
 }
 
-func (w *World) margin() float64 { return w.Conf.Resolution * 4 }
+func (w *World) margin() float64 {
+	if w.upliftModel() {
+		return w.upliftSpacing(0)
+	}
+	return w.Conf.Resolution * 4
+}
 
 func (w *World) inBounds(p geom.Vec2) bool {
 	return p.X >= 0 && p.X < float64(w.Width) && p.Y >= 0 && p.Y < float64(w.Height)

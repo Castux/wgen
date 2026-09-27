@@ -32,7 +32,8 @@ type Options struct {
 	Base    Base
 	Shading bool
 
-	// River width in world units is (flow / max flow) ^ RiverPower * RiverWidth
+	// River width in world units is (drainage / max drainage) ^ RiverPower *
+	// RiverWidth
 	RiverPower float64
 	RiverWidth float64
 
@@ -184,12 +185,17 @@ func Sample(w *gen.World, data []float64, p geom.Vec2) float64 {
 func shade(w *gen.World, img *image.RGBA, scale float64) {
 	const ambient = 0.4
 	const d = 1.0 // finite differences step, in world units
+	mpp := metersPerPixel(w)
 
 	forEachPixel(img, scale, func(i int, p geom.Vec2) {
 		dx := (Sample(w, w.Heightmap, geom.Vec2{X: p.X + d, Y: p.Y}) -
 			Sample(w, w.Heightmap, geom.Vec2{X: p.X - d, Y: p.Y})) / (2 * d)
 		dy := (Sample(w, w.Heightmap, geom.Vec2{X: p.X, Y: p.Y + d}) -
 			Sample(w, w.Heightmap, geom.Vec2{X: p.X, Y: p.Y - d})) / (2 * d)
+
+		// Elevations may be in other units than pixels
+		dx /= mpp
+		dy /= mpp
 
 		// Normal is (-dx, -dy, 1), normalized
 		n := math.Sqrt(dx*dx + dy*dy + 1)
@@ -238,20 +244,30 @@ func drawLines(w *gen.World, img *image.RGBA, o Options) {
 	})
 }
 
-// MaxFlow is the reference for river widths.
-func MaxFlow(w *gen.World) int32 {
-	var maxFlow int32 = 1
-	for _, f := range w.Flow {
-		maxFlow = max(maxFlow, f)
+// MaxDrainage is the reference for river widths: the largest on land.
+func MaxDrainage(w *gen.World) float64 {
+	maxDrainage := 1.0
+	for v, a := range w.Drainage {
+		if w.IsLand(int32(v)) {
+			maxDrainage = math.Max(maxDrainage, a)
+		}
 	}
-	return maxFlow
+	return maxDrainage
+}
+
+// metersPerPixel is the elevation unit, per horizontal unit (pixel).
+func metersPerPixel(w *gen.World) float64 {
+	if w.MetersPerPixel > 0 {
+		return w.MetersPerPixel
+	}
+	return 1
 }
 
 // drawRivers draws every downhill link as an antialiased segment with round
-// caps, its width growing with the flow.
+// caps, its width growing with the drainage area.
 func drawRivers(w *gen.World, img *image.RGBA, o Options) {
 	width, height := img.Rect.Dx(), img.Rect.Dy()
-	maxFlow := float64(MaxFlow(w))
+	maxDrainage := MaxDrainage(w)
 	m := w.Mesh
 
 	// World to image coordinates, pixel centers at +0.5
@@ -267,7 +283,7 @@ func drawRivers(w *gen.World, img *image.RGBA, o Options) {
 			continue
 		}
 
-		radius := math.Pow(float64(w.Flow[v])/maxFlow, o.RiverPower) * o.RiverWidth * o.Scale / 2
+		radius := math.Pow(w.Drainage[v]/maxDrainage, o.RiverPower) * o.RiverWidth * o.Scale / 2
 		a, b := toImage(m.Points[v]), toImage(m.Points[d])
 
 		if math.Max(a.X, b.X) < -radius || math.Min(a.X, b.X) > visible.X+radius ||

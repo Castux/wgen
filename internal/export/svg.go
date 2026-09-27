@@ -42,7 +42,10 @@ func SVG(w *gen.World, path string) error {
 			}
 
 			p, q := m.Points[v], m.Points[d]
-			strokeWidth := math.Sqrt(float64(w.Flow[v])) * math.Pow(w.Conf.Resolution/30, 2)
+			// Grows like the square root of the drainage, in vertices of the
+			// finest mesh
+			res := w.Conf.Resolution
+			strokeWidth := math.Sqrt(w.Drainage[v]/(res*res*math.Sqrt(3)/2)) * math.Pow(res/30, 2)
 
 			fmt.Fprintf(out, `<line x1="%f" y1="%f" x2="%f" y2="%f" stroke="#0E443D" stroke-width="%f" />`+"\n",
 				p.X, -p.Y, q.X, -q.Y, strokeWidth)

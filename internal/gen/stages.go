@@ -105,6 +105,11 @@ func (w *World) generatePoints() []geom.Vec2 {
 }
 
 func (w *World) generateMesh() error {
+	if w.upliftModel() {
+		return w.generateUpliftMeshes()
+	}
+	w.levels = nil
+
 	m, err := mesh.Build(w.generatePoints())
 	if err != nil {
 		return err
@@ -205,6 +210,31 @@ func (w *World) assignTerrainTypes() error {
 	}
 
 	return nil
+}
+
+// elevation computes the elevation, and with the uplift model the rivers.
+func (w *World) elevation() error {
+	if w.upliftModel() {
+		w.MetersPerPixel = w.Conf.Uplift.MapWidth * 1000 / float64(w.Width)
+		return w.simulate()
+	}
+	w.MetersPerPixel = 1
+	w.computeElevation(false)
+	return nil
+}
+
+// rivers computes river flow (done by the simulation with the uplift model).
+func (w *World) rivers() {
+	if !w.upliftModel() {
+		w.computeRiverFlow()
+	}
+}
+
+// erosion erodes along rivers (done by the simulation with the uplift model).
+func (w *World) erosion() {
+	if !w.upliftModel() {
+		w.erode()
+	}
 }
 
 // computeElevation builds elevation up from the sea shores: each vertex is at
@@ -310,6 +340,7 @@ func (w *World) computeRiverFlow() {
 	z := w.Z
 	w.Downhill = make([]int32, len(m.Points))
 	w.Flow = make([]int32, len(m.Points))
+	w.Drainage = CellAreas(m)
 
 	var order []int32
 
@@ -348,6 +379,7 @@ func (w *World) computeRiverFlow() {
 	for _, v := range order {
 		if d := w.Downhill[v]; d >= 0 {
 			w.Flow[d] += w.Flow[v]
+			w.Drainage[d] += w.Drainage[v]
 		}
 	}
 }
@@ -392,7 +424,7 @@ func (w *World) computeWaterDepth() {
 				continue
 			}
 
-			newZ := cz + w.Gradient[n]*m.Points[c].Dist(m.Points[n])
+			newZ := cz + w.Gradient[n]*m.Points[c].Dist(m.Points[n])*w.MetersPerPixel
 			if math.IsNaN(z[n]) || newZ > z[n] {
 				z[n] = newZ
 				if w.IsLake(n) {
