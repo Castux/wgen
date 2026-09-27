@@ -11,44 +11,83 @@ that surface, and elevation is rebuilt with gentler slopes along the bigger
 rivers, which carves valleys. The irregular mesh does the rest to make it look
 natural.
 
-## Usage
+The interactive viewer shows the result in 3D or as a map, lets you edit
+every parameter and see the effect right away, and follows changes made to
+the config file and the image in other programs.
 
-Requires Go 1.26.
+## Building
+
+wgen is a single program, built from source with Go 1.26 and a C/C++
+compiler (the viewer uses OpenGL, GLFW and Dear ImGui, which are C and C++
+libraries):
+
+- Windows: a 64 bits MinGW-w64 GCC on the `PATH`, such as the
+  [WinLibs](https://winlibs.com/) or MinGW-Builds distributions.
+- macOS: the Xcode command line tools (`xcode-select --install`).
+- Linux: GCC and the X11 and OpenGL development packages. On Debian or
+  Ubuntu: `sudo apt install build-essential libgl1-mesa-dev xorg-dev`.
 
 ```sh
 go build -o bin/wgen ./cmd/wgen
+```
 
+The first build takes several minutes (compiling the ImGui bindings), later
+ones a few seconds. See [DEVELOPMENT.md](DEVELOPMENT.md) if it fails.
+
+## Usage
+
+```sh
 bin/wgen test/config.json                  # generate and export
-bin/wgen --interactive test/config.json    # web viewer on http://localhost:8080
+bin/wgen --interactive test/config.json    # open the viewer
 ```
 
 Flags:
 
-- `--interactive`: serve the web viewer instead of exporting.
-- `-addr :8080`: viewer address (all interfaces by default; use
-  `-addr localhost:8080` to keep it local).
-- `-static web/static`: serve the viewer files from disk instead of the ones
-  embedded in the binary, to edit them without rebuilding.
+- `--interactive`: open the viewer instead of exporting.
 - `-v`: log the duration of each generation stage.
 
 Exports are written next to the config: `<config>.obj`, `<config>.svg`,
 `<config>.png` (elevation) and `<config>-w.png` (water level).
 
-### Viewer
+## Viewer
 
-- Views: 3D orbit, 3D top, and 2D map (`Tab` cycles). In the 2D map: drag to
-  pan, wheel to zoom, double click to fit.
-- `Shift`: terrain or height colors. `q`: lit or unlit. `w`: wireframe.
-- Rivers, contour lines and the grid are rendered by the server, and used as a
-  texture in 3D.
-- Every generation parameter can be edited in the panel: only the affected
-  stages are rerun. "Save config" writes the parameters back to the config
-  file (reformatted, and without unknown keys). "Export files" writes the
-  exports enabled in the config.
-- The config file and the outline image are watched: edit them in any editor
-  and the viewer updates. If the config file changes, it replaces any unsaved
-  edits made in the panel. A broken config keeps the last good result and
-  shows the error.
+Three views, cycled with `Tab`:
+
+| View | Left drag | Right drag | Wheel, middle drag |
+|---|---|---|---|
+| 3D orbit | rotate (pan with `Shift` or `Ctrl`) | pan | zoom |
+| 3D top | pan | pan | zoom |
+| 2D map | pan (any button) | pan | zoom at the cursor |
+
+Double click the map to fit it in the window. "Reset view" in the panel
+reframes the current view.
+
+Keys: `Shift` switches between terrain and height colors, `q` between lit and
+unlit, `w` toggles the wireframe.
+
+The panel:
+
+- View: the settings above, and the overlay drawn on the terrain: rivers,
+  contour lines, grid. The overlay is drawn on the CPU, so its sliders only
+  apply when released. View settings are remembered between sessions.
+- Actions: "Save config" writes the parameters back to the config file
+  (reformatted, and without unknown keys). "Export files" writes the exports
+  enabled in the config.
+- Generation: every parameter of the config. A change only reruns the
+  generation stages it affects, and applies when the slider is released.
+  `Ctrl` + click a slider to type a value.
+
+The status in the bottom left corner shows what is running (generating,
+rendering the overlay, exporting), errors, and whether the config has unsaved
+changes.
+
+The config file and the outline image are watched: edit them in any editor
+and the viewer updates. If the config file changes, it replaces any unsaved
+edits made in the panel. A broken config keeps the last good result and
+shows the error.
+
+Large maps work, but take time: a 16384 x 16384 image takes about 20
+seconds to load and generate, and each parameter change several seconds.
 
 ## Config
 
@@ -85,30 +124,5 @@ Exports are written next to the config: `<config>.obj`, `<config>.svg`,
 Heightmap PNGs contain the raw elevations, clamped to the pixel range (0..255
 or 0..65535), so water is 0. Use `maxHeight` to choose the scale.
 
-## Code layout
-
-| Path | |
-|---|---|
-| `cmd/wgen` | command line |
-| `internal/config` | config loading, validation, patching, saving; parameter schema for the UI |
-| `internal/mesh` | Delaunay triangulation and dual graph |
-| `internal/gen` | the generation pipeline, in stages; immutable `World` snapshots |
-| `internal/export` | OBJ, SVG, PNG |
-| `internal/render` | server-side images: base colors, hillshade, rivers, contours, grid |
-| `internal/server` | HTTP API, background regeneration, file watching |
-| `web` | the viewer (plain ES modules, three.js and lil-gui from a CDN) |
-
-A config change reruns the pipeline from the first stage it affects
-(`gen.ChangedStage`): image, mesh, terrain (terrain types, elevation, rivers),
-erosion (erosion, water depth), raster (rasterize, blur).
-
-## Tests
-
-```sh
-go test ./...
-go test ./internal/gen -run Golden -update   # after an intended change of results
-```
-
-`internal/gen/dref_test.go` compares against the original D implementation
-(still on the `web` and `main` branches), given reference outputs: see the
-comment at its top.
+Mesh points on a color that matches no terrain are reported as warnings in
+the log, and get no terrain, as if they were outside the map.
