@@ -1,8 +1,15 @@
 package engine
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"errors"
+	"image"
+	"image/color"
+	"image/png"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"github.com/Castux/wgen/internal/config"
@@ -18,7 +25,8 @@ type Session struct {
 	configPath string
 
 	mu        sync.Mutex
-	imagePath string // currently watched
+	imagePath string   // currently watched
+	written   [32]byte // hash of the last image written by SaveOutline
 }
 
 var errNoConfig = errors.New("no config loaded")
@@ -84,6 +92,15 @@ func (s *Session) watchImage(path string) {
 
 	s.imagePath = path
 	err := s.watcher.Watch(path, func() {
+		// Not for our own writes
+		data, err := os.ReadFile(path)
+		s.mu.Lock()
+		own := err == nil && sha256.Sum256(data) == s.written
+		s.mu.Unlock()
+		if own {
+			return
+		}
+
 		slog.Info("outline image changed", "path", path)
 		s.Engine.ReloadImage()
 	})
@@ -137,4 +154,47 @@ func (s *Session) Export() ([]string, error) {
 		return nil, errors.New("nothing generated yet")
 	}
 	return export.All(world)
+}
+
+// SetOutline regenerates with a map given in memory (the editor's), instead
+// of the image file.
+func (s *Session) SetOutline(o *Outline) {
+	s.Engine.SetOutline(o)
+}
+
+// SaveOutline writes a map to the image file of the config, and returns the
+// file path.
+func (s *Session) SaveOutline(o *Outline) (string, error) {
+	conf := s.Engine.Config()
+	if conf == nil {
+		return "", errNoConfig
+	}
+
+	img := image.NewNRGBA(image.Rect(0, 0, o.Width, o.Height))
+	for y := range o.Height {
+		row := o.Pixels[(o.Height-1-y)*o.Width:] // bottom row first
+		for x := range o.Width {
+			c := row[x]
+			img.SetNRGBA(x, y, color.NRGBA{c[0], c[1], c[2], 255})
+		}
+	}
+
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		return "", err
+	}
+
+	s.mu.Lock()
+	s.written = sha256.Sum256(buf.Bytes())
+	s.mu.Unlock()
+
+	path := conf.Path
+	if dir := filepath.Dir(path); dir != "" {
+		os.MkdirAll(dir, 0o755)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		return "", err
+	}
+	slog.Info("saved map", "path", path)
+	return path, nil
 }

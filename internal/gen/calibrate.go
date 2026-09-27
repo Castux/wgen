@@ -51,9 +51,9 @@ const (
 type upliftField struct {
 	cell    float64 // pixels
 	gw, gh  int
-	label   []int32            // region of each cell, -1 for water or none
+	label   []int32           // region of each cell, -1 for water or none
 	terrain []*config.Terrain // of each region
-	ramp    []float64          // uplift factor of each cell, rampFloor..1
+	ramp    []float64         // uplift factor of each cell, rampFloor..1
 }
 
 // rank orders terrains for the ramps: by target height, or by uplift.

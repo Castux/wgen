@@ -145,6 +145,8 @@ type simState struct {
 	mpp  float64 // meters per pixel
 	expM float64 // area exponent
 
+	canceled func() bool // polled every step
+
 	rec     []int32   // receiver (downhill neighbour), itself if none
 	recDist []float64 // meters
 	order   []int32   // base level first, every vertex after its receiver
@@ -183,12 +185,14 @@ func (w *World) simulate() error {
 		coarse := w.newSimState(w.levels[0], field.sampler(rates), erodibilityNoise)
 		coarse.startFlat(w.rng(streamNoise))
 		run(coarse, u.Steps)
+		w.preview(coarse)
 		s = refine(coarse, field.sampler(rates))
 	} else {
 		// Calibrated on the coarse level, then again for what the
 		// refinement adds (see calibrate.go)
 		targets := field.targets()
 		coarse := w.calibrate(field, rates, targets, nil, erodibilityNoise, run)
+		w.preview(coarse)
 		s = refine(coarse, field.sampler(rates))
 
 		if len(w.levels) > 1 {
@@ -203,9 +207,34 @@ func (w *World) simulate() error {
 		}
 	}
 
+	if w.opts.canceled() {
+		return ErrCanceled
+	}
+
 	w.setSimResult(s)
 	slog.Debug("uplift model", "took", time.Since(start).Round(time.Millisecond))
 	return nil
+}
+
+// preview hands a world made of the coarse simulation to Options.Preview,
+// if there are finer levels to come.
+func (w *World) preview(coarse *simState) {
+	if w.opts.Preview == nil || len(w.levels) < 2 || w.opts.canceled() {
+		return
+	}
+
+	p := *w
+	p.Mesh = w.levels[0]
+	p.opts = Options{}
+	if err := p.assignTerrainTypes(); err != nil {
+		return
+	}
+	p.setSimResult(coarse)
+	p.computeWaterDepth()
+	p.finalizeElevation()
+	p.rasterize()
+	p.blurHeightmap()
+	w.opts.Preview(&p)
 }
 
 func (w *World) newSimState(m *mesh.Mesh, upliftAt, erodibilityNoise func(geom.Vec2) float64) *simState {
@@ -225,6 +254,8 @@ func (w *World) newSimState(m *mesh.Mesh, upliftAt, erodibilityNoise func(geom.V
 		rec:     make([]int32, n),
 		recDist: make([]float64, n),
 		area:    make([]float64, n),
+
+		canceled: w.opts.canceled,
 	}
 
 	for v, p := range m.Points {
@@ -369,6 +400,9 @@ func (s *simState) transfer(coarse *simState, seed uint64) {
 func (s *simState) run(steps int, dt, criticalSlope float64) {
 	const fillEvery = 10
 	for step := range steps {
+		if s.canceled != nil && s.canceled() {
+			return
+		}
 		if step%fillEvery == 0 {
 			s.fill()
 		}

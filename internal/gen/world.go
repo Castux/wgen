@@ -11,6 +11,7 @@
 package gen
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -68,7 +69,26 @@ type World struct {
 	// Rasterized, Width * Height, bottom row first
 	Heightmap []float64
 	WaterMap  []float64
+
+	opts Options // of the generation in progress
 }
+
+// Options of a generation.
+type Options struct {
+	// Canceled is polled during the generation, which stops with
+	// ErrCanceled when it returns true.
+	Canceled func() bool
+
+	// Preview is called with a coarse version of the result, before
+	// refining it (uplift model). It must not keep the world past the
+	// generation if that fails.
+	Preview func(*World)
+}
+
+// ErrCanceled is returned by generations stopped by Options.Canceled.
+var ErrCanceled = errors.New("generation canceled")
+
+func (o Options) canceled() bool { return o.Canceled != nil && o.Canceled() }
 
 // New runs the full pipeline for a config.
 func New(conf *config.Config) (*World, error) {
@@ -145,35 +165,76 @@ func changedStageUplift(old, conf *config.Config) Stage {
 // stages. The receiver is left untouched. If nothing needs recomputing, the
 // returned world shares everything but the config with the old one.
 func (w *World) Update(conf *config.Config) (*World, Stage, error) {
+	return w.UpdateWith(conf, Options{})
+}
+
+// UpdateWith is Update, with options.
+func (w *World) UpdateWith(conf *config.Config, opts Options) (*World, Stage, error) {
 	stage := ChangedStage(w.Conf, conf)
-	n, err := w.run(conf, stage)
+	n, err := w.run(conf, stage, opts)
 	return n, stage, err
 }
 
 // ReloadImage reloads the outline image and reruns the pipeline. The mesh is
-// kept if the image size did not change.
+// kept if the image size did not change (and, with the uplift model, the
+// mesh doesn't depend on the image).
 func (w *World) ReloadImage() (*World, Stage, error) {
+	return w.ReloadImageWith(Options{})
+}
+
+// ReloadImageWith is ReloadImage, with options.
+func (w *World) ReloadImageWith(opts Options) (*World, Stage, error) {
 	n := *w
 	if err := n.loadOutline(); err != nil {
 		return nil, StageImage, err
 	}
 
-	stage := StageMesh
-	if n.Width == w.Width && n.Height == w.Height {
-		stage = StageTerrain
-	}
-
-	res, err := n.run(w.Conf, stage)
+	stage := n.outlineStage(w)
+	res, err := n.run(w.Conf, stage, opts)
 	return res, stage, err
 }
 
-func (w *World) run(conf *config.Config, from Stage) (*World, error) {
+// WithOutline returns a new world with the given outline instead of the
+// image file (bottom row first), and the given config.
+func (w *World) WithOutline(conf *config.Config, width, height int, outline []config.Color, opts Options) (*World, Stage, error) {
+	if len(outline) != width*height {
+		return nil, StageImage, fmt.Errorf("outline of %d pixels for %dx%d", len(outline), width, height)
+	}
+
+	n := *w
+	n.Width, n.Height, n.Outline = width, height, outline
+
+	stage := StageMesh
+	if w.Conf != nil {
+		// Not the image stage: it would load the file
+		stage = max(StageMesh, min(ChangedStage(w.Conf, conf), n.outlineStage(w)))
+	}
+	res, err := n.run(conf, stage, opts)
+	return res, stage, err
+}
+
+// outlineStage is the first stage to rerun when the outline changed from
+// the old world's.
+func (w *World) outlineStage(old *World) Stage {
+	if w.Width != old.Width || w.Height != old.Height || old.Mesh == nil {
+		return StageMesh
+	}
+	if w.upliftModel() && w.Conf.Uplift.Levels > 0 {
+		// The mesh is refined according to the terrains
+		return StageMesh
+	}
+	return StageTerrain
+}
+
+func (w *World) run(conf *config.Config, from Stage, opts Options) (*World, error) {
 	if err := conf.Validate(); err != nil {
 		return nil, err
 	}
 
 	n := *w
 	n.Conf = conf
+	n.opts = opts
+	defer func() { n.opts = Options{} }()
 	start := time.Now()
 
 	steps := []struct {
@@ -195,6 +256,10 @@ func (w *World) run(conf *config.Config, from Stage) (*World, error) {
 	for _, step := range steps {
 		if step.stage < from {
 			continue
+		}
+
+		if opts.canceled() {
+			return nil, ErrCanceled
 		}
 
 		t := time.Now()

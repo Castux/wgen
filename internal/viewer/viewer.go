@@ -545,6 +545,8 @@ func (a *app) drawStatus(state engine.State) {
 	var lines []line
 
 	switch {
+	case state.Busy && state.Preview:
+		lines = append(lines, line{"Refining…", busyColor})
 	case state.Busy:
 		lines = append(lines, line{"Generating…", busyColor})
 	case a.loading():

@@ -285,3 +285,66 @@ func TestUpliftCalibration(t *testing.T) {
 		}
 	}
 }
+
+// The uplift model shows a coarse preview, and can be canceled.
+func TestUpliftPreviewCancel(t *testing.T) {
+	conf := setupUplift(t)
+
+	var previews []*World
+	full, _, err := (&World{}).UpdateWith(conf, Options{Preview: func(p *World) { previews = append(previews, p) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("%d previews", len(previews))
+	}
+	p := previews[0]
+	if p.Mesh != full.levels[0] || len(p.Z) != len(p.Mesh.Points) || len(p.Heightmap) != p.Width*p.Height {
+		t.Errorf("preview not of the coarse mesh")
+	}
+	if p.Highest <= 0 || p.Highest > 2*full.Highest {
+		t.Errorf("preview highest %v, final %v", p.Highest, full.Highest)
+	}
+
+	// Canceled once previewed
+	previewed := false
+	_, _, err = (&World{}).UpdateWith(conf, Options{
+		Preview:  func(*World) { previewed = true },
+		Canceled: func() bool { return previewed },
+	})
+	if err != ErrCanceled {
+		t.Errorf("canceled generation: %v", err)
+	}
+}
+
+// An outline given in memory gives the same world as from the file.
+func TestWithOutline(t *testing.T) {
+	for _, conf := range []*config.Config{setup(t), setupUplift(t)} {
+		fromFile := generate(t, conf)
+
+		outline := slices.Clone(fromFile.Outline)
+		fromMemory, _, err := (&World{}).WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !equalNaN(fromFile.Z, fromMemory.Z) {
+			t.Errorf("%s: outline in memory differs from the file", conf.Uplift.Model)
+		}
+
+		// Painting mountains in the sea changes the world, as a full generation
+		for i := range 200 {
+			outline[i*fromFile.Width+i/2] = config.Color{101, 72, 31}
+		}
+		painted, _, err := fromFile.WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		full, _, err := (&World{}).WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !equalNaN(painted.Z, full.Z) || equalNaN(painted.Z, fromFile.Z) {
+			t.Errorf("%s: painted outline not regenerated right", conf.Uplift.Model)
+		}
+	}
+}

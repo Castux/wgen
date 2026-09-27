@@ -145,3 +145,74 @@ func TestHotReload(t *testing.T) {
 		t.Errorf("after image change: %+v", st)
 	}
 }
+
+func TestOutline(t *testing.T) {
+	h := setup(t)
+	world, _ := h.s.Engine.Snapshot()
+	v0 := h.s.Engine.State().Version
+
+	// Paint the island away: all sea but a corner
+	o := &Outline{Width: world.Width, Height: world.Height, Pixels: slices.Clone(world.Outline)}
+	sea, land := o.Pixels[0], o.Pixels[40*o.Width+50]
+	for i := range o.Pixels {
+		o.Pixels[i] = sea
+	}
+	for y := range 20 {
+		for x := range 20 {
+			o.Pixels[y*o.Width+x] = land
+		}
+	}
+
+	h.s.SetOutline(o)
+	h.waitFor(func(st State) bool { return st.Version > v0 && !st.Busy })
+	painted, v1 := h.s.Engine.Snapshot()
+	if painted.Outline[40*o.Width+50] != sea || painted.Highest >= world.Highest {
+		t.Errorf("painted outline not generated: highest %v, was %v", painted.Highest, world.Highest)
+	}
+
+	// Saved to the image file, which reloads as is: nothing regenerated
+	path, err := h.s.SaveOutline(o)
+	if err != nil || path != "island.png" {
+		t.Fatalf("save: %q %v", path, err)
+	}
+	time.Sleep(500 * time.Millisecond)
+	if st := h.s.Engine.State(); st.Version != v1 || st.Busy {
+		t.Errorf("own save reloaded: %+v", st)
+	}
+
+	// The saved file is the map
+	f, _ := os.Open("island.png")
+	img, err := png.Decode(f)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r, g, b, _ := img.At(5, world.Height-1-5).RGBA(); [3]uint8{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8)} != [3]uint8(land) {
+		t.Errorf("saved image: land corner is %v", img.At(5, world.Height-6))
+	}
+}
+
+func TestPreviewAndSupersede(t *testing.T) {
+	h := setup(t)
+	if err := h.s.Patch([]byte(`{"elevationModel": "uplift", "mapWidth": 50, "resolution": 1, "levels": 2,
+		"terrains": {"land": {"height": 1000}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	// Right away, superseding it
+	if err := h.s.Patch([]byte(`{"terrains": {"land": {"height": 2000}}}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	previewed := false
+	h.waitFor(func(st State) bool {
+		previewed = previewed || st.Preview
+		world, _ := h.s.Engine.Snapshot()
+		return !st.Busy && !st.Preview && world.Conf.Terrain("land").Height == 2000
+	})
+	if !previewed {
+		t.Error("no preview shown")
+	}
+	if st := h.s.Engine.State(); st.Error != "" {
+		t.Errorf("error: %s", st.Error)
+	}
+}
