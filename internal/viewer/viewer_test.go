@@ -7,9 +7,12 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/go-gl/glfw/v3.4/glfw"
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/gen"
@@ -58,10 +61,6 @@ func TestRoundToStep(t *testing.T) {
 		if got := roundToStep(test.v, test.step); got != test.want {
 			t.Errorf("roundToStep(%v, %v) = %v, expected %v", test.v, test.step, got, test.want)
 		}
-	}
-
-	if stepFormat(0.01) != "%.2f" || stepFormat(1) != "%.0f" || stepFormat(0.5) != "%.1f" {
-		t.Error("stepFormat")
 	}
 }
 
@@ -146,5 +145,52 @@ func TestImageSlot(t *testing.T) {
 	defer mu.Unlock()
 	if wakes != 2 {
 		t.Errorf("%d wake ups, expected 2", wakes)
+	}
+}
+
+func TestShortcuts(t *testing.T) {
+	const (
+		press   = glfw.Press
+		release = glfw.Release
+		repeat  = glfw.Repeat
+	)
+	type event struct {
+		key    glfw.Key
+		name   string
+		action glfw.Action
+		mods   glfw.ModifierKey
+		click  bool // a mouse button or wheel instead
+	}
+	shiftDown := event{key: glfw.KeyLeftShift, action: press, mods: glfw.ModShift}
+	shiftUp := event{key: glfw.KeyLeftShift, action: release}
+
+	for _, test := range []struct {
+		name   string
+		events []event
+		want   []shortcut
+	}{
+		{"tab", []event{{key: glfw.KeyTab, action: press}}, []shortcut{shortcutView}},
+		{"ctrl+tab is ImGui's", []event{{key: glfw.KeyTab, action: press, mods: glfw.ModControl}}, nil},
+		{"shift tap", []event{shiftDown, shiftUp}, []shortcut{shortcutColor}},
+		{"right shift tap", []event{{key: glfw.KeyRightShift, action: press}, {key: glfw.KeyRightShift, action: release}}, []shortcut{shortcutColor}},
+		{"shift+drag", []event{shiftDown, {click: true}, shiftUp}, nil},
+		{"shift+tab", []event{shiftDown, {key: glfw.KeyTab, action: press, mods: glfw.ModShift}, shiftUp}, nil},
+		{"shift held", []event{shiftDown, {key: glfw.KeyLeftShift, action: repeat, mods: glfw.ModShift}, shiftUp}, []shortcut{shortcutColor}},
+		{"q and w by name", []event{{key: glfw.KeyA, name: "q", action: press}, {key: glfw.KeyZ, name: "w", action: press}}, []shortcut{shortcutShading, shortcutWireframe}},
+		{"held w", []event{{key: glfw.KeyW, name: "w", action: press}, {key: glfw.KeyW, action: repeat}, {key: glfw.KeyW, action: repeat}}, []shortcut{shortcutWireframe}},
+		{"ctrl+w", []event{{key: glfw.KeyW, name: "w", action: press, mods: glfw.ModControl}}, nil},
+		{"release", []event{{key: glfw.KeyW, action: release}}, nil},
+	} {
+		a := &app{}
+		for _, e := range test.events {
+			if e.click {
+				a.onMouse()
+				continue
+			}
+			a.onKey(e.key, e.name, e.action, e.mods)
+		}
+		if !slices.Equal(a.keys, test.want) {
+			t.Errorf("%s: %v, expected %v", test.name, a.keys, test.want)
+		}
 	}
 }

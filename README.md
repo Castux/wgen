@@ -55,7 +55,7 @@ Three views, cycled with `Tab`:
 
 | View | Left drag | Right drag | Wheel, middle drag |
 |---|---|---|---|
-| 3D orbit | rotate (pan with `Ctrl`) | pan | zoom |
+| 3D orbit | rotate (pan with `Shift` or `Ctrl`) | pan | zoom |
 | 3D top | pan | pan | zoom |
 | 2D map | pan (any button) | pan | zoom at the cursor |
 
@@ -63,19 +63,25 @@ Double click the map to fit it in the window. "Reset view" in the panel
 reframes the current view.
 
 Keys: `Shift` switches between terrain and height colors, `q` between lit and
-unlit, `w` toggles the wireframe.
+unlit, `w` toggles the wireframe. Shortcuts (these and `Tab`) are ignored
+while typing in a field or with a dropdown open, and when combined with
+`Ctrl`, `Alt` or `Cmd`. `Shift` only counts when pressed and released alone,
+since it is also a modifier: panning, and horizontal scrolling in the panel.
 
 The panel:
 
 - View: the settings above, and the overlay drawn on the terrain: rivers,
-  contour lines, grid. The overlay is drawn on the CPU, so its sliders only
-  apply when released. View settings are remembered between sessions.
+  contour lines, grid. View settings are remembered between sessions.
 - Actions: "Save config" writes the parameters back to the config file
   (reformatted, and without unknown keys). "Export files" writes the exports
   enabled in the config.
 - Generation: every parameter of the config. A change only reruns the
-  generation stages it affects, and applies when the slider is released.
-  `Ctrl` + click a slider to type a value.
+  generation stages it affects.
+
+Numbers have a slider, for quick changes within a typical range, rounded to
+a sensible step, and a field, to type a precise value (not rounded, and
+possibly outside of the slider range). Changes apply when the slider is
+released, or when pressing `Enter` or leaving the field (`Escape` cancels).
 
 The status in the bottom left corner shows what is running (generating,
 rendering the overlay, exporting), errors, and whether the config has unsaved

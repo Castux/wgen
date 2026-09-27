@@ -96,6 +96,11 @@ image rendering, exports) wakes it with `glfw.PostEmptyEvent`. Each frame:
    the images the current settings need; upload rendered images.
 2. `handleInput`: keys and mouse, unless ImGui wants them. A drag that
    started outside of the panel belongs to the view until released.
+   Shortcuts are collected from the GLFW key callback (`onKey`), and skipped
+   while ImGui has an active widget or an open popup. They avoid ImGui's own
+   keys: modified keys are not shortcuts (`Ctrl+Tab` is ImGui's window
+   switching, enabled even without keyboard navigation), and Shift only is
+   when tapped alone (ImGui scrolls horizontally with Shift+wheel).
 3. The panel and the status, then the scene, then ImGui on top.
 
 Files:
@@ -116,8 +121,11 @@ Files:
   grid), and the 2D map image (only while the map is shown, at a power of
   two scale following the zoom).
 - `panel.go`: the ImGui panel. Generation parameters come from
-  `config.Schema`, their values from `config.Value`. Sliders commit on
-  release: edits are sent to the session as partial configs.
+  `config.Schema`, their values from `config.Value`. Numbers are a slider
+  (rounded to the schema step) and a field (as typed), which commit when
+  done, not on every change: edits are sent to the session as partial
+  configs, unless the value is unchanged. The panel is kept inside the
+  window, as its saved position may be off screen in a smaller window.
 - `settings.go`: viewer settings, saved as JSON in the user config directory
   (`os.UserConfigDir()/wgen/viewer.json`, with ImGui's `imgui.ini` for the
   panel layout next to it).

@@ -60,14 +60,15 @@ type app struct {
 	params     []param
 	paramsConf *config.Config // params are of this config
 	editKey    string         // slider being dragged
-	editValue  float32
+	editValue  float64
 
 	// Input
 	drag struct {
 		active bool
 		button imgui.MouseButton
 	}
-	chars []rune // typed since the last frame
+	keys     []shortcut // pressed since the last frame
+	shiftTap bool       // Shift is down, and nothing else happened since
 
 	wake   atomic.Bool // something happened in the background
 	redraw int         // frames to draw before sleeping
@@ -132,14 +133,23 @@ func Run(session *engine.Session) error {
 	}
 
 	// Installed before ImGui's, which call them in turn
-	window.SetCharCallback(func(_ *glfw.Window, r rune) {
-		a.chars = append(a.chars, r)
+	window.SetKeyCallback(func(_ *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
+		name := ""
+		if action == glfw.Press {
+			name = glfw.GetKeyName(key, scancode)
+		}
+		a.onKey(key, name, action, mods)
 		a.activity()
 	})
-	window.SetKeyCallback(func(*glfw.Window, glfw.Key, int, glfw.Action, glfw.ModifierKey) { a.activity() })
-	window.SetMouseButtonCallback(func(*glfw.Window, glfw.MouseButton, glfw.Action, glfw.ModifierKey) { a.activity() })
+	window.SetMouseButtonCallback(func(*glfw.Window, glfw.MouseButton, glfw.Action, glfw.ModifierKey) {
+		a.onMouse()
+		a.activity()
+	})
 	window.SetCursorPosCallback(func(*glfw.Window, float64, float64) { a.activity() })
-	window.SetScrollCallback(func(*glfw.Window, float64, float64) { a.activity() })
+	window.SetScrollCallback(func(*glfw.Window, float64, float64) {
+		a.onMouse()
+		a.activity()
+	})
 	window.SetFocusCallback(func(*glfw.Window, bool) { a.activity() })
 	window.SetSizeCallback(func(*glfw.Window, int, int) { a.activity() })
 	window.SetRefreshCallback(func(*glfw.Window) { a.activity() })
@@ -302,31 +312,81 @@ func (a *app) setSettings(s Settings) {
 	}
 }
 
+// Keyboard shortcuts
+type shortcut int
+
+const (
+	shortcutView      shortcut = iota // Tab
+	shortcutColor                     // Shift
+	shortcutShading                   // q
+	shortcutWireframe                 // w
+)
+
+// onKey turns key events into shortcuts.
+//
+// Shift is only a shortcut when tapped alone, since it is also a modifier:
+// horizontal scrolling in the panel, panning in the orbit view. The other
+// shortcuts are keys pressed without modifiers (Ctrl+Tab switches ImGui
+// windows), not repeated when held, and q and w are recognized by name
+// (glfw.GetKeyName, given for key presses), to follow the keyboard layout.
+func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.ModifierKey) {
+	shift := key == glfw.KeyLeftShift || key == glfw.KeyRightShift
+
+	switch {
+	case shift && action == glfw.Press:
+		a.shiftTap = true
+
+	case shift && action == glfw.Release:
+		if a.shiftTap {
+			a.keys = append(a.keys, shortcutColor)
+		}
+		a.shiftTap = false
+
+	case action == glfw.Press:
+		a.shiftTap = false
+		if mods&(glfw.ModShift|glfw.ModControl|glfw.ModAlt|glfw.ModSuper) != 0 {
+			return
+		}
+		switch {
+		case key == glfw.KeyTab:
+			a.keys = append(a.keys, shortcutView)
+		case name == "q":
+			a.keys = append(a.keys, shortcutShading)
+		case name == "w":
+			a.keys = append(a.keys, shortcutWireframe)
+		}
+	}
+}
+
+// onMouse is called on mouse buttons and wheel: Shift is being used as a
+// modifier.
+func (a *app) onMouse() { a.shiftTap = false }
+
 func (a *app) handleInput() {
 	io := imgui.CurrentIO()
-	s := a.settings
 
-	if !io.WantCaptureKeyboard() {
-		if imgui.IsKeyPressedBoolV(imgui.KeyTab, false) {
-			s.View = cycle(views, s.View)
-		}
-		if imgui.IsKeyPressedBoolV(imgui.KeyLeftShift, false) || imgui.IsKeyPressedBoolV(imgui.KeyRightShift, false) {
-			s.Color = cycle(colors, s.Color)
-		}
-		// Characters rather than keys, to follow the keyboard layout
-		for _, r := range a.chars {
-			switch r {
-			case 'w':
-				s.Wireframe = !s.Wireframe
-			case 'q':
+	// Not while typing in a field or using a widget, nor while a combo is
+	// open, where they would change its value behind it
+	popup := imgui.IsPopupOpenStrV("", imgui.PopupFlagsAnyPopupId|imgui.PopupFlagsAnyPopupLevel)
+	if !io.WantCaptureKeyboard() && !popup {
+		s := a.settings
+		for _, k := range a.keys {
+			switch k {
+			case shortcutView:
+				s.View = cycle(views, s.View)
+			case shortcutColor:
+				s.Color = cycle(colors, s.Color)
+			case shortcutShading:
 				s.Shading = cycle(shadings, s.Shading)
+			case shortcutWireframe:
+				s.Wireframe = !s.Wireframe
 			}
 		}
+		if s != a.settings {
+			a.setSettings(s)
+		}
 	}
-	a.chars = a.chars[:0]
-	if s != a.settings {
-		a.setSettings(s)
-	}
+	a.keys = a.keys[:0]
 
 	// A drag belongs to the view if it started outside of the panel
 	if !a.drag.active && !io.WantCaptureMouse() {
