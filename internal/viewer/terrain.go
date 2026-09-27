@@ -44,7 +44,7 @@ const terrainVertexShader = `
 #version 330 core
 
 layout(location = 0) in vec3 position;     // map coordinates
-layout(location = 1) in vec3 terrainColor; // sRGB
+layout(location = 1) in vec4 terrainColor; // sRGB, alpha 1 for water
 
 uniform mat4 view;
 uniform mat4 projection;
@@ -63,12 +63,24 @@ vec3 srgbToLinear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
 }
 
+// Height colors: gray on land, blue in water, darker when deeper (sea level
+// at 0)
+const vec3 deepWater = vec3(25.0, 45.0, 100.0) / 255.0;
+const vec3 shallowWater = vec3(110.0, 160.0, 215.0) / 255.0;
+
+vec3 heightColor(float z, bool water) {
+	if (!water)
+		return vec3((z - lowest) / span);
+	float t = clamp((z - lowest) / max(-lowest, 1.0), 0.0, 1.0);
+	return srgbToLinear(mix(deepWater, shallowWater, t));
+}
+
 void main() {
 	vPosition = position;
 	vec4 viewPosition = view * vec4(position.xy - size / 2.0, position.z * zScale, 1.0);
 	vViewPosition = viewPosition.xyz;
 
-	vColor = heightColors ? vec3((position.z - lowest) / span) : srgbToLinear(terrainColor);
+	vColor = heightColors ? heightColor(position.z, terrainColor.a > 0.5) : srgbToLinear(terrainColor.rgb);
 
 	// The overlay is top row first
 	vUV = vec2(position.x / size.x, 1.0 - position.y / size.y);
@@ -120,7 +132,7 @@ void main() {
 
 type terrainVertex struct {
 	x, y, z    float32
-	r, g, b, _ uint8
+	r, g, b, a uint8 // a: 255 for water
 }
 
 func newTerrainView() (*terrainView, error) {
@@ -143,7 +155,7 @@ func newTerrainView() (*terrainView, error) {
 	gl.EnableVertexAttribArray(0)
 	gl.VertexAttribPointerWithOffset(0, 3, gl.FLOAT, false, stride, 0)
 	gl.EnableVertexAttribArray(1)
-	gl.VertexAttribPointerWithOffset(1, 3, gl.UNSIGNED_BYTE, true, stride, 12)
+	gl.VertexAttribPointerWithOffset(1, 4, gl.UNSIGNED_BYTE, true, stride, 12)
 	gl.BindVertexArray(0)
 
 	return v, nil
@@ -162,6 +174,9 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 		}
 		c := render.VertexColor(w, int32(i))
 		vertices[i] = terrainVertex{x: float32(p.X), y: float32(p.Y), z: float32(z), r: c[0], g: c[1], b: c[2]}
+		if w.IsWater(int32(i)) {
+			vertices[i].a = 255
+		}
 	}
 
 	indices := make([]uint32, 0, 3*len(m.Triangles))

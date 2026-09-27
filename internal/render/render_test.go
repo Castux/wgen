@@ -68,6 +68,15 @@ func TestRender(t *testing.T) {
 		t.Errorf("sea %v, land %v", sea, land)
 	}
 
+	// Height colors: sea in blue, land in gray
+	heights := Render(w, Options{Scale: 2, Base: BaseHeight})
+	if sea := heights.RGBAAt(2, 2); sea.B <= sea.R+20 {
+		t.Errorf("height colors: sea %v not blue", sea)
+	}
+	if land := heights.RGBAAt(100, 80); land.R != land.G || land.G != land.B {
+		t.Errorf("height colors: land %v not gray", land)
+	}
+
 	// Overlay: white, with some river pixels
 	overlay := Render(w, Options{Scale: 2, Base: BaseNone, RiverPower: 0.5, RiverWidth: 4})
 	if overlay.RGBAAt(2, 2) != (color.RGBA{255, 255, 255, 255}) {

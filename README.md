@@ -62,6 +62,9 @@ Three views, cycled with `Tab`:
 Double click the map to fit it in the window. "Reset view" in the panel
 reframes the current view.
 
+Height colors are gray on land and blue in water (sea and lakes), darker
+when deeper, so that shorelines show.
+
 Keys: `Shift` switches between terrain and height colors, `q` between lit and
 unlit, `w` toggles the wireframe. Shortcuts (these and `Tab`) are ignored
 while typing in a field or with a dropdown open, and when combined with

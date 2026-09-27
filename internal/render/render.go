@@ -149,13 +149,41 @@ func drawTerrainColors(w *gen.World, img *image.RGBA, scale float64) {
 	})
 }
 
+// Height colors of water, from the deepest to the surface
+var (
+	deepWater    = [3]float64{25, 45, 100}
+	shallowWater = [3]float64{110, 160, 215}
+)
+
+// drawHeightColors draws elevation: gray on land, blue in water (sea and
+// lakes), darker when deeper, so that shores show.
 func drawHeightColors(w *gen.World, img *image.RGBA, scale float64) {
 	span := w.Highest - w.Lowest
 	forEachPixel(img, scale, func(i int, p geom.Vec2) {
-		h := (Sample(w, w.Heightmap, p) - w.Lowest) / span
+		z := Sample(w, w.Heightmap, p)
+
+		// Water where its level is above the ground (the level is per
+		// triangle: not interpolated)
+		if level := nearest(w, w.WaterMap, p); level > z {
+			t := geom.Clamp((z-w.Lowest)/math.Max(level-w.Lowest, 1e-9), 0, 1)
+			for k := range 3 {
+				img.Pix[i+k] = uint8(math.Round(geom.Lerp(deepWater[k], shallowWater[k], t)))
+			}
+			img.Pix[i+3] = 255
+			return
+		}
+
+		h := (z - w.Lowest) / span
 		g := uint8(math.Round(geom.Clamp(h, 0, 1) * 255))
 		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = g, g, g, 255
 	})
+}
+
+// nearest is the value of a raster of the world at the pixel of p.
+func nearest(w *gen.World, data []float64, p geom.Vec2) float64 {
+	x := int(geom.Clamp(math.Round(p.X), 0, float64(w.Width-1)))
+	y := int(geom.Clamp(math.Round(p.Y), 0, float64(w.Height-1)))
+	return data[y*w.Width+x]
 }
 
 // Sample interpolates a raster of the world (such as the heightmap) at p.
