@@ -58,7 +58,56 @@ type Config struct {
 	ExportSVG       bool `json:"exportSVG"`
 	ExportHeightmap bool `json:"exportHeightmap"`
 	PNG16           bool `json:"png16"`
+
+	Erosion ErosionModel `json:"-"`
+	Noise   SlopeNoise   `json:"-"`
 }
+
+// ErosionModel is how slopes are reduced along rivers.
+//
+// "step" (the default) reduces them by ErosionFactor where the flow is above
+// ErosionMinFlow, once. "power" is a stream power law: the slope is
+// multiplied by (A / ChannelArea) ^ -Theta where the drainage area A is
+// above ChannelArea, and at least by Floor. The drainage changes with the
+// elevation, so the elevation and the rivers are then computed again,
+// Iterations times.
+type ErosionModel struct {
+	Model       string  `json:"erosionModel"`
+	Theta       float64 `json:"erosionTheta"`
+	ChannelArea float64 `json:"channelArea"` // square pixels
+	Floor       float64 `json:"erosionFloor"`
+	Iterations  int     `json:"erosionIterations"`
+}
+
+// SlopeNoise multiplies land slopes by 1 + Amplitude * n, n between -1 and 1
+// from a noise of the given type: "fbm" (smooth), "ridged" (low along thin
+// lines) or "worley" (low along the boundaries of cells), or "none".
+type SlopeNoise struct {
+	Type      string  `json:"noiseType"`
+	Scale     float64 `json:"noiseScale"` // pixels, of the largest octave
+	Amplitude float64 `json:"noiseAmplitude"`
+	Octaves   int     `json:"noiseOctaves"`
+	Stretch   float64 `json:"noiseStretch"` // elongation along Angle
+	Angle     float64 `json:"noiseAngle"`   // degrees, counterclockwise from x
+}
+
+// Erosion models
+const (
+	ErosionStep  = "step"
+	ErosionPower = "power"
+)
+
+// Noise types
+const (
+	NoiseNone   = "none"
+	NoiseFBM    = "fbm"
+	NoiseRidged = "ridged"
+	NoiseWorley = "worley"
+)
+
+var defaultErosion = ErosionModel{Model: ErosionStep, Theta: 0.5, ChannelArea: 20000, Floor: 0.05, Iterations: 10}
+
+var defaultNoise = SlopeNoise{Type: NoiseNone, Scale: 256, Amplitude: 0.5, Octaves: 3, Stretch: 1}
 
 // Grid types
 const (
@@ -70,7 +119,9 @@ var required = []string{"path", "resolution", "grid", "jitter", "relax",
 	"smoothingRadius", "erosionMinFlow", "erosionFactor", "terrains"}
 
 var optional = []string{"seed", "maxHeight", "blurRadius",
-	"exportOBJ", "exportSVG", "exportHeightmap", "png16"}
+	"exportOBJ", "exportSVG", "exportHeightmap", "png16",
+	"erosionModel", "erosionTheta", "channelArea", "erosionFloor", "erosionIterations",
+	"noiseType", "noiseScale", "noiseAmplitude", "noiseOctaves", "noiseStretch", "noiseAngle"}
 
 var terrainKeys = []string{"r", "g", "b", "gradient", "fixedShore", "smoothing", "erosion"}
 
@@ -93,7 +144,7 @@ func Load(path string) (conf *Config, warnings []string, err error) {
 
 // Parse decodes and validates a config.
 func Parse(data []byte) (*Config, []string, error) {
-	conf := &Config{ExportHeightmap: true}
+	conf := &Config{ExportHeightmap: true, Erosion: defaultErosion, Noise: defaultNoise}
 	warnings, err := conf.apply(data, true)
 	if err != nil {
 		return nil, warnings, err
@@ -162,10 +213,24 @@ func (c *Config) setField(key string, value json.RawMessage) error {
 	buf.Write(value)
 	buf.WriteString("}")
 
+	// Keys of the parameter groups
+	var target any = c
+	switch {
+	case slices.Contains(erosionKeys, key):
+		target = &c.Erosion
+	case slices.Contains(noiseKeys, key):
+		target = &c.Noise
+	}
+
 	dec := json.NewDecoder(&buf)
 	dec.DisallowUnknownFields()
-	return dec.Decode(c)
+	return dec.Decode(target)
 }
+
+var (
+	erosionKeys = []string{"erosionModel", "erosionTheta", "channelArea", "erosionFloor", "erosionIterations"}
+	noiseKeys   = []string{"noiseType", "noiseScale", "noiseAmplitude", "noiseOctaves", "noiseStretch", "noiseAngle"}
+)
 
 type rawTerrain struct {
 	R          *uint8   `json:"r"`
@@ -305,6 +370,40 @@ func (c *Config) Validate() error {
 	if c.ErosionFactor < 0 {
 		errs = append(errs, "erosionFactor must be positive")
 	}
+
+	e := c.Erosion
+	if e.Model != ErosionStep && e.Model != ErosionPower {
+		errs = append(errs, fmt.Sprintf("unknown erosionModel %q (expected step or power)", e.Model))
+	}
+	if e.Theta < 0 {
+		errs = append(errs, "erosionTheta must be positive")
+	}
+	if e.ChannelArea <= 0 {
+		errs = append(errs, "channelArea must be positive")
+	}
+	if e.Floor < 0 || e.Floor > 1 {
+		errs = append(errs, "erosionFloor must be between 0 and 1")
+	}
+	if e.Iterations < 1 {
+		errs = append(errs, "erosionIterations must be at least 1")
+	}
+
+	n := c.Noise
+	if !slices.Contains([]string{NoiseNone, NoiseFBM, NoiseRidged, NoiseWorley}, n.Type) {
+		errs = append(errs, fmt.Sprintf("unknown noiseType %q (expected none, fbm, ridged or worley)", n.Type))
+	}
+	if n.Scale <= 0 {
+		errs = append(errs, "noiseScale must be positive")
+	}
+	if n.Amplitude < 0 || n.Amplitude > 1 {
+		errs = append(errs, "noiseAmplitude must be between 0 and 1")
+	}
+	if n.Octaves < 1 {
+		errs = append(errs, "noiseOctaves must be at least 1")
+	}
+	if n.Stretch < 1 {
+		errs = append(errs, "noiseStretch must be at least 1")
+	}
 	if len(c.Terrains) == 0 {
 		errs = append(errs, "no terrains defined")
 	}
@@ -397,6 +496,32 @@ func (c *Config) Marshal() []byte {
 	fmt.Fprintf(&b, "\t\"erosionFactor\": %s,\n", num(c.ErosionFactor))
 	fmt.Fprintf(&b, "\t\"maxHeight\": %s,\n", num(c.MaxHeight))
 	fmt.Fprintf(&b, "\t\"blurRadius\": %d,\n", c.BlurRadius)
+
+	// Experimental parameters, only when not the defaults
+	var extra []string
+	if e := c.Erosion; e != defaultErosion {
+		extra = append(extra,
+			fmt.Sprintf("\"erosionModel\": %s", strconv.Quote(e.Model)),
+			fmt.Sprintf("\"erosionTheta\": %s", num(e.Theta)),
+			fmt.Sprintf("\"channelArea\": %s", num(e.ChannelArea)),
+			fmt.Sprintf("\"erosionFloor\": %s", num(e.Floor)),
+			fmt.Sprintf("\"erosionIterations\": %d", e.Iterations))
+	}
+	if n := c.Noise; n != defaultNoise {
+		extra = append(extra,
+			fmt.Sprintf("\"noiseType\": %s", strconv.Quote(n.Type)),
+			fmt.Sprintf("\"noiseScale\": %s", num(n.Scale)),
+			fmt.Sprintf("\"noiseAmplitude\": %s", num(n.Amplitude)),
+			fmt.Sprintf("\"noiseOctaves\": %d", n.Octaves),
+			fmt.Sprintf("\"noiseStretch\": %s", num(n.Stretch)),
+			fmt.Sprintf("\"noiseAngle\": %s", num(n.Angle)))
+	}
+	if len(extra) > 0 {
+		b.WriteString("\n")
+		for _, line := range extra {
+			fmt.Fprintf(&b, "\t%s,\n", line)
+		}
+	}
 
 	b.WriteString("\n\t\"terrains\": {\n")
 	for i, t := range c.Terrains {

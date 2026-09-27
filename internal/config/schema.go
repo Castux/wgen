@@ -51,6 +51,21 @@ func (c *Config) Schema() []Param {
 		integer("erosionMinFlow", "Erosion min flow", "Elevation", "erosion", 0, 500),
 		num("erosionFactor", "Erosion factor", "Elevation", "erosion", 0, 1, 0.01),
 		integer("blurRadius", "Blur radius", "Elevation", "raster", 0, 20),
+
+		{Path: []string{"erosionModel"}, Label: "Model", Group: "Erosion (experimental)", Type: "enum",
+			Options: []string{ErosionStep, ErosionPower}, Stage: "erosion"},
+		num("erosionTheta", "Theta (power)", "Erosion (experimental)", "erosion", 0, 1, 0.01),
+		num("channelArea", "Channel area (power)", "Erosion (experimental)", "erosion", 100, 200000, 100),
+		num("erosionFloor", "Floor (power)", "Erosion (experimental)", "erosion", 0, 1, 0.01),
+		integer("erosionIterations", "Iterations (power)", "Erosion (experimental)", "erosion", 1, 50),
+
+		{Path: []string{"noiseType"}, Label: "Type", Group: "Slope noise (experimental)", Type: "enum",
+			Options: []string{NoiseNone, NoiseFBM, NoiseRidged, NoiseWorley}, Stage: "terrain"},
+		num("noiseScale", "Scale", "Slope noise (experimental)", "terrain", 16, 2048, 1),
+		num("noiseAmplitude", "Amplitude", "Slope noise (experimental)", "terrain", 0, 1, 0.01),
+		integer("noiseOctaves", "Octaves", "Slope noise (experimental)", "terrain", 1, 8),
+		num("noiseStretch", "Stretch", "Slope noise (experimental)", "terrain", 1, 8, 0.1),
+		num("noiseAngle", "Angle", "Slope noise (experimental)", "terrain", -90, 90, 1),
 	}
 
 	for _, t := range c.Terrains {
@@ -109,9 +124,12 @@ func (c *Config) Value(path []string) (any, error) {
 	}
 
 	if len(path) == 1 && path[0] != "terrains" {
+		// The parameter groups are only serialized when not the defaults
 		var values map[string]any
-		if err := json.Unmarshal(c.Marshal(), &values); err != nil {
-			return nil, err
+		for _, data := range [][]byte{c.Marshal(), jsonOf(c.Erosion), jsonOf(c.Noise)} {
+			if err := json.Unmarshal(data, &values); err != nil {
+				return nil, err
+			}
 		}
 		if v, ok := values[path[0]]; ok {
 			return v, nil
@@ -119,4 +137,9 @@ func (c *Config) Value(path []string) (any, error) {
 	}
 
 	return nil, fmt.Errorf("unknown parameter %s", strings.Join(path, "."))
+}
+
+func jsonOf(v any) []byte {
+	data, _ := json.Marshal(v)
+	return data
 }

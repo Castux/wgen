@@ -1,0 +1,27 @@
+{
+	"path": "lab/chasers.png",
+	"resolution": 32,
+	"grid": "hex",
+	"jitter": 1.0,
+	"relax": false,
+	"smoothingRadius": 20,
+	"erosionMinFlow": 10,
+	"erosionFactor": 0.75,
+
+	"terrains": {
+		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
+		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2, "erosion": true},
+		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8 },
+		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2 },
+
+		"lake": { "r": 109, "g": 148, "b": 194, "gradient": 0.0001, "smoothing": false, "erosion": false},
+		"flat": { "r": 153, "g": 153, "b": 153, "gradient": 0.01 },
+
+		"cliffs": { "r": 148, "g": 10, "b": 0, "gradient": 4.0, "smoothing": false, "erosion": false}
+
+	},
+
+	"exportOBJ": false,
+	"exportSVG": false,
+	"exportHeightmap": false
+}

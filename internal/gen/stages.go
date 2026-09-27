@@ -23,6 +23,7 @@ import (
 const (
 	streamMesh = iota + 1
 	streamSmoothing
+	streamNoise
 )
 
 func (w *World) rng(stream uint64) *rand.Rand {
@@ -181,6 +182,16 @@ func (w *World) assignTerrainTypes() error {
 		slog.Warn("pixel color matches no terrain", "color", pixel.String(), "vertices", count)
 	}
 
+	// Land slopes varied by noise
+	if noise := slopeNoise(w.Conf.Noise, w.rng(streamNoise).Uint64()); noise != nil {
+		amplitude := w.Conf.Noise.Amplitude
+		for v, p := range w.Mesh.Points {
+			if w.Terrain[v] != nil && w.Gradient[v] > 0 {
+				w.Gradient[v] *= 1 + amplitude*noise(p)
+			}
+		}
+	}
+
 	for v := range w.Mesh.Points {
 		v := int32(v)
 		if w.IsWater(v) && slices.ContainsFunc(w.Mesh.Neighbours[v], w.IsLand) {
@@ -229,8 +240,8 @@ func (w *World) computeElevation(erosion bool) {
 				gradient = 0.00001
 			}
 
-			if erosion && w.Terrain[n].Erosion && w.Downhill[n] == c && int(w.Flow[n]) > w.Conf.ErosionMinFlow {
-				gradient *= w.Conf.ErosionFactor
+			if erosion && w.Terrain[n].Erosion && w.Downhill[n] == c {
+				gradient *= w.erosionFactor(n)
 			}
 
 			newZ := cz + gradient*m.Points[c].Dist(m.Points[n])
@@ -246,6 +257,54 @@ func (w *World) computeElevation(erosion bool) {
 
 // computeRiverFlow finds the steepest downhill neighbour of every vertex, and
 // the flow of each vertex: 1 for itself plus the flow of everything uphill.
+// erosionFactor is the slope multiplier along the river flowing out of v.
+func (w *World) erosionFactor(v int32) float64 {
+	e := w.Conf.Erosion
+	if e.Model == config.ErosionPower {
+		area := float64(w.Flow[v]) * w.cellArea()
+		if area <= e.ChannelArea {
+			return 1
+		}
+		return math.Max(e.Floor, math.Pow(area/e.ChannelArea, -e.Theta))
+	}
+
+	if int(w.Flow[v]) > w.Conf.ErosionMinFlow {
+		return w.Conf.ErosionFactor
+	}
+	return 1
+}
+
+// cellArea is the average area of the Voronoi cell of a vertex, in square
+// pixels.
+func (w *World) cellArea() float64 {
+	res := w.Conf.Resolution
+	if w.Conf.Grid == config.GridHex {
+		return res * res * math.Sqrt(3) / 2
+	}
+	return res * res
+}
+
+// erode reduces slopes along rivers. With the power model, the rivers are
+// computed again on the eroded terrain, and the terrain eroded again by the
+// new rivers, a number of times: capturing more drainage makes a valley
+// deeper, which lets it capture more, which gives rivers their tree shapes.
+func (w *World) erode() {
+	if w.Conf.Erosion.Model != config.ErosionPower {
+		w.computeElevation(true)
+		return
+	}
+
+	// From the uneroded terrain: the rivers of the world may be those of a
+	// previous erosion
+	w.computeElevation(false)
+	w.computeRiverFlow()
+
+	for range w.Conf.Erosion.Iterations {
+		w.computeElevation(true)
+		w.computeRiverFlow()
+	}
+}
+
 func (w *World) computeRiverFlow() {
 	m := w.Mesh
 	z := w.Z

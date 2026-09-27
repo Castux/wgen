@@ -207,6 +207,9 @@ func TestIncremental(t *testing.T) {
 		{`{"blurRadius": 0}`, StageRaster},
 		{`{"erosionFactor": 0.2}`, StageErosion},
 		{`{"erosionMinFlow": 50}`, StageErosion},
+		{`{"erosionModel": "power", "erosionIterations": 3, "channelArea": 100}`, StageErosion},
+		{`{"noiseType": "worley", "noiseScale": 20}`, StageTerrain},
+		{`{"noiseType": "ridged", "noiseStretch": 3, "noiseAngle": 30}`, StageTerrain},
 		{`{"terrains": {"hills": {"gradient": 1.5}}}`, StageTerrain},
 		{`{"terrains": {"plains": {"erosion": false}}}`, StageTerrain},
 		{`{"smoothingRadius": 0}`, StageTerrain},
@@ -375,4 +378,35 @@ func equalNaN(a, b []float64) bool {
 	return slices.EqualFunc(a, b, func(x, y float64) bool {
 		return x == y || math.IsNaN(x) && math.IsNaN(y)
 	})
+}
+
+// Updating an eroded world gives the same result as generating from scratch,
+// with erosion recomputing the rivers.
+func TestIncrementalPowerErosion(t *testing.T) {
+	conf := setup(t)
+	patch := func(c *config.Config, p string) *config.Config {
+		t.Helper()
+		patched, err := c.Patch([]byte(p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return patched
+	}
+
+	first := patch(conf, `{"erosionModel": "power", "erosionIterations": 4, "channelArea": 100}`)
+	eroded := generate(t, first)
+
+	second := patch(first, `{"channelArea": 300, "erosionTheta": 0.4}`)
+	updated, stage, err := eroded.Update(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stage != StageErosion {
+		t.Errorf("stage %v", stage)
+	}
+
+	full := generate(t, second)
+	if !equalNaN(updated.Z, full.Z) || !slices.Equal(updated.Flow, full.Flow) {
+		t.Error("update of an eroded world differs from a full generation")
+	}
 }

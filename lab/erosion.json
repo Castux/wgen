@@ -1,0 +1,72 @@
+{
+	"config": "chasers.json",
+	"region": "mountains",
+	"channelArea": 3000,
+	"contours": 10,
+	"crops": {
+		"sw": [
+			60,
+			1360,
+			420,
+			1860
+		],
+		"se": [
+			1080,
+			1400,
+			1720,
+			1820
+		]
+	},
+	"cases": {
+		"1-small": {},
+		"2-continent": {
+			"resolution": 8
+		}
+	},
+	"variants": {
+		"1-baseline": {},
+		"2-fbm": {
+			"noiseType": "fbm",
+			"noiseScale": 256,
+			"noiseAmplitude": 0.6,
+			"noiseOctaves": 3
+		},
+		"3-ridged": {
+			"noiseType": "ridged",
+			"noiseScale": 256,
+			"noiseAmplitude": 0.6,
+			"noiseOctaves": 3
+		},
+		"4-worley": {
+			"noiseType": "worley",
+			"noiseScale": 256,
+			"noiseAmplitude": 0.6,
+			"noiseOctaves": 3
+		},
+		"5-power-a1000": {
+			"erosionModel": "power",
+			"erosionTheta": 0.5,
+			"erosionFloor": 0.05,
+			"erosionIterations": 10,
+			"channelArea": 1000
+		},
+		"6-power-a5000": {
+			"erosionModel": "power",
+			"erosionTheta": 0.5,
+			"erosionFloor": 0.05,
+			"erosionIterations": 10,
+			"channelArea": 5000
+		},
+		"7-power-a1000-worley": {
+			"erosionModel": "power",
+			"erosionTheta": 0.5,
+			"erosionFloor": 0.05,
+			"erosionIterations": 10,
+			"channelArea": 1000,
+			"noiseType": "worley",
+			"noiseScale": 256,
+			"noiseAmplitude": 0.6,
+			"noiseOctaves": 3
+		}
+	}
+}

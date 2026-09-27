@@ -41,6 +41,7 @@ and tested without a C compiler.
 | Path | |
 |---|---|
 | `cmd/wgen` | command line: export, or open the viewer |
+| `cmd/wgenlab` | experiments: compare generation variants (see below) |
 | `internal/config` | config loading, validation, patching, saving; parameter schema for the panel |
 | `internal/mesh` | Delaunay triangulation and dual graph |
 | `internal/gen` | the generation pipeline, in stages; immutable `World` snapshots |
@@ -50,6 +51,7 @@ and tested without a C compiler.
 | `internal/viewer` | the viewer window |
 | `test` | sample outline images and config |
 | `etc` | source artwork and larger sample maps |
+| `lab` | experiments for `cmd/wgenlab` |
 
 ## Generation
 
@@ -140,6 +142,25 @@ editing `viewer.json`, it checks every view and mode from a script:
 ```sh
 WGEN_SCREENSHOT=shot.png bin/wgen --interactive test/config.json
 ```
+
+## Experiments
+
+`cmd/wgenlab` compares variants of the generation, to judge algorithm
+changes on more than a glance at the viewer. An experiment file names a base
+config, cases and variants (partial configs, all combinations are run), a
+terrain to measure, and image regions to render at full scale:
+
+```sh
+go run ./cmd/wgenlab -out lab/out2 lab/erosion2.json
+```
+
+It writes renders (elevation, hillshading, rivers, contours) of the whole map
+and of the regions, and `report.md`: per variant, generation time, and
+measures on the chosen terrain: peaks, drainage density, bifurcation ratio of
+the river network (3 to 5 in nature) and Hack exponent (length of rivers
+against drainage area, about 0.6 in nature, 1 for the parallel drainage of a
+single crest). `lab/` holds the experiments on the erosion models; outputs go
+to `lab/out*`, which is not versioned.
 
 ## Tests
 

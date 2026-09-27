@@ -161,3 +161,40 @@ func TestSchemaValues(t *testing.T) {
 		t.Error("value of an unknown terrain")
 	}
 }
+
+func TestExperimentalParameters(t *testing.T) {
+	c, _, err := Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Erosion != defaultErosion || c.Noise != defaultNoise {
+		t.Errorf("defaults: %+v %+v", c.Erosion, c.Noise)
+	}
+	if strings.Contains(string(c.Marshal()), "erosionModel") {
+		t.Error("default experimental parameters are serialized")
+	}
+
+	p, err := c.Patch([]byte(`{"erosionModel": "power", "erosionIterations": 5, "noiseType": "worley", "noiseAngle": 30}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Erosion.Model != "power" || p.Erosion.Iterations != 5 || p.Erosion.Theta != 0.5 ||
+		p.Noise.Type != "worley" || p.Noise.Angle != 30 {
+		t.Errorf("patched: %+v %+v", p.Erosion, p.Noise)
+	}
+
+	// Round trip
+	r, _, err := Parse(p.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Erosion != p.Erosion || r.Noise != p.Noise {
+		t.Errorf("round trip: %+v %+v", r.Erosion, r.Noise)
+	}
+
+	for _, patch := range []string{`{"erosionModel": "rain"}`, `{"noiseAmplitude": 2}`, `{"erosionIterations": 0}`, `{"noiseType": "perlin"}`} {
+		if _, err := c.Patch([]byte(patch)); err == nil {
+			t.Errorf("%s accepted", patch)
+		}
+	}
+}

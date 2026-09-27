@@ -127,6 +127,33 @@ seconds to load and generate, and each parameter change several seconds.
 }
 ```
 
+Experimental parameters (optional, only saved when changed):
+
+```jsonc
+{
+	// Erosion model. "step" (default): slopes along rivers are multiplied by
+	// erosionFactor where the flow is above erosionMinFlow. "power": they are
+	// multiplied by (drainage area / channelArea) ^ -erosionTheta, at least
+	// erosionFloor, and the rivers and elevation are computed again,
+	// erosionIterations times, which carves branching valleys into mountains.
+	"erosionModel": "power",
+	"erosionTheta": 0.5,
+	"channelArea": 300,           // square pixels
+	"erosionFloor": 0.05,
+	"erosionIterations": 10,
+
+	// Noise on land slopes: "none" (default), "fbm", "ridged" (slopes lower
+	// along thin lines) or "worley" (lower along the boundaries of cells).
+	// Slopes are multiplied by 1 +- noiseAmplitude.
+	"noiseType": "ridged",
+	"noiseScale": 128,            // pixels, largest octave
+	"noiseAmplitude": 0.5,
+	"noiseOctaves": 3,
+	"noiseStretch": 1,            // elongation of the features along noiseAngle
+	"noiseAngle": 0               // degrees
+}
+```
+
 Heightmap PNGs contain the raw elevations, clamped to the pixel range (0..255
 or 0..65535), so water is 0. Use `maxHeight` to choose the scale.
 

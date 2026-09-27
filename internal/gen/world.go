@@ -84,11 +84,13 @@ func ChangedStage(old, conf *config.Config) Stage {
 
 	case !config.TerrainsEqual(conf, old) ||
 		conf.SmoothingRadius != old.SmoothingRadius ||
-		conf.MaxHeight != old.MaxHeight:
+		conf.MaxHeight != old.MaxHeight ||
+		conf.Noise != old.Noise:
 		return StageTerrain
 
 	case conf.ErosionMinFlow != old.ErosionMinFlow ||
-		conf.ErosionFactor != old.ErosionFactor:
+		conf.ErosionFactor != old.ErosionFactor ||
+		conf.Erosion != old.Erosion:
 		return StageErosion
 
 	case conf.BlurRadius != old.BlurRadius:
@@ -143,7 +145,7 @@ func (w *World) run(conf *config.Config, from Stage) (*World, error) {
 		{StageTerrain, "assigning terrain types", n.assignTerrainTypes},
 		{StageTerrain, "computing elevation", func() error { n.computeElevation(false); return nil }},
 		{StageTerrain, "computing river flow", func() error { n.computeRiverFlow(); return nil }},
-		{StageErosion, "eroding", func() error { n.computeElevation(true); return nil }},
+		{StageErosion, "eroding", func() error { n.erode(); return nil }},
 		{StageErosion, "computing water depth", func() error { n.computeWaterDepth(); n.finalizeElevation(); return nil }},
 		{StageRaster, "rasterizing", func() error { n.rasterize(); return nil }},
 		{StageRaster, "blurring", func() error { n.blurHeightmap(); return nil }},
