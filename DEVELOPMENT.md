@@ -71,6 +71,43 @@ The random generator is seeded by the config's `seed`, with a separate stream
 per use, so that runs are reproducible and a stage's randomness doesn't
 depend on earlier stages.
 
+### Uplift model
+
+`internal/gen/uplift.go`, selected by `elevationModel`. It replaces the
+elevation, river and erosion steps; the mesh stage builds its meshes, and
+the terrain stage runs the simulation. `changedStageUplift` decides what
+reruns: the mesh depends on the terrains' details, the simulation on
+everything else.
+
+- Meshes: hex lattices, each level at half the spacing of the previous one,
+  and containing its points (unjittered, lattice point (i, j) of a level is
+  (2i + j%2, 2j) on the next). A point is added at the first level where it
+  is on the lattice, if the terrain around wants that much detail, and
+  jittered once, so that it keeps its position at every level.
+- Per level, `simState` holds the elevation (meters), uplift, erodibility and
+  Voronoi cell areas (`CellAreas`) of each vertex. Sea vertices are the fixed
+  base level; lakes don't rise and erode fast.
+- Each time step (`simState.run`): steepest descent receivers, an ordering
+  from the base level up, drainage areas accumulated in reverse, then the
+  implicit stream power update of Braun and Willett (2013), for n = 1: in
+  order, h = (h + U dt + F h_receiver) / (1 + F), F = K dt A^m / distance.
+  Then slopes steeper than the critical slope collapse. Every 10 steps,
+  depressions are filled (priority flood with a small slope), so that every
+  vertex drains to the sea.
+- The first level starts nearly flat and runs `steps`; each next level
+  starts from the previous one (common vertices keep their elevation, new
+  ones get the mean of their neighbours plus a little noise) and runs
+  `refineSteps`.
+- Elevations are in meters, positions in pixels: `World.MetersPerPixel`
+  converts (1 with the slope model). The hillshading of `render`, the OBJ
+  export and the viewer (a `zScale` uniform, with the vertical exaggeration)
+  use it. River widths come from `World.Drainage`, the drainage area in
+  square pixels, since the mesh isn't uniform.
+
+`lab/uplift.json` and `lab/uplift-exp.json` are the experiments on it. On
+the Chasers map at 1000 km wide: 5 s for 160 000 vertices (3 levels), 13 s
+for 430 000 (4 levels); peaks up to 9.5 km, Hack exponent 0.56.
+
 ## Engine and session
 
 `engine.Engine` owns the current world, and regenerates it in a goroutine.
@@ -137,10 +174,13 @@ Files:
 
 With `WGEN_SCREENSHOT=shot.png` in the environment, the viewer saves a
 screenshot once the world and its images are ready, and quits. Combined with
-editing `viewer.json`, it checks every view and mode from a script:
+editing `viewer.json`, it checks every view and mode from a script.
+`WGEN_CAMERA=x,y,distance,tilt,turn` places the orbit camera for close
+ups: target in image pixels (top left origin), distance in pixels, tilt from
+vertical and turn in degrees.
 
 ```sh
-WGEN_SCREENSHOT=shot.png bin/wgen --interactive test/config.json
+WGEN_SCREENSHOT=shot.png WGEN_CAMERA=200,1600,150,60,20 bin/wgen --interactive lab/uplift.json
 ```
 
 ## Experiments

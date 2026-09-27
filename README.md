@@ -154,6 +154,67 @@ Experimental parameters (optional, only saved when changed):
 }
 ```
 
+## Uplift model
+
+With `"elevationModel": "uplift"`, elevation is not built from slopes but
+simulated: terrains give the rate at which the land rises, rivers erode it,
+hillslopes collapse beyond a critical slope, and the sea stays at its level.
+River networks grow into the rising land from the coasts, which gives
+branching valleys, winding ridges and many peaks, at realistic heights:
+elevations are in meters, for a map of the given width.
+
+```jsonc
+{
+	"elevationModel": "uplift",
+	"mapWidth": 1000,             // km
+	"resolution": 2,              // mesh spacing of the finest level, pixels
+	"levels": 3,                  // the coarse mesh is 2^levels coarser
+
+	"terrains": {
+		// gradient still tells water (negative) from land, and is the slope
+		// of the sea floor, in meters per meter
+		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.01, "fixedShore": 0.0 },
+		// uplift: mm per year. detail: how many levels refine this terrain
+		// (default: all on land, none on water)
+		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2, "uplift": 0.2, "detail": 1 },
+		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8, "uplift": 1, "detail": 2 },
+		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2, "uplift": 4 },
+		// water without fixedShore: a lake, eroded flat down to its outlet
+		"lake": { "r": 109, "g": 148, "b": 194, "gradient": -0.001, "detail": 1 }
+	}
+}
+```
+
+`lab/uplift.json` is a complete example. Optional parameters, with their
+defaults:
+
+| Key | Default | |
+|---|---|---|
+| `upliftBlur` | 30 | km: uplift is smoothed, so that ranges rise more in their core |
+| `erodibility` | 2e-6 | per year: how fast rivers erode. Lower gives higher relief |
+| `streamExponent` | 0.5 | how erosion grows with the drainage area |
+| `criticalSlope` | 30 | degrees: steeper hillslopes collapse |
+| `timeStep` | 50 | thousands of years |
+| `steps` | 300 | time steps on the coarse mesh, until the landscape settles |
+| `refineSteps` | 60 | time steps on each finer mesh |
+| `erodibilityNoise` | 0.3 | 0..1: variation of the rock hardness |
+| `erodibilityNoiseScale` | 30 | km |
+
+Terrains can also have an `erodibility` factor (default 1).
+
+Heights depend on the uplift, on the size of the uplifted region, and on its
+neighbours (through the blur): on the Chasers map at 1000 km wide, with the
+defaults, mountains rising 4 mm per year reach about 9.5 km, and hills next
+to them several km. The simulation takes
+seconds: about 5 on the Chasers map (160 000 vertices), each refinement
+level multiplying the vertices in the refined terrains by 4.
+
+At true scale, mountains are small on a continent: 10 km high on 1000 km
+wide. They show when zooming in, and "Vertical exaggeration" in the viewer
+scales them in the 3D views. Contour intervals are in meters. Heightmap
+PNGs are in meters too: use `png16`, or `maxHeight` to rescale. OBJ
+exports have the elevations converted to pixels, for true proportions.
+
 Heightmap PNGs contain the raw elevations, clamped to the pixel range (0..255
 or 0..65535), so water is 0. Use `maxHeight` to choose the scale.
 

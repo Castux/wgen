@@ -5,7 +5,7 @@
 //
 // Usage:
 //
-//	wgenlab [-out dir] experiment.json
+//	wgenlab [-v] [-out dir] experiment.json
 //
 // The experiment file:
 //
@@ -56,9 +56,13 @@ type experiment struct {
 
 func main() {
 	out := flag.String("out", "lab/out", "output directory")
+	verbose := flag.Bool("v", false, "verbose logging (stage timings)")
 	flag.Parse()
+	if *verbose {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
 	if flag.NArg() != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: wgenlab [-out dir] experiment.json")
+		fmt.Fprintln(os.Stderr, "Usage: wgenlab [-v] [-out dir] experiment.json")
 		os.Exit(2)
 	}
 
@@ -205,24 +209,25 @@ func measure(w *gen.World, region string, channelArea float64) measures {
 	m := w.Mesh
 	n := len(m.Points)
 
-	// Average cell area: the mesh is uniform
-	cellArea := float64(w.Width*w.Height) / float64(countInBounds(w))
+	cells := gen.CellAreas(m)
 	isChannel := func(v int32) bool {
-		return w.Terrain[v] != nil && w.IsLand(v) && float64(w.Flow[v])*cellArea >= channelArea
+		return w.Terrain[v] != nil && w.IsLand(v) && w.Drainage[v] >= channelArea
 	}
 	inRegion := func(v int32) bool { return w.Terrain[v] != nil && w.Terrain[v].Name == region }
 
 	var r measures
 	r.maxZ = math.Inf(-1)
-	regionVertices := 0
+	regionArea := 0.0
 	channelLength := 0.0
 
 	for v := range int32(n) {
 		if !inRegion(v) {
 			continue
 		}
-		regionVertices++
-		r.maxZ = math.Max(r.maxZ, w.Z[v])
+		regionArea += cells[v]
+		if !math.IsNaN(w.Z[v]) {
+			r.maxZ = math.Max(r.maxZ, w.Z[v])
+		}
 
 		peak := true
 		for _, u := range m.Neighbours[v] {
@@ -240,7 +245,6 @@ func measure(w *gen.World, region string, channelArea float64) measures {
 		}
 	}
 
-	regionArea := float64(regionVertices) * cellArea
 	if regionArea > 0 {
 		r.peakDensity = float64(r.peaks) / regionArea * 1e6
 		r.drainageDensity = channelLength / regionArea * 1000
@@ -323,23 +327,13 @@ func measure(w *gen.World, region string, channelArea float64) measures {
 	var xs, ys []float64
 	for _, v := range order {
 		if isChannel(v) && inRegion(v) && length[v] > 0 {
-			xs = append(xs, math.Log(float64(w.Flow[v])*cellArea))
+			xs = append(xs, math.Log(w.Drainage[v]))
 			ys = append(ys, math.Log(length[v]))
 		}
 	}
 	r.hack = slope(xs, ys)
 
 	return r
-}
-
-func countInBounds(w *gen.World) int {
-	count := 0
-	for _, p := range w.Mesh.Points {
-		if p.X >= 0 && p.Y >= 0 && p.X < float64(w.Width) && p.Y < float64(w.Height) {
-			count++
-		}
-	}
-	return count
 }
 
 func mean(xs []float64) float64 {
