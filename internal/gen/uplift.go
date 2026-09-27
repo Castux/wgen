@@ -156,32 +156,51 @@ type simState struct {
 func (w *World) simulate() error {
 	u := w.Conf.Uplift
 	start := time.Now()
-	upliftAt := w.upliftMap()
 	erodibilityNoise := w.erodibilityNoise()
-
-	var s *simState
-	for k, m := range w.levels {
-		prev := s
-		s = w.newSimState(m, upliftAt, erodibilityNoise)
-
-		steps := u.RefineSteps
-		if prev == nil {
-			// Start from a flat land, barely above the sea
-			r := w.rng(streamNoise)
-			for v := range s.h {
-				if s.active[v] {
-					s.h[v] = r.Float64()
-				}
-			}
-			steps = u.Steps
-		} else {
-			s.transfer(prev, hash2(w.Conf.Seed, int64(k), 99))
-		}
-
+	run := func(s *simState, steps int) {
 		t := time.Now()
 		s.run(steps, u.TimeStep*1000, math.Tan(u.CriticalSlope*math.Pi/180))
-		slog.Debug("simulated", "level", k, "vertices", len(m.Points), "steps", steps,
+		slog.Debug("simulated", "vertices", len(s.m.Points), "steps", steps,
 			"took", time.Since(t).Round(time.Millisecond))
+	}
+
+	refine := func(coarse *simState, upliftAt func(geom.Vec2) float64) *simState {
+		s := coarse
+		for k := 1; k < len(w.levels); k++ {
+			prev := s
+			s = w.newSimState(w.levels[k], upliftAt, erodibilityNoise)
+			s.transfer(prev, hash2(w.Conf.Seed, int64(k), 99))
+			run(s, u.RefineSteps)
+		}
+		return s
+	}
+
+	field := w.newUpliftField()
+	rates := field.initialRates()
+
+	var s *simState
+	if !field.calibrated() {
+		coarse := w.newSimState(w.levels[0], field.sampler(rates), erodibilityNoise)
+		coarse.startFlat(w.rng(streamNoise))
+		run(coarse, u.Steps)
+		s = refine(coarse, field.sampler(rates))
+	} else {
+		// Calibrated on the coarse level, then again for what the
+		// refinement adds (see calibrate.go)
+		targets := field.targets()
+		coarse := w.calibrate(field, rates, targets, nil, erodibilityNoise, run)
+		s = refine(coarse, field.sampler(rates))
+
+		if len(w.levels) > 1 {
+			before, after := field.summits(coarse), field.summits(s)
+			for r := range targets {
+				if ratio := after[r] / before[r]; targets[r] > 0 && ratio > 0 {
+					targets[r] /= geom.Clamp(ratio, 1.0/3, 3)
+				}
+			}
+			coarse = w.calibrate(field, rates, targets, coarse, erodibilityNoise, run)
+			s = refine(coarse, field.sampler(rates))
+		}
 	}
 
 	w.setSimResult(s)
@@ -233,71 +252,12 @@ func (w *World) newSimState(m *mesh.Mesh, upliftAt, erodibilityNoise func(geom.V
 	return s
 }
 
-// upliftMap returns the uplift rate (mm per year) at a position: the
-// terrains' uplift, blurred.
-func (w *World) upliftMap() func(geom.Vec2) float64 {
-	terrains := w.Conf.TerrainsByColor()
-	rate := func(p geom.Vec2) float64 {
-		if t := terrains[w.pixel(p)]; t != nil && t.Gradient >= 0 {
-			return t.Uplift
+// startFlat starts from a flat land, barely above the sea.
+func (s *simState) startFlat(r interface{ Float64() float64 }) {
+	for v := range s.h {
+		if s.active[v] {
+			s.h[v] = r.Float64()
 		}
-		return 0
-	}
-
-	blur := w.Conf.Uplift.UpliftBlur * 1000 / w.MetersPerPixel // pixels
-	if blur < 1 {
-		return rate
-	}
-
-	// Sampled on a grid, blurred with three box blurs (about a gaussian)
-	cell := math.Max(1, blur/4)
-	gw, gh := int(math.Ceil(float64(w.Width)/cell)), int(math.Ceil(float64(w.Height)/cell))
-	grid := make([]float64, gw*gh)
-	for y := range gh {
-		for x := range gw {
-			p := geom.Vec2{X: math.Min((float64(x)+0.5)*cell, float64(w.Width-1)), Y: math.Min((float64(y)+0.5)*cell, float64(w.Height-1))}
-			grid[y*gw+x] = rate(p)
-		}
-	}
-	radius := max(1, int(math.Round(blur/cell/1.7)))
-	for range 3 {
-		boxBlur(grid, gw, gh, radius)
-	}
-
-	return func(p geom.Vec2) float64 {
-		x := geom.Clamp(p.X/cell-0.5, 0, float64(gw-1))
-		y := geom.Clamp(p.Y/cell-0.5, 0, float64(gh-1))
-		x0, y0 := int(x), int(y)
-		x1, y1 := min(x0+1, gw-1), min(y0+1, gh-1)
-		fx, fy := x-float64(x0), y-float64(y0)
-		return geom.Lerp(
-			geom.Lerp(grid[y0*gw+x0], grid[y0*gw+x1], fx),
-			geom.Lerp(grid[y1*gw+x0], grid[y1*gw+x1], fx),
-			fy)
-	}
-}
-
-// boxBlur blurs a grid in place, horizontally then vertically, clamping at
-// the edges.
-func boxBlur(grid []float64, width, height, radius int) {
-	line := func(get func(int) float64, set func(int, float64), n int) {
-		out := make([]float64, n)
-		for i := range n {
-			sum := 0.0
-			for d := -radius; d <= radius; d++ {
-				sum += get(min(max(i+d, 0), n-1))
-			}
-			out[i] = sum / float64(2*radius+1)
-		}
-		for i, v := range out {
-			set(i, v)
-		}
-	}
-	for y := range height {
-		line(func(x int) float64 { return grid[y*width+x] }, func(x int, v float64) { grid[y*width+x] = v }, width)
-	}
-	for x := range width {
-		line(func(y int) float64 { return grid[y*width+x] }, func(y int, v float64) { grid[y*width+x] = v }, height)
 	}
 }
 

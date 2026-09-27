@@ -97,7 +97,7 @@ func run(path, out string) error {
 	}
 
 	cases, variants := sortedKeys(e.Cases), sortedKeys(e.Variants)
-	var report strings.Builder
+	var report, heights strings.Builder
 	fmt.Fprintf(&report, "# %s\n\nRegion: %s. Channels: drainage area above %g px².\n\n", filepath.Base(path), e.Region, e.ChannelArea)
 
 	for _, c := range cases {
@@ -125,6 +125,8 @@ func run(path, out string) error {
 			fmt.Fprintf(&report, "| %s | %.1fs | %d | %.1f | %d | %.1f | %.2f | %.2f | %.2f |\n",
 				v, took.Seconds(), len(w.Mesh.Points), m.maxZ, m.peaks, m.peakDensity, m.drainageDensity, m.bifurcation, m.hack)
 
+			heights.WriteString(heightTable(w, c+" "+v))
+
 			name := c + "-" + v
 			if err := renders(w, e, filepath.Join(out, name)); err != nil {
 				return err
@@ -133,6 +135,11 @@ func run(path, out string) error {
 		}
 		report.WriteString("\n")
 	}
+
+	report.WriteString("## Heights per terrain\n\n")
+	report.WriteString("| case, variant | terrain | target | median | 95% | 99% | max |\n|---|---|---|---|---|---|---|\n")
+	report.WriteString(heights.String())
+	report.WriteString("\n")
 
 	report.WriteString(`Measures, on the region's vertices:
 
@@ -355,4 +362,28 @@ func slope(xs, ys []float64) float64 {
 		sxx += (xs[i] - mx) * (xs[i] - mx)
 	}
 	return sxy / sxx
+}
+
+// heightTable gives quantiles of the elevation of each land terrain, with
+// its target height, as markdown table rows.
+func heightTable(w *gen.World, name string) string {
+	var b strings.Builder
+	for _, t := range w.Conf.Terrains {
+		if t.Gradient < 0 {
+			continue
+		}
+		var zs []float64
+		for v, tv := range w.Terrain {
+			if tv == t && !math.IsNaN(w.Z[v]) {
+				zs = append(zs, w.Z[v])
+			}
+		}
+		if len(zs) == 0 {
+			continue
+		}
+		slices.Sort(zs)
+		q := func(f float64) float64 { return zs[int(f*float64(len(zs)-1))] }
+		fmt.Fprintf(&b, "| %s | %s | %.0f | %.0f | %.0f | %.0f | %.0f |\n", name, t.Name, t.Height, q(0.5), q(0.95), q(0.99), zs[len(zs)-1])
+	}
+	return b.String()
 }

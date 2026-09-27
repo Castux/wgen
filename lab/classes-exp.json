@@ -1,0 +1,26 @@
+{
+	"config": "classes.json",
+	"region": "mountains",
+	"channelArea": 200,
+	"contours": 250,
+	"crops": {
+		"sw": [
+			60,
+			1360,
+			420,
+			1860
+		],
+		"se": [
+			1080,
+			1400,
+			1720,
+			1820
+		]
+	},
+	"cases": {
+		"uplift": {}
+	},
+	"variants": {
+		"1-default": {}
+	}
+}

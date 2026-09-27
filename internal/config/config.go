@@ -32,13 +32,19 @@ type Terrain struct {
 	Smoothing bool
 	Erosion   bool
 
-	// Uplift model: rate of rock uplift in mm per year, erodibility
-	// multiplier, and number of mesh refinement levels (DetailAuto: all
-	// levels on land, none on water).
+	// Uplift model: target summit height in meters (0: none, Uplift is used
+	// as is), rate of rock uplift in mm per year, erodibility multiplier, and
+	// number of mesh refinement levels (DetailAuto: all levels on land, none
+	// on water).
+	Height      float64
 	Uplift      float64
 	Erodibility float64
 	Detail      int
 }
+
+// Calibrated tells whether the uplift of a terrain is found from its target
+// height.
+func (t *Terrain) Calibrated() bool { return t.Height > 0 && t.Gradient >= 0 }
 
 // DetailAuto is the default terrain detail.
 const DetailAuto = -1
@@ -174,7 +180,7 @@ var optional = []string{"seed", "maxHeight", "blurRadius",
 	"elevationModel", "mapWidth", "levels", "upliftBlur", "erodibility", "streamExponent", "criticalSlope",
 	"timeStep", "steps", "refineSteps", "erodibilityNoiseScale", "erodibilityNoise"}
 
-var terrainKeys = []string{"r", "g", "b", "gradient", "fixedShore", "smoothing", "erosion", "uplift", "erodibility", "detail"}
+var terrainKeys = []string{"r", "g", "b", "gradient", "fixedShore", "smoothing", "erosion", "height", "uplift", "erodibility", "detail"}
 
 // Load reads and validates a config file. Warnings are non fatal problems,
 // such as unknown keys.
@@ -296,6 +302,7 @@ type rawTerrain struct {
 	Smoothing  *bool    `json:"smoothing"`
 	Erosion    *bool    `json:"erosion"`
 
+	Height      *float64 `json:"height"`
 	Uplift      *float64 `json:"uplift"`
 	Erodibility *float64 `json:"erodibility"`
 	Detail      *int     `json:"detail"`
@@ -370,6 +377,9 @@ func (t *Terrain) update(rt *rawTerrain) {
 	}
 	if rt.Erosion != nil {
 		t.Erosion = *rt.Erosion
+	}
+	if rt.Height != nil {
+		t.Height = *rt.Height
 	}
 	if rt.Uplift != nil {
 		t.Uplift = *rt.Uplift
@@ -484,8 +494,8 @@ func (c *Config) Validate() error {
 		errs = append(errs, "erodibilityNoise must be between 0 and 1")
 	}
 	for _, t := range c.Terrains {
-		if t.Erodibility < 0 {
-			errs = append(errs, fmt.Sprintf("terrain %s: erodibility must be positive", t.Name))
+		if t.Erodibility < 0 || t.Height < 0 {
+			errs = append(errs, fmt.Sprintf("terrain %s: height and erodibility must be positive", t.Name))
 		}
 		if t.Detail < DetailAuto {
 			errs = append(errs, fmt.Sprintf("terrain %s: detail must be positive (or -1, automatic)", t.Name))
@@ -597,6 +607,7 @@ func (t *Terrain) equal(o *Terrain) bool {
 		sameShore &&
 		t.Smoothing == o.Smoothing &&
 		t.Erosion == o.Erosion &&
+		t.Height == o.Height &&
 		t.Uplift == o.Uplift &&
 		t.Erodibility == o.Erodibility &&
 		t.Detail == o.Detail
@@ -674,6 +685,9 @@ func (c *Config) Marshal() []byte {
 		}
 		if !t.Erosion {
 			b.WriteString(", \"erosion\": false")
+		}
+		if t.Height != 0 {
+			fmt.Fprintf(&b, ", \"height\": %s", num(t.Height))
 		}
 		if t.Uplift != 0 {
 			fmt.Fprintf(&b, ", \"uplift\": %s", num(t.Uplift))

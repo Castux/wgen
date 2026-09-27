@@ -255,3 +255,33 @@ func TestUpliftMapEdge(t *testing.T) {
 		}
 	}
 }
+
+// Terrains with a target height reach it: the high elevations of each are
+// close to the target.
+func TestUpliftCalibration(t *testing.T) {
+	conf := setupUplift(t)
+	patched, err := conf.Patch([]byte(`{"upliftBlur": 5, "terrains": {
+		"plains": {"height": 300}, "hills": {"height": 1000}, "mountains": {"height": 3000}
+	}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := generate(t, patched)
+
+	for _, terrain := range patched.Terrains {
+		if !terrain.Calibrated() {
+			continue
+		}
+		var zs []float64
+		for v, tv := range w.Terrain {
+			if tv != nil && tv.Name == terrain.Name {
+				zs = append(zs, w.Z[v])
+			}
+		}
+		slices.Sort(zs)
+		summit := zs[int(0.95*float64(len(zs)-1))]
+		if math.Abs(summit/terrain.Height-1) > 0.3 {
+			t.Errorf("%s: summits at %.0f m, target %.0f m", terrain.Name, summit, terrain.Height)
+		}
+	}
+}

@@ -117,7 +117,9 @@ func (c *Config) Schema() []Param {
 
 		if uplift {
 			params = append(params,
-				Param{Path: path("uplift"), Label: "Uplift (mm/yr)", Group: group, Type: "number",
+				Param{Path: path("height"), Label: "Target height (m, 0: off)", Group: group, Type: "number",
+					Min: 0, Max: 9000, Step: 10, Stage: "terrain"},
+				Param{Path: path("uplift"), Label: "Uplift (mm/yr, without height)", Group: group, Type: "number",
 					Min: 0, Max: 10, Step: 0.01, Stage: "terrain"},
 				Param{Path: path("erodibility"), Label: "Erodibility factor", Group: group, Type: "number",
 					Min: 0, Max: 10, Step: 0.01, Stage: "terrain"},
@@ -154,6 +156,8 @@ func (c *Config) Value(path []string) (any, error) {
 			return t.Smoothing, nil
 		case "erosion":
 			return t.Erosion, nil
+		case "height":
+			return t.Height, nil
 		case "uplift":
 			return t.Uplift, nil
 		case "erodibility":
