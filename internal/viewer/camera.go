@@ -23,10 +23,7 @@ type orbitCamera struct {
 	far         float64
 }
 
-const (
-	orbitFOV  = 60.0 // vertical, degrees
-	orbitNear = 1.0
-)
+const orbitFOV = 60.0 // vertical, degrees
 
 // reset frames a map of the given size.
 func (c *orbitCamera) reset(width, height float64) {
@@ -57,9 +54,15 @@ func (c *orbitCamera) view() mgl64.Mat4 {
 	return mgl64.LookAtV(c.position(), c.target, mgl64.Vec3{0, 0, 1})
 }
 
+// projection has its near plane following the distance to the target, so
+// that close ups work (true scale mountains are small at the map's scale).
 func (c *orbitCamera) projection(aspect float64) mgl64.Mat4 {
-	return mgl64.Perspective(mgl64.DegToRad(orbitFOV), aspect, orbitNear, c.far)
+	near := mgl64.Clamp(c.radius/1000, 0.001, 1)
+	return mgl64.Perspective(mgl64.DegToRad(orbitFOV), aspect, near, c.far)
 }
+
+// Closest distance to the target, in map units
+const orbitMinDistance = 0.05
 
 // rotate orbits for a mouse movement, in a view of the given height.
 func (c *orbitCamera) rotate(dx, dy, viewHeight float64) {
@@ -86,7 +89,7 @@ func (c *orbitCamera) pan(dx, dy, viewHeight float64) {
 
 // dolly moves toward the target (factor < 1) or away from it.
 func (c *orbitCamera) dolly(factor float64) {
-	c.radius = mgl64.Clamp(c.radius*factor, 0, c.maxDistance)
+	c.radius = mgl64.Clamp(c.radius*factor, orbitMinDistance, c.maxDistance)
 }
 
 // topCamera is an orthographic camera looking down.

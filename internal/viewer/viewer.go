@@ -24,6 +24,7 @@ import (
 	implgl "github.com/AllenDang/cimgui-go/impl/opengl3"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.4/glfw"
+	"github.com/go-gl/mathgl/mgl64"
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
@@ -268,7 +269,9 @@ func (a *app) update() {
 	if world, version := a.session.Engine.Snapshot(); world != nil && version != a.version {
 		a.world, a.version = world, version
 		a.message = nil
-		a.terrain.setMesh(world)
+		if a.terrain.setMesh(world) {
+			a.devCamera()
+		}
 		a.mapView.setSize(float64(world.Width), float64(world.Height), width, height)
 	}
 
@@ -301,6 +304,25 @@ func (a *app) update() {
 		a.message = &m
 	default:
 	}
+}
+
+// devCamera places the orbit camera as given by WGEN_CAMERA, for
+// screenshots of close ups (see WGEN_SCREENSHOT): "x,y,distance,tilt,turn",
+// the target in image pixels (top left origin), the tilt from vertical and
+// the turn around it in degrees.
+func (a *app) devCamera() {
+	spec := os.Getenv("WGEN_CAMERA")
+	if spec == "" {
+		return
+	}
+	var x, y, distance, tilt, turn float64
+	if _, err := fmt.Sscanf(spec, "%g,%g,%g,%g,%g", &x, &y, &distance, &tilt, &turn); err != nil {
+		slog.Warn("bad WGEN_CAMERA", "value", spec, "err", err)
+		return
+	}
+	c := &a.terrain.orbit
+	c.target = mgl64.Vec3{x - a.terrain.width/2, a.terrain.height/2 - y, 0}
+	c.radius, c.phi, c.theta = distance, tilt*math.Pi/180, turn*math.Pi/180
 }
 
 func (a *app) loading() bool { return a.overlay.busy() || a.mapImg.busy() }

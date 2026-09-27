@@ -92,6 +92,11 @@ func (a *app) drawViewSettings() {
 	s.Shading, c = combo("Shading (q)", s.Shading, shadings)
 	edit(c)
 	edit(imgui.Checkbox("Wireframe (w)", &s.Wireframe))
+	s.VerticalScale, c = a.number("view.verticalScale", "Vertical exaggeration", s.VerticalScale, 0.5, 20, 0.5, false)
+	edit(c)
+	if s.VerticalScale <= 0 {
+		s.VerticalScale = a.settings.VerticalScale
+	}
 
 	// Rendered on the CPU: only updated when done editing
 	s.RiverWidth, c = a.number("view.riverWidth", "River max width", s.RiverWidth, 0, 20, 0.1, false)

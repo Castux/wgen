@@ -25,6 +25,7 @@ type terrainView struct {
 
 	width, height   float64 // map size, 0 before the first mesh
 	lowest, highest float64
+	metersPerPixel  float64 // elevation units per map unit
 
 	overlay    texture
 	hasOverlay bool
@@ -51,6 +52,7 @@ uniform vec2 size;
 uniform float lowest;
 uniform float span;
 uniform bool heightColors;
+uniform float zScale; // elevation to map units
 
 out vec3 vPosition;
 out vec3 vViewPosition;
@@ -63,7 +65,7 @@ vec3 srgbToLinear(vec3 c) {
 
 void main() {
 	vPosition = position;
-	vec4 viewPosition = view * vec4(position.xy - size / 2.0, position.z, 1.0);
+	vec4 viewPosition = view * vec4(position.xy - size / 2.0, position.z * zScale, 1.0);
 	vViewPosition = viewPosition.xyz;
 
 	vColor = heightColors ? vec3((position.z - lowest) / span) : srgbToLinear(terrainColor);
@@ -182,6 +184,10 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 	changed := width != v.width || height != v.height
 	v.width, v.height = width, height
 	v.lowest, v.highest = w.Lowest, w.Highest
+	v.metersPerPixel = w.MetersPerPixel
+	if v.metersPerPixel <= 0 {
+		v.metersPerPixel = 1
+	}
 
 	if changed {
 		v.resetCameras()
@@ -242,6 +248,7 @@ func (v *terrainView) draw(s *Settings, aspect float64) {
 	}
 	p.setFloat("span", span)
 	p.setInt("heightColors", boolInt(s.Color == "height"))
+	p.setFloat("zScale", s.VerticalScale/v.metersPerPixel)
 	p.setInt("lit", boolInt(s.Shading == "lit"))
 	p.setVec3("lightDirection", view.Mat3().Mul3x1(lightDirection).Normalize())
 	p.setInt("hasOverlay", boolInt(v.hasOverlay))

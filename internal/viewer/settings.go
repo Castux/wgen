@@ -21,6 +21,8 @@ type Settings struct {
 	RiverWidth float64 `json:"riverWidth"`
 	Contours   float64 `json:"contours"`
 	Grid       float64 `json:"grid"`
+
+	VerticalScale float64 `json:"verticalScale"` // of the 3D views
 }
 
 var (
@@ -35,6 +37,8 @@ var defaultSettings = Settings{
 	Shading:    "lit",
 	RiverPower: 0.5,
 	RiverWidth: 10,
+
+	VerticalScale: 1,
 }
 
 // settingsDir is where the viewer settings and the panel layout are saved,
@@ -66,6 +70,9 @@ func loadSettings(path string) Settings {
 	valid(&s.View, views, defaultSettings.View)
 	valid(&s.Color, colors, defaultSettings.Color)
 	valid(&s.Shading, shadings, defaultSettings.Shading)
+	if !(s.VerticalScale > 0) {
+		s.VerticalScale = defaultSettings.VerticalScale
+	}
 
 	return s
 }
