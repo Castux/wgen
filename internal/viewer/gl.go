@@ -150,6 +150,36 @@ func (t *texture) upload(img *image.RGBA) {
 	}
 }
 
+// uploadPixels replaces the texture content with RGBA pixels, rows from the
+// top, without mipmaps: for textures then updated in parts (updateRegion).
+func (t *texture) uploadPixels(width, height int, pixels []byte) {
+	if t.id == 0 {
+		gl.GenTextures(1, &t.id)
+	}
+	t.width, t.height = width, height
+
+	gl.BindTexture(gl.TEXTURE_2D, t.id)
+	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
+	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, int32(width), int32(height), 0,
+		gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels))
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+}
+
+// updateRegion replaces the pixels of a rectangle (rows from the top) of a
+// texture made by uploadPixels.
+func (t *texture) updateRegion(r image.Rectangle, pixels []byte) {
+	if t.id == 0 || r.Empty() {
+		return
+	}
+	gl.BindTexture(gl.TEXTURE_2D, t.id)
+	gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
+	gl.TexSubImage2D(gl.TEXTURE_2D, 0, int32(r.Min.X), int32(r.Min.Y), int32(r.Dx()), int32(r.Dy()),
+		gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(pixels))
+}
+
 // setSmooth chooses between linear and nearest magnification.
 func (t *texture) setSmooth(smooth bool) {
 	filter := int32(gl.NEAREST)

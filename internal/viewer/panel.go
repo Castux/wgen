@@ -48,6 +48,7 @@ func (a *app) drawPanel(state engine.State) {
 		imgui.PushItemWidth(-150 * a.uiScale)
 		a.drawViewSettings()
 		a.drawActions(state)
+		a.drawEditor()
 		if conf := a.session.Engine.Config(); conf != nil {
 			a.drawParams(conf)
 		}

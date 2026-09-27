@@ -113,3 +113,7 @@ func slopeNoise(n config.SlopeNoise, seed uint64) func(p geom.Vec2) float64 {
 		return 2*sum/weight - 1
 	}
 }
+
+// Noise is 2D gradient noise, about -0.7..0.7, for other packages (such as
+// the map editor's brushes).
+func Noise(seed uint64, x, y float64) float64 { return gradientNoise(seed, x, y) }

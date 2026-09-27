@@ -179,6 +179,15 @@ func TestShortcuts(t *testing.T) {
 		{"q and w by name", []event{{key: glfw.KeyA, name: "q", action: press}, {key: glfw.KeyZ, name: "w", action: press}}, []shortcut{shortcutShading, shortcutWireframe}},
 		{"held w", []event{{key: glfw.KeyW, name: "w", action: press}, {key: glfw.KeyW, action: repeat}, {key: glfw.KeyW, action: repeat}}, []shortcut{shortcutWireframe}},
 		{"ctrl+w", []event{{key: glfw.KeyW, name: "w", action: press, mods: glfw.ModControl}}, nil},
+		{"e and brackets", []event{{key: glfw.KeyE, name: "e", action: press}, {key: glfw.KeyLeftBracket, name: "[", action: press}, {key: glfw.KeyRightBracket, name: "]", action: press}},
+			[]shortcut{shortcutEdit, shortcutSmaller, shortcutLarger}},
+		{"undo, redo, save", []event{
+			{key: glfw.KeyZ, name: "z", action: press, mods: glfw.ModControl},
+			{key: glfw.KeyZ, name: "z", action: press, mods: glfw.ModControl | glfw.ModShift},
+			{key: glfw.KeyY, name: "y", action: press, mods: glfw.ModSuper},
+			{key: glfw.KeyS, name: "s", action: press, mods: glfw.ModControl},
+		}, []shortcut{shortcutUndo, shortcutRedo, shortcutRedo, shortcutSave}},
+		{"ctrl+alt+z", []event{{key: glfw.KeyZ, name: "z", action: press, mods: glfw.ModControl | glfw.ModAlt}}, nil},
 		{"release", []event{{key: glfw.KeyW, action: release}}, nil},
 	} {
 		a := &app{}

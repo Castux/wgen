@@ -47,6 +47,7 @@ type app struct {
 
 	terrain *terrainView
 	mapView *mapView
+	editor  editor
 	overlay imageSlot // rivers, contours and grid, as a texture of the 3D views
 	mapImg  imageSlot // the 2D map
 
@@ -246,6 +247,7 @@ func (a *app) frame() {
 	fw, fh := a.window.GetFramebufferSize()
 	gl.Viewport(0, 0, int32(fw), int32(fh))
 	width, height, ratio := a.viewSize()
+	a.updatePaintTexture()
 	if a.settings.View == "map" {
 		a.mapView.draw(width, height, ratio)
 	} else {
@@ -269,6 +271,7 @@ func (a *app) update() {
 	if world, version := a.session.Engine.Snapshot(); world != nil && version != a.version {
 		a.world, a.version = world, version
 		a.message = nil
+		a.syncCanvas(world)
 		if a.terrain.setMesh(world) {
 			a.devCamera()
 		}
@@ -342,6 +345,12 @@ const (
 	shortcutColor                     // Shift
 	shortcutShading                   // q
 	shortcutWireframe                 // w
+	shortcutEdit                      // e
+	shortcutSmaller                   // [, brush
+	shortcutLarger                    // ]
+	shortcutUndo                      // ctrl+z
+	shortcutRedo                      // ctrl+y, ctrl+shift+z
+	shortcutSave                      // ctrl+s
 )
 
 // onKey turns key events into shortcuts.
@@ -349,8 +358,9 @@ const (
 // Shift is only a shortcut when tapped alone, since it is also a modifier:
 // horizontal scrolling in the panel, panning in the orbit view. The other
 // shortcuts are keys pressed without modifiers (Ctrl+Tab switches ImGui
-// windows), not repeated when held, and q and w are recognized by name
+// windows), not repeated when held, and letters are recognized by name
 // (glfw.GetKeyName, given for key presses), to follow the keyboard layout.
+// The editor's undo, redo and save are with Ctrl (or Cmd).
 func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.ModifierKey) {
 	shift := key == glfw.KeyLeftShift || key == glfw.KeyRightShift
 
@@ -366,6 +376,17 @@ func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.Mod
 
 	case action == glfw.Press:
 		a.shiftTap = false
+		if ctrl := mods&(glfw.ModControl|glfw.ModSuper) != 0; ctrl && mods&glfw.ModAlt == 0 {
+			switch {
+			case name == "z" && mods&glfw.ModShift != 0, name == "y":
+				a.keys = append(a.keys, shortcutRedo)
+			case name == "z":
+				a.keys = append(a.keys, shortcutUndo)
+			case name == "s":
+				a.keys = append(a.keys, shortcutSave)
+			}
+			return
+		}
 		if mods&(glfw.ModShift|glfw.ModControl|glfw.ModAlt|glfw.ModSuper) != 0 {
 			return
 		}
@@ -376,6 +397,12 @@ func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.Mod
 			a.keys = append(a.keys, shortcutShading)
 		case name == "w":
 			a.keys = append(a.keys, shortcutWireframe)
+		case name == "e":
+			a.keys = append(a.keys, shortcutEdit)
+		case name == "[":
+			a.keys = append(a.keys, shortcutSmaller)
+		case name == "]":
+			a.keys = append(a.keys, shortcutLarger)
 		}
 	}
 }
@@ -402,6 +429,21 @@ func (a *app) handleInput() {
 				s.Shading = cycle(shadings, s.Shading)
 			case shortcutWireframe:
 				s.Wireframe = !s.Wireframe
+			case shortcutEdit:
+				s.Editing = !s.Editing
+				if s.Editing {
+					s.View = "map"
+				}
+			case shortcutSmaller:
+				s.BrushRadius = math.Max(1, math.Round(s.BrushRadius/1.25))
+			case shortcutLarger:
+				s.BrushRadius = math.Min(500, math.Round(s.BrushRadius*1.25+0.5))
+			case shortcutUndo:
+				a.undo()
+			case shortcutRedo:
+				a.redo()
+			case shortcutSave:
+				a.saveAll()
 			}
 		}
 		if s != a.settings {
@@ -410,9 +452,18 @@ func (a *app) handleInput() {
 	}
 	a.keys = a.keys[:0]
 
+	// Painting takes the left button
+	painting := a.settings.Editing && a.settings.View == "map"
+	if a.paintInput() {
+		return
+	}
+
 	// A drag belongs to the view if it started outside of the panel
 	if !a.drag.active && !io.WantCaptureMouse() {
 		for _, b := range []imgui.MouseButton{imgui.MouseButtonLeft, imgui.MouseButtonRight, imgui.MouseButtonMiddle} {
+			if painting && b == imgui.MouseButtonLeft {
+				continue
+			}
 			if imgui.IsMouseClickedBool(b) {
 				a.drag.active, a.drag.button = true, b
 				break
@@ -434,7 +485,7 @@ func (a *app) handleInput() {
 	if wheel := float64(io.MouseWheel()); wheel != 0 {
 		a.wheelView(wheel, width, height)
 	}
-	if a.settings.View == "map" {
+	if a.settings.View == "map" && !painting {
 		if imgui.IsMouseDoubleClicked(imgui.MouseButtonLeft) {
 			a.mapView.camera.fit(width, height)
 		}
@@ -502,6 +553,16 @@ func (a *app) resetView() {
 	}
 }
 
+// saveAll saves what has unsaved changes: the config, the map.
+func (a *app) saveAll() {
+	if a.session.Engine.State().Dirty {
+		a.save()
+	}
+	if a.editor.dirty {
+		a.saveMap()
+	}
+}
+
 func (a *app) save() {
 	a.message = &message{text: "Config saved"}
 	if _, err := a.session.Save(); err != nil {
@@ -546,20 +607,23 @@ func (a *app) drawStatus(state engine.State) {
 
 	switch {
 	case state.Busy && state.Preview:
-		lines = append(lines, line{"Refining…", busyColor})
+		lines = append(lines, line{"Refining...", busyColor})
 	case state.Busy:
-		lines = append(lines, line{"Generating…", busyColor})
+		lines = append(lines, line{"Generating...", busyColor})
 	case a.loading():
-		lines = append(lines, line{"Loading…", busyColor})
+		lines = append(lines, line{"Loading...", busyColor})
 	}
 	if a.exporting.Load() {
-		lines = append(lines, line{"Exporting…", busyColor})
+		lines = append(lines, line{"Exporting...", busyColor})
 	}
 	if state.Error != "" {
 		lines = append(lines, line{state.Error, errorColor})
 	}
 	if state.Dirty {
 		lines = append(lines, line{"Unsaved config changes", dirtyColor})
+	}
+	if a.editor.dirty {
+		lines = append(lines, line{"Unsaved map changes", dirtyColor})
 	}
 	if m := a.message; m != nil {
 		color := textColor

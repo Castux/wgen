@@ -23,6 +23,11 @@ type Settings struct {
 	Grid       float64 `json:"grid"`
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D views
+
+	// Map editor
+	Editing      bool    `json:"editing"`
+	BrushRadius  float64 `json:"brushRadius"` // pixels
+	PaintOpacity float64 `json:"paintOpacity"`
 }
 
 var (
@@ -39,6 +44,9 @@ var defaultSettings = Settings{
 	RiverWidth: 10,
 
 	VerticalScale: 1,
+
+	BrushRadius:  20,
+	PaintOpacity: 0.5,
 }
 
 // settingsDir is where the viewer settings and the panel layout are saved,
@@ -72,6 +80,12 @@ func loadSettings(path string) Settings {
 	valid(&s.Shading, shadings, defaultSettings.Shading)
 	if !(s.VerticalScale > 0) {
 		s.VerticalScale = defaultSettings.VerticalScale
+	}
+	if !(s.BrushRadius >= 1) {
+		s.BrushRadius = defaultSettings.BrushRadius
+	}
+	if !(s.PaintOpacity >= 0 && s.PaintOpacity <= 1) {
+		s.PaintOpacity = defaultSettings.PaintOpacity
 	}
 
 	return s

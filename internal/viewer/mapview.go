@@ -4,12 +4,16 @@ import (
 	"github.com/go-gl/gl/v3.3-core/gl"
 )
 
-// mapView draws the rendered map image in 2D, with pan and zoom.
+// mapView draws the rendered map image in 2D, with pan and zoom, and the
+// map being edited over it.
 type mapView struct {
 	program *program
 	vao     uint32
 	image   texture
 	camera  mapCamera
+
+	paint        texture // the edited map
+	paintOpacity float64 // 0 hides it
 }
 
 // Background around the map
@@ -34,12 +38,20 @@ const mapFragmentShader = `
 
 in vec2 vUV;
 
+uniform bool hasImage;
 uniform sampler2D image;
+uniform vec3 background;
+uniform bool hasPaint;
+uniform sampler2D paint;
+uniform float paintOpacity;
 
 out vec4 fragColor;
 
 void main() {
-	fragColor = vec4(texture(image, vUV).rgb, 1.0);
+	vec3 color = hasImage ? texture(image, vUV).rgb : background;
+	if (hasPaint)
+		color = mix(color, texture(paint, vUV).rgb, paintOpacity);
+	fragColor = vec4(color, 1.0);
 }
 `
 
@@ -70,13 +82,18 @@ func (v *mapView) draw(viewWidth, viewHeight, pixelRatio float64) {
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
 	c := &v.camera
-	if v.image.id == 0 || c.width == 0 {
+	hasPaint := v.paint.id != 0 && v.paintOpacity > 0
+	if (v.image.id == 0 && !hasPaint) || c.width == 0 {
 		return
 	}
 
 	// Pixelated when zoomed in far past the image resolution
-	smooth := c.zoom*pixelRatio < float64(v.image.width)/c.width*2
-	v.image.setSmooth(smooth)
+	if v.image.id != 0 {
+		v.image.setSmooth(c.zoom*pixelRatio < float64(v.image.width)/c.width*2)
+	}
+	if hasPaint {
+		v.paint.setSmooth(c.zoom*pixelRatio < float64(v.paint.width)/c.width*2)
+	}
 
 	x0, y0 := c.offset.X(), c.offset.Y()
 	x1, y1 := x0+c.width*c.zoom, y0+c.height*c.zoom
@@ -85,8 +102,19 @@ func (v *mapView) draw(viewWidth, viewHeight, pixelRatio float64) {
 
 	v.program.use()
 	gl.Uniform4f(v.program.location("rect"), ndcX(x0), ndcY(y0), ndcX(x1), ndcY(y1))
-	v.program.setInt("image", 0)
-	v.image.bind(0)
+	p := v.program
+	p.setInt("hasImage", boolInt(v.image.id != 0))
+	p.setInt("image", 0)
+	gl.Uniform3f(p.location("background"), mapBackground[0], mapBackground[1], mapBackground[2])
+	if v.image.id != 0 {
+		v.image.bind(0)
+	}
+	p.setInt("hasPaint", boolInt(hasPaint))
+	p.setInt("paint", 1)
+	p.setFloat("paintOpacity", v.paintOpacity)
+	if hasPaint {
+		v.paint.bind(1)
+	}
 
 	gl.BindVertexArray(v.vao)
 	gl.DrawArrays(gl.TRIANGLE_STRIP, 0, 4)
