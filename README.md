@@ -55,7 +55,7 @@ Three views, cycled with `Tab`:
 
 | View | Left drag | Right drag | Wheel, middle drag |
 |---|---|---|---|
-| 3D orbit | rotate (pan with `Shift` or `Ctrl`) | pan | zoom |
+| 3D orbit | rotate (pan with `Ctrl`) | pan | zoom |
 | 3D top | pan | pan | zoom |
 | 2D map | pan (any button) | pan | zoom at the cursor |
 
