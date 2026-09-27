@@ -86,6 +86,12 @@ a sensible step, and a field, to type a precise value (not rounded, and
 possibly outside of the slider range). Changes apply when the slider is
 released, or when pressing `Enter` or leaving the field (`Escape` cancels).
 
+- Simulation (uplift model): "Watch the simulation" shows the landscape as
+  it is simulated, every few time steps ("Time steps per frame"), with what
+  is being done in the status: the land rising from the sea, rivers cutting
+  in, the heights being calibrated, then each finer mesh. "Replay the
+  simulation" runs it again, to watch it. Watching makes generating slower
+  (about a minute on the Chasers map), not different.
 - Map editor: see below.
 
 The status in the bottom left corner shows what is running (generating,

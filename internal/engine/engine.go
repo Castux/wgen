@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/gen"
@@ -33,7 +34,11 @@ type Engine struct {
 	pendingConf    *config.Config
 	pendingImage   bool
 	pendingOutline *Outline
+	pendingRerun   bool
 	wake           chan struct{}
+
+	watchSteps int    // show the simulation every that many steps, 0: don't
+	progress   string // of the simulation being watched
 
 	subscribers map[chan State]struct{}
 }
@@ -47,13 +52,14 @@ type Outline struct {
 
 // State is what the viewer is told about the engine.
 type State struct {
-	Version int    // incremented whenever the displayed world changes
-	Busy    bool   // generating
-	Preview bool   // the displayed world is a preview, being refined
-	Error   string // last error, generating or loading the config
-	Dirty   bool   // the config differs from its file
-	Ready   bool   // a world was generated
-	Stage   string // first stage rerun by the last generation
+	Version  int    // incremented whenever the displayed world changes
+	Busy     bool   // generating
+	Preview  bool   // the displayed world is a preview, being refined
+	Progress string // what the watched simulation is doing
+	Error    string // last error, generating or loading the config
+	Dirty    bool   // the config differs from its file
+	Ready    bool   // a world was generated
+	Stage    string // first stage rerun by the last generation
 }
 
 func NewEngine() *Engine {
@@ -87,7 +93,7 @@ func (e *Engine) State() State {
 }
 
 func (e *Engine) stateLocked(stage string) State {
-	s := State{Version: e.version, Busy: e.busy, Preview: e.preview, Dirty: e.dirty, Ready: e.display != nil, Stage: stage}
+	s := State{Version: e.version, Busy: e.busy, Preview: e.preview, Progress: e.progress, Dirty: e.dirty, Ready: e.display != nil, Stage: stage}
 	if e.err != nil {
 		s.Error = e.err.Error()
 	}
@@ -119,6 +125,23 @@ func (e *Engine) SetOutline(o *Outline) {
 	e.mu.Lock()
 	e.pendingOutline = o
 	e.pendingImage = false
+	e.mu.Unlock()
+	e.signal()
+}
+
+// SetWatch chooses to show the simulation as it runs, every that many time
+// steps (0: not).
+func (e *Engine) SetWatch(steps int) {
+	e.mu.Lock()
+	e.watchSteps = steps
+	e.mu.Unlock()
+}
+
+// Rerun requests generating again with the same config, to watch the
+// simulation.
+func (e *Engine) Rerun() {
+	e.mu.Lock()
+	e.pendingRerun = true
 	e.mu.Unlock()
 	e.signal()
 }
@@ -156,18 +179,23 @@ func (e *Engine) loop() {
 
 // pendingLocked tells whether a request is waiting.
 func (e *Engine) pendingLocked() bool {
-	return e.pendingConf != nil || e.pendingImage || e.pendingOutline != nil
+	return e.pendingConf != nil || e.pendingImage || e.pendingOutline != nil || e.pendingRerun
 }
+
+// Watched frames are shown for at least this long, so that fast phases can
+// be seen
+const minFrameTime = time.Second / 15
 
 // step runs one pending request, returns false if there was none.
 func (e *Engine) step() bool {
 	e.mu.Lock()
-	conf, image, outline := e.pendingConf, e.pendingImage, e.pendingOutline
-	e.pendingConf, e.pendingImage, e.pendingOutline = nil, false, nil
+	conf, image, outline, rerun := e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun
+	e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun = nil, false, nil, false
 	world := e.world
 	latest := e.conf
+	watchSteps := e.watchSteps
 
-	if conf == nil && !image && outline == nil {
+	if conf == nil && !image && outline == nil && !rerun {
 		e.mu.Unlock()
 		return false
 	}
@@ -192,6 +220,23 @@ func (e *Engine) step() bool {
 		},
 	}
 
+	if watchSteps > 0 {
+		var last time.Time
+		opts.WatchSteps = watchSteps
+		opts.Watch = func(p *gen.World, progress string) {
+			e.mu.Lock()
+			e.display, e.preview, e.progress = p, true, progress
+			e.version++
+			e.publishLocked("")
+			e.mu.Unlock()
+
+			if wait := minFrameTime - time.Since(last); wait > 0 {
+				time.Sleep(wait)
+			}
+			last = time.Now()
+		}
+	}
+
 	var next *gen.World
 	var err error
 	stage := gen.StageNone
@@ -206,6 +251,9 @@ func (e *Engine) step() bool {
 			base = &gen.World{}
 		}
 		next, stage, err = base.WithOutline(latest, outline.Width, outline.Height, outline.Pixels, opts)
+
+	case rerun && conf == nil && !image && world != nil:
+		next, stage, err = world.Rerun(opts)
 
 	case world == nil:
 		// Nothing generated yet (or the first generation failed): full run
@@ -236,12 +284,13 @@ func (e *Engine) step() bool {
 			e.pendingOutline = outline
 		}
 		e.pendingImage = e.pendingImage || image
+		e.pendingRerun = e.pendingRerun || (rerun && !e.pendingLocked())
 		return true
 	}
 
 	e.busy = false
 	previewed := e.preview
-	e.preview = false
+	e.preview, e.progress = false, ""
 	e.err = err
 	if err != nil {
 		slog.Error("generation failed", "err", err)

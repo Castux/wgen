@@ -24,6 +24,10 @@ type Settings struct {
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D views
 
+	// Watching the simulation
+	Watch      bool    `json:"watch"`
+	WatchSteps float64 `json:"watchSteps"` // time steps per frame
+
 	// Map editor
 	Editing      bool    `json:"editing"`
 	LockShore    bool    `json:"lockShore"`   // brushes don't move the shoreline
@@ -45,6 +49,8 @@ var defaultSettings = Settings{
 	RiverWidth: 10,
 
 	VerticalScale: 1,
+
+	WatchSteps: 10,
 
 	BrushRadius:  20,
 	PaintOpacity: 0.5,
@@ -81,6 +87,9 @@ func loadSettings(path string) Settings {
 	valid(&s.Shading, shadings, defaultSettings.Shading)
 	if !(s.VerticalScale > 0) {
 		s.VerticalScale = defaultSettings.VerticalScale
+	}
+	if !(s.WatchSteps >= 1) {
+		s.WatchSteps = defaultSettings.WatchSteps
 	}
 	if !(s.BrushRadius >= 1) {
 		s.BrushRadius = defaultSettings.BrushRadius

@@ -83,6 +83,12 @@ type Options struct {
 	// refining it (uplift model). It must not keep the world past the
 	// generation if that fails.
 	Preview func(*World)
+
+	// Watch, if set, is called during the simulation of the uplift model
+	// with the world as it is, every WatchSteps time steps, and a
+	// description of what is being done: to see the process.
+	Watch      func(w *World, progress string)
+	WatchSteps int
 }
 
 // ErrCanceled is returned by generations stopped by Options.Canceled.
@@ -211,6 +217,16 @@ func (w *World) WithOutline(conf *config.Config, width, height int, outline []co
 	}
 	res, err := n.run(conf, stage, opts)
 	return res, stage, err
+}
+
+// Rerun generates the world again from the terrain stage (with the uplift
+// model: the simulation), with the same config: to watch it again.
+func (w *World) Rerun(opts Options) (*World, Stage, error) {
+	if w.Conf == nil || w.Mesh == nil {
+		return nil, StageImage, errors.New("nothing generated yet")
+	}
+	n, err := w.run(w.Conf, StageTerrain, opts)
+	return n, StageTerrain, err
 }
 
 // outlineStage is the first stage to rerun when the outline changed from

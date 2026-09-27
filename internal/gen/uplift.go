@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"time"
@@ -145,7 +146,8 @@ type simState struct {
 	mpp  float64 // meters per pixel
 	expM float64 // area exponent
 
-	canceled func() bool // polled every step
+	canceled func() bool    // polled every step
+	onStep   func(step int) // called after every step
 
 	rec     []int32   // receiver (downhill neighbour), itself if none
 	recDist []float64 // meters
@@ -159,20 +161,34 @@ func (w *World) simulate() error {
 	u := w.Conf.Uplift
 	start := time.Now()
 	erodibilityNoise := w.erodibilityNoise()
-	run := func(s *simState, steps int) {
+	snapshots := map[*mesh.Mesh]*World{}
+
+	run := func(s *simState, steps int, phase string) {
+		if watch := w.opts.Watch; watch != nil {
+			every := max(1, w.opts.WatchSteps)
+			s.onStep = func(step int) {
+				if (step+1)%every == 0 || step == 0 {
+					if p := w.snapshot(s, snapshots); p != nil {
+						watch(p, fmt.Sprintf("%s: step %d of %d", phase, step+1, steps))
+					}
+				}
+			}
+		}
+
 		t := time.Now()
 		s.run(steps, u.TimeStep*1000, math.Tan(u.CriticalSlope*math.Pi/180))
-		slog.Debug("simulated", "vertices", len(s.m.Points), "steps", steps,
+		s.onStep = nil
+		slog.Debug("simulated", "phase", phase, "vertices", len(s.m.Points), "steps", steps,
 			"took", time.Since(t).Round(time.Millisecond))
 	}
 
-	refine := func(coarse *simState, upliftAt func(geom.Vec2) float64) *simState {
+	refine := func(coarse *simState, upliftAt func(geom.Vec2) float64, pass string) *simState {
 		s := coarse
 		for k := 1; k < len(w.levels); k++ {
 			prev := s
 			s = w.newSimState(w.levels[k], upliftAt, erodibilityNoise)
 			s.transfer(prev, hash2(w.Conf.Seed, int64(k), 99))
-			run(s, u.RefineSteps)
+			run(s, u.RefineSteps, fmt.Sprintf("%sRefining, level %d of %d (%d vertices)", pass, k, len(w.levels)-1, len(s.m.Points)))
 		}
 		return s
 	}
@@ -184,16 +200,16 @@ func (w *World) simulate() error {
 	if !field.calibrated() {
 		coarse := w.newSimState(w.levels[0], field.sampler(rates), erodibilityNoise)
 		coarse.startFlat(w.rng(streamNoise))
-		run(coarse, u.Steps)
-		w.preview(coarse)
-		s = refine(coarse, field.sampler(rates))
+		run(coarse, u.Steps, fmt.Sprintf("Coarse level (%d vertices)", len(coarse.m.Points)))
+		w.preview(coarse, snapshots)
+		s = refine(coarse, field.sampler(rates), "")
 	} else {
 		// Calibrated on the coarse level, then again for what the
 		// refinement adds (see calibrate.go)
 		targets := field.targets()
-		coarse := w.calibrate(field, rates, targets, nil, erodibilityNoise, run)
-		w.preview(coarse)
-		s = refine(coarse, field.sampler(rates))
+		coarse := w.calibrate(field, rates, targets, nil, erodibilityNoise, run, "Calibrating heights")
+		w.preview(coarse, snapshots)
+		s = refine(coarse, field.sampler(rates), "First pass, ")
 
 		if len(w.levels) > 1 {
 			before, after := field.summits(coarse), field.summits(s)
@@ -202,8 +218,8 @@ func (w *World) simulate() error {
 					targets[r] /= geom.Clamp(ratio, 1.0/3, 3)
 				}
 			}
-			coarse = w.calibrate(field, rates, targets, coarse, erodibilityNoise, run)
-			s = refine(coarse, field.sampler(rates))
+			coarse = w.calibrate(field, rates, targets, coarse, erodibilityNoise, run, "Calibrating heights again, for the refinement")
+			s = refine(coarse, field.sampler(rates), "Second pass, ")
 		}
 	}
 
@@ -218,23 +234,37 @@ func (w *World) simulate() error {
 
 // preview hands a world made of the coarse simulation to Options.Preview,
 // if there are finer levels to come.
-func (w *World) preview(coarse *simState) {
+func (w *World) preview(coarse *simState, snapshots map[*mesh.Mesh]*World) {
 	if w.opts.Preview == nil || len(w.levels) < 2 || w.opts.canceled() {
 		return
 	}
-
-	p := *w
-	p.Mesh = w.levels[0]
-	p.opts = Options{}
-	if err := p.assignTerrainTypes(); err != nil {
-		return
+	if p := w.snapshot(coarse, snapshots); p != nil {
+		w.opts.Preview(p)
 	}
-	p.setSimResult(coarse)
+}
+
+// snapshot makes a world of a simulation in progress, on its mesh. The
+// terrains of each mesh are assigned once, in cache.
+func (w *World) snapshot(s *simState, cache map[*mesh.Mesh]*World) *World {
+	base, ok := cache[s.m]
+	if !ok {
+		p := *w
+		p.Mesh = s.m
+		p.opts = Options{}
+		if err := p.assignTerrainTypes(); err != nil {
+			return nil
+		}
+		base = &p
+		cache[s.m] = base
+	}
+
+	p := *base
+	p.setSimResult(s)
 	p.computeWaterDepth()
 	p.finalizeElevation()
 	p.rasterize()
 	p.blurHeightmap()
-	w.opts.Preview(&p)
+	return &p
 }
 
 func (w *World) newSimState(m *mesh.Mesh, upliftAt, erodibilityNoise func(geom.Vec2) float64) *simState {
@@ -409,6 +439,9 @@ func (s *simState) run(steps int, dt, criticalSlope float64) {
 		s.route()
 		s.erode(dt)
 		s.collapse(criticalSlope)
+		if s.onStep != nil {
+			s.onStep(step)
+		}
 	}
 	s.fill()
 	s.route()

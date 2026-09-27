@@ -16,8 +16,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 	implglfw "github.com/AllenDang/cimgui-go/impl/glfw"
@@ -75,7 +77,9 @@ type app struct {
 	wake   atomic.Bool // something happened in the background
 	redraw int         // frames to draw before sleeping
 
-	screenshot string // development: save a screenshot there once ready, and quit
+	screenshot   string        // development: save a screenshot there once ready, and quit
+	screenshotAt time.Duration // or at that time
+	start        time.Time
 }
 
 type message struct {
@@ -122,6 +126,10 @@ func Run(session *engine.Session) error {
 		redraw:  settleFrames,
 
 		screenshot: os.Getenv("WGEN_SCREENSHOT"),
+		start:      time.Now(),
+	}
+	if at, err := strconv.ParseFloat(os.Getenv("WGEN_SCREENSHOT_AT"), 64); err == nil {
+		a.screenshotAt = time.Duration(at * float64(time.Second))
 	}
 	a.overlay.wake = a.wakeUp
 	a.mapImg.wake = a.wakeUp
@@ -164,6 +172,12 @@ func Run(session *engine.Session) error {
 	defer implglfw.Shutdown()
 	implgl.InitV("#version 330")
 	defer implgl.Shutdown()
+
+	a.applyWatch()
+	if a.settings.Watch {
+		// Watch the first generation too: started before the viewer
+		session.Engine.Rerun()
+	}
 
 	if a.terrain, err = newTerrainView(); err != nil {
 		return err
@@ -256,7 +270,12 @@ func (a *app) frame() {
 
 	implgl.RenderDrawData(imgui.CurrentDrawData())
 
-	if a.screenshot != "" && a.world != nil && !state.Busy && !a.loading() && a.redraw == 0 {
+	ready := a.world != nil && !state.Busy && !a.loading() && a.redraw == 0
+	if a.screenshotAt > 0 {
+		ready = a.world != nil && time.Since(a.start) > a.screenshotAt
+		a.activity() // keep drawing until then
+	}
+	if a.screenshot != "" && ready {
 		a.saveScreenshot(fw, fh)
 	}
 
@@ -328,10 +347,23 @@ func (a *app) devCamera() {
 	c.radius, c.phi, c.theta = distance, tilt*math.Pi/180, turn*math.Pi/180
 }
 
+// applyWatch tells the engine whether to show the simulation as it runs.
+func (a *app) applyWatch() {
+	steps := 0
+	if a.settings.Watch {
+		steps = max(1, int(a.settings.WatchSteps))
+	}
+	a.session.Engine.SetWatch(steps)
+}
+
 func (a *app) loading() bool { return a.overlay.busy() || a.mapImg.busy() }
 
 func (a *app) setSettings(s Settings) {
+	watch := s.Watch != a.settings.Watch || s.WatchSteps != a.settings.WatchSteps
 	a.settings = s
+	if watch {
+		a.applyWatch()
+	}
 	if a.settingsPath != "" {
 		saveSettings(a.settingsPath, s)
 	}
@@ -611,6 +643,8 @@ func (a *app) drawStatus(state engine.State) {
 	var lines []line
 
 	switch {
+	case state.Busy && state.Progress != "":
+		lines = append(lines, line{state.Progress, busyColor})
 	case state.Busy && state.Preview:
 		lines = append(lines, line{"Refining...", busyColor})
 	case state.Busy:

@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Castux/wgen/internal/config"
@@ -346,5 +347,58 @@ func TestWithOutline(t *testing.T) {
 		if !equalNaN(painted.Z, full.Z) || equalNaN(painted.Z, fromFile.Z) {
 			t.Errorf("%s: painted outline not regenerated right", conf.Uplift.Model)
 		}
+	}
+}
+
+// Watching the simulation shows its steps, without changing its result.
+func TestUpliftWatch(t *testing.T) {
+	conf := setupUplift(t)
+	calibrated, err := conf.Patch([]byte(`{"terrains": {"mountains": {"height": 2000}}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []*config.Config{conf, calibrated} {
+		plain := generate(t, c)
+
+		var frames []*World
+		var phases []string
+		watched, _, err := (&World{}).UpdateWith(c, Options{
+			WatchSteps: 20,
+			Watch: func(w *World, progress string) {
+				frames = append(frames, w)
+				phases = append(phases, progress)
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !equalNaN(plain.Z, watched.Z) {
+			t.Error("watching changes the result")
+		}
+		if len(frames) < 10 {
+			t.Fatalf("%d frames", len(frames))
+		}
+		// From the coarse mesh to the finest
+		if frames[0].Mesh != watched.levels[0] || frames[len(frames)-1].Mesh != watched.Mesh {
+			t.Error("frames not from the coarse to the final mesh")
+		}
+		for i, f := range frames {
+			if len(f.Z) != len(f.Mesh.Points) || len(f.Heightmap) != f.Width*f.Height {
+				t.Fatalf("frame %d incomplete", i)
+			}
+		}
+		if c.Terrain("mountains").Calibrated() && !slices.ContainsFunc(phases, func(p string) bool { return strings.Contains(p, "Calibrating") }) {
+			t.Errorf("no calibration phase in %v", phases[:3])
+		}
+	}
+}
+
+func TestRerun(t *testing.T) {
+	w := generate(t, setupUplift(t))
+	again, stage, err := w.Rerun(Options{})
+	if err != nil || stage != StageTerrain || !equalNaN(w.Z, again.Z) {
+		t.Errorf("rerun: stage %v, err %v, same %v", stage, err, equalNaN(w.Z, again.Z))
 	}
 }

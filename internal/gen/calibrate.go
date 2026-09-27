@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"fmt"
 	"log/slog"
 	"math"
 	"slices"
@@ -287,17 +288,20 @@ func (f *upliftField) summits(s *simState) []float64 {
 // land, or from a previous simulation. Each next iteration continues from
 // the previous one, for a third of the steps: the landscape is already
 // close to settled.
-func (w *World) calibrate(f *upliftField, rates, targets []float64, from *simState, erodibilityNoise func(geom.Vec2) float64, run func(*simState, int)) *simState {
+func (w *World) calibrate(f *upliftField, rates, targets []float64, from *simState, erodibilityNoise func(geom.Vec2) float64,
+	run func(*simState, int, string), phase string) *simState {
+
 	s := from
 	for it := range calibrationIterations {
 		prev := s
 		s = w.newSimState(w.levels[0], f.sampler(rates), erodibilityNoise)
+		label := fmt.Sprintf("%s, coarse level (%d vertices): iteration %d", phase, len(s.m.Points), it+1)
 		if prev == nil {
 			s.startFlat(w.rng(streamNoise))
-			run(s, w.Conf.Uplift.Steps)
+			run(s, w.Conf.Uplift.Steps, label)
 		} else {
 			s.h = slices.Clone(prev.h)
-			run(s, max(1, w.Conf.Uplift.Steps/3))
+			run(s, max(1, w.Conf.Uplift.Steps/3), label)
 		}
 
 		worst := 0.0

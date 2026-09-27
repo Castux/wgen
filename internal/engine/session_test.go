@@ -216,3 +216,30 @@ func TestPreviewAndSupersede(t *testing.T) {
 		t.Errorf("error: %s", st.Error)
 	}
 }
+
+func TestWatchRerun(t *testing.T) {
+	h := setup(t)
+	if err := h.s.Patch([]byte(`{"elevationModel": "uplift", "mapWidth": 50, "resolution": 2, "levels": 1,
+		"steps": 100, "refineSteps": 20, "terrains": {"land": {"height": 1000}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	h.waitFor(func(st State) bool { return !st.Busy && !st.Preview && st.Stage != "" })
+
+	h.s.Engine.SetWatch(20)
+	v0 := h.s.Engine.State().Version
+	h.s.Engine.Rerun()
+
+	var progress []string
+	st := h.waitFor(func(st State) bool {
+		if st.Progress != "" {
+			progress = append(progress, st.Progress)
+		}
+		return !st.Busy && st.Version > v0 && st.Progress == ""
+	})
+	if len(progress) < 3 || !strings.Contains(progress[0], "step") {
+		t.Errorf("progress: %v", progress)
+	}
+	if st.Error != "" || st.Preview {
+		t.Errorf("after rerun: %+v", st)
+	}
+}

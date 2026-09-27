@@ -48,6 +48,7 @@ func (a *app) drawPanel(state engine.State) {
 		imgui.PushItemWidth(-150 * a.uiScale)
 		a.drawViewSettings()
 		a.drawActions(state)
+		a.drawSimulation(state)
 		a.drawEditor()
 		if conf := a.session.Engine.Config(); conf != nil {
 			a.drawParams(conf)
@@ -140,6 +141,38 @@ func (a *app) drawActions(state engine.State) {
 	if imgui.ButtonV("Reset view", full) {
 		a.resetView()
 	}
+}
+
+// drawSimulation is the section about watching the uplift model's
+// simulation.
+func (a *app) drawSimulation(state engine.State) {
+	conf := a.session.Engine.Config()
+	if conf == nil || conf.Uplift.Model != config.ModelUplift {
+		return
+	}
+	if !imgui.CollapsingHeaderTreeNodeFlagsV("Simulation", imgui.TreeNodeFlagsDefaultOpen) {
+		return
+	}
+
+	s := a.settings
+	changed := imgui.Checkbox("Watch the simulation", &s.Watch)
+	imgui.SetItemTooltip("Show the landscape as it is simulated, instead of the result only")
+	var c bool
+	s.WatchSteps, c = a.number("simulation.watchSteps", "Time steps per frame", s.WatchSteps, 1, 50, 1, true)
+	if changed || c {
+		a.setSettings(s)
+	}
+
+	imgui.BeginDisabledV(state.Busy)
+	if imgui.ButtonV("Replay the simulation", imgui.NewVec2(-math.SmallestNonzeroFloat32, 0)) {
+		if !a.settings.Watch {
+			s := a.settings
+			s.Watch = true
+			a.setSettings(s)
+		}
+		a.session.Engine.Rerun()
+	}
+	imgui.EndDisabled()
 }
 
 func (a *app) drawParams(conf *config.Config) {

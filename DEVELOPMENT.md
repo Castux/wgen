@@ -131,9 +131,16 @@ redone with it), and shows the preview the uplift model gives after its
 coarse level, while refining. It keeps the last complete world as the base
 of incremental updates, apart from the displayed one.
 
-Requests are a config, reloading the image file, or a map in memory (the
+Requests are a config, reloading the image file, a map in memory (the
 editor's, `World.WithOutline`), which replaces the file's until it is
-reloaded. Readers take the current snapshot
+reloaded, or a rerun (`World.Rerun`: the simulation again, to watch it).
+
+Watching (`Engine.SetWatch`): `gen.Options.Watch` is called every
+`WatchSteps` time steps with a world made of the simulation in progress
+(`World.snapshot`: on the mesh of its level, terrains assigned once per
+mesh, rasterized), and a description of the phase. The engine shows each,
+at most 15 per second so that fast phases can be seen. The result is the
+same as without watching. Readers take the current snapshot
 (`Snapshot`), and can subscribe to state changes (`Subscribe`): version
 (incremented by each generation that changed the world), busy, error, dirty
 (the config differs from its file).
@@ -204,7 +211,8 @@ Files:
 With `WGEN_SCREENSHOT=shot.png` in the environment, the viewer saves a
 screenshot once the world and its images are ready, and quits. Combined with
 editing `viewer.json`, it checks every view and mode from a script.
-`WGEN_CAMERA=x,y,distance,tilt,turn` places the orbit camera for close
+`WGEN_SCREENSHOT_AT=seconds` takes it at that time instead, for instance
+during a watched simulation. `WGEN_CAMERA=x,y,distance,tilt,turn` places the orbit camera for close
 ups: target in image pixels (top left origin), distance in pixels, tilt from
 vertical and turn in degrees.
 
