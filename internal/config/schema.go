@@ -1,6 +1,11 @@
 package config
 
-import "math"
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"strings"
+)
 
 // Param describes an editable config value, for building a UI. Path is the
 // location of the value in the JSON config, Stage the first generation stage
@@ -81,4 +86,37 @@ func (c *Config) Schema() []Param {
 	)
 
 	return params
+}
+
+// Value returns the current value of a parameter, given its schema path:
+// float64 for numbers, bool or string.
+func (c *Config) Value(path []string) (any, error) {
+	if len(path) == 3 && path[0] == "terrains" {
+		t := c.Terrain(path[1])
+		if t == nil {
+			return nil, fmt.Errorf("no terrain %q", path[1])
+		}
+		switch path[2] {
+		case "gradient":
+			return t.Gradient, nil
+		case "fixedShore":
+			return t.FixedShore, nil
+		case "smoothing":
+			return t.Smoothing, nil
+		case "erosion":
+			return t.Erosion, nil
+		}
+	}
+
+	if len(path) == 1 && path[0] != "terrains" {
+		var values map[string]any
+		if err := json.Unmarshal(c.Marshal(), &values); err != nil {
+			return nil, err
+		}
+		if v, ok := values[path[0]]; ok {
+			return v, nil
+		}
+	}
+
+	return nil, fmt.Errorf("unknown parameter %s", strings.Join(path, "."))
 }

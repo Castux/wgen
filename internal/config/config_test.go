@@ -114,3 +114,50 @@ func TestPatch(t *testing.T) {
 		t.Errorf("plains should have no fixed shore")
 	}
 }
+
+func TestSchemaValues(t *testing.T) {
+	c, _, err := Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Every parameter has a value of its type
+	for _, p := range c.Schema() {
+		v, err := c.Value(p.Path)
+		if err != nil {
+			t.Errorf("%v: %v", p.Path, err)
+			continue
+		}
+		var ok bool
+		switch p.Type {
+		case "bool":
+			_, ok = v.(bool)
+		case "enum":
+			_, ok = v.(string)
+		default:
+			_, ok = v.(float64)
+		}
+		if !ok {
+			t.Errorf("%v: %T value for a %s", p.Path, v, p.Type)
+		}
+	}
+
+	for _, test := range []struct {
+		path []string
+		want any
+	}{
+		{[]string{"resolution"}, 8.0},
+		{[]string{"grid"}, "hex"},
+		{[]string{"terrains", "sea", "smoothing"}, true},
+		{[]string{"terrains", "lake", "erosion"}, false},
+		{[]string{"terrains", "plains", "gradient"}, 0.2},
+	} {
+		if v, _ := c.Value(test.path); v != test.want {
+			t.Errorf("%v: %v, expected %v", test.path, v, test.want)
+		}
+	}
+
+	if _, err := c.Value([]string{"terrains", "swamp", "gradient"}); err == nil {
+		t.Error("value of an unknown terrain")
+	}
+}

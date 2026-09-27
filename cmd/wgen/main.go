@@ -5,29 +5,26 @@
 //	wgen [flags] <config.json>
 //
 // Without flags, generates the world and writes the exports enabled in the
-// config. With --interactive, serves the web viewer instead, regenerating
-// whenever the config or the outline image change.
+// config. With --interactive, opens the viewer instead, regenerating whenever
+// the config or the outline image change.
 package main
 
 import (
 	"flag"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 
 	"github.com/Castux/wgen/internal/config"
+	"github.com/Castux/wgen/internal/engine"
 	"github.com/Castux/wgen/internal/export"
 	"github.com/Castux/wgen/internal/gen"
-	"github.com/Castux/wgen/internal/server"
-	"github.com/Castux/wgen/web"
+	"github.com/Castux/wgen/internal/viewer"
 )
 
 func main() {
 	verbose := flag.Bool("v", false, "verbose logging (stage timings)")
-	interactive := flag.Bool("interactive", false, "serve the web viewer")
-	addr := flag.String("addr", ":8080", "viewer address, with --interactive")
-	static := flag.String("static", "", "serve the viewer files from this directory instead of the embedded ones (for development)")
+	interactive := flag.Bool("interactive", false, "open the viewer")
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: wgen [flags] <config.json>")
@@ -62,7 +59,7 @@ func main() {
 
 	var err error
 	if *interactive {
-		err = serve(path, *addr, *static)
+		err = view(path)
 	} else {
 		err = run(path)
 	}
@@ -88,17 +85,14 @@ func run(path string) error {
 	return err
 }
 
-func serve(path, addr, staticDir string) error {
-	var files fs.FS = web.Static
-	if staticDir != "" {
-		files = os.DirFS(staticDir)
-	}
-
-	s, err := server.New(path, files)
+func view(path string) error {
+	session, err := engine.Open(path)
 	if err != nil {
 		return err
 	}
-	return s.Run(addr)
+	defer session.Close()
+
+	return viewer.Run(session)
 }
 
 func loadConfig(path string) (*config.Config, error) {
