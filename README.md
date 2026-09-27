@@ -83,9 +83,33 @@ a sensible step, and a field, to type a precise value (not rounded, and
 possibly outside of the slider range). Changes apply when the slider is
 released, or when pressing `Enter` or leaving the field (`Escape` cancels).
 
+- Map editor: see below.
+
 The status in the bottom left corner shows what is running (generating,
-rendering the overlay, exporting), errors, and whether the config has unsaved
-changes.
+refining a preview, rendering the overlay, exporting), errors, and whether
+the config or the map have unsaved changes.
+
+### Map editor
+
+The map (the outline image) can be painted in the viewer: check "Paint the
+map" (or press `e`), which shows the 2D view with the painted terrains over
+the generated map. The left button paints the terrain selected in the panel,
+the other buttons pan. Brushes lay stamps with natural looking, irregular
+edges, different every time.
+
+- `[` and `]` change the brush size, "Painting opacity" how much the
+  painted map shows over the generated one.
+- `Ctrl+Z` undoes a stroke, `Ctrl+Y` (or `Ctrl+Shift+Z`) redoes it.
+- Each stroke regenerates the world. With the uplift model, a coarse preview
+  shows first ("Refining..."), and a new stroke cancels the generation in
+  progress.
+- "Save map" (or `Ctrl+S`, which also saves the config) writes the map to
+  the config's image file. "New map..." starts from an empty sea, of a size
+  to choose.
+
+The map is only saved when asked: quitting loses unsaved changes. If the
+image file changes elsewhere, the editor follows it, unless the map has
+unsaved changes.
 
 The config file and the outline image are watched: edit them in any editor
 and the viewer updates. If the config file changes, it replaces any unsaved
@@ -157,11 +181,18 @@ Experimental parameters (optional, only saved when changed):
 ## Uplift model
 
 With `"elevationModel": "uplift"`, elevation is not built from slopes but
-simulated: terrains give the rate at which the land rises, rivers erode it,
-hillslopes collapse beyond a critical slope, and the sea stays at its level.
-River networks grow into the rising land from the coasts, which gives
-branching valleys, winding ridges and many peaks, at realistic heights:
-elevations are in meters, for a map of the given width.
+simulated: the land rises, rivers erode it, hillslopes collapse beyond a
+critical slope, and the sea stays at its level. River networks grow into the
+rising land from the coasts, which gives branching valleys, winding ridges
+and many peaks, at realistic heights: elevations are in meters, for a map of
+the given width.
+
+Terrains are height classes: each gives a target height for the summits of
+its regions ("mountains here, about 4500 m"), and the uplift that reaches
+it is found by the simulation, for every region on its own (a small range
+needs to rise faster than a large one). Summits end up within about 20% of
+their targets: the target is what the high points of a region reach, most of
+the region is lower, valleys much lower.
 
 ```jsonc
 {
@@ -174,23 +205,23 @@ elevations are in meters, for a map of the given width.
 		// gradient still tells water (negative) from land, and is the slope
 		// of the sea floor, in meters per meter
 		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.01, "fixedShore": 0.0 },
-		// uplift: mm per year. detail: how many levels refine this terrain
-		// (default: all on land, none on water)
-		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2, "uplift": 0.2, "detail": 1 },
-		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8, "uplift": 1, "detail": 2 },
-		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2, "uplift": 4 },
+		// height: target summit height, meters. detail: how many levels
+		// refine this terrain (default: all on land, none on water)
+		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2, "height": 400, "detail": 1 },
+		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8, "height": 1500, "detail": 2 },
+		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2, "height": 4500 },
 		// water without fixedShore: a lake, eroded flat down to its outlet
 		"lake": { "r": 109, "g": 148, "b": 194, "gradient": -0.001, "detail": 1 }
 	}
 }
 ```
 
-`lab/uplift.json` is a complete example. Optional parameters, with their
+`lab/classes.json` is a complete example. Optional parameters, with their
 defaults:
 
 | Key | Default | |
 |---|---|---|
-| `upliftBlur` | 30 | km: uplift is smoothed, so that ranges rise more in their core |
+| `upliftBlur` | 30 | km: uplift ramps up over this distance from the border of a region with lower terrains, so that ranges rise more in their core |
 | `erodibility` | 2e-6 | per year: how fast rivers erode. Lower gives higher relief |
 | `streamExponent` | 0.5 | how erosion grows with the drainage area |
 | `criticalSlope` | 30 | degrees: steeper hillslopes collapse |
@@ -200,14 +231,14 @@ defaults:
 | `erodibilityNoise` | 0.3 | 0..1: variation of the rock hardness |
 | `erodibilityNoiseScale` | 30 | km |
 
-Terrains can also have an `erodibility` factor (default 1).
+Terrains can also have an `erodibility` factor (default 1). Instead of a
+`height`, a terrain can give its `uplift` directly, in mm per year (as in
+`lab/uplift.json`): heights then depend on the size of its regions and on
+their neighbours.
 
-Heights depend on the uplift, on the size of the uplifted region, and on its
-neighbours (through the blur): on the Chasers map at 1000 km wide, with the
-defaults, mountains rising 4 mm per year reach about 9.5 km, and hills next
-to them several km. The simulation takes
-seconds: about 5 on the Chasers map (160 000 vertices), each refinement
-level multiplying the vertices in the refined terrains by 4.
+The simulation takes seconds: about 8 on the Chasers map (160 000
+vertices), with a preview after 3. Each refinement level multiplies the
+vertices of the refined terrains by 4.
 
 At true scale, mountains are small on a continent: 10 km high on 1000 km
 wide. They show when zooming in, and "Vertical exaggeration" in the viewer

@@ -84,6 +84,16 @@ everything else.
   (2i + j%2, 2j) on the next). A point is added at the first level where it
   is on the lattice, if the terrain around wants that much detail, and
   jittered once, so that it keeps its position at every level.
+- Uplift (`calibrate.go`): every connected region of a land terrain, found on
+  a grid, has its own rate, ramping up from its border with lower terrains
+  over `upliftBlur` (not blurred across regions: that raised the neighbours
+  of mountains, and made calibration diverge). Terrains with a target
+  height are calibrated: the coarse level is simulated, each region's summit
+  height (95th percentile of its elevations) measured and its rate scaled
+  toward the target, a few times, each iteration continuing from the
+  previous landscape. Finer levels raise summits (their ridges barely
+  erode), so after refining, the coarse level is calibrated again for
+  target / (refined summit / coarse summit), and refined again.
 - Per level, `simState` holds the elevation (meters), uplift, erodibility and
   Voronoi cell areas (`CellAreas`) of each vertex. Sea vertices are the fixed
   base level; lakes don't rise and erode fast.
@@ -104,15 +114,26 @@ everything else.
   use it. River widths come from `World.Drainage`, the drainage area in
   square pixels, since the mesh isn't uniform.
 
-`lab/uplift.json` and `lab/uplift-exp.json` are the experiments on it. On
-the Chasers map at 1000 km wide: 5 s for 160 000 vertices (3 levels), 13 s
-for 430 000 (4 levels); peaks up to 9.5 km, Hack exponent 0.56.
+The experiments on it are in `lab/`: `uplift.json` and `uplift-exp.json`
+with uplift rates, `classes.json` and `classes-exp.json` with target heights
+(the lab reports height quantiles per terrain). On the Chasers map at 1000 km
+wide, with uplift rates: 5 s for 160 000 vertices (3 levels), 13 s for
+430 000 (4 levels), Hack exponent 0.56. With target heights, calibration
+brings it to about 8 s, the coarse preview after about 3.
 
 ## Engine and session
 
 `engine.Engine` owns the current world, and regenerates it in a goroutine.
 Requests are coalesced: while a generation runs, only the latest requested
-config is kept, and generated next. Readers take the current snapshot
+config is kept, and generated next. Generations take `gen.Options`: the
+engine cancels the one in progress when a newer request arrives (it is then
+redone with it), and shows the preview the uplift model gives after its
+coarse level, while refining. It keeps the last complete world as the base
+of incremental updates, apart from the displayed one.
+
+Requests are a config, reloading the image file, or a map in memory (the
+editor's, `World.WithOutline`), which replaces the file's until it is
+reloaded. Readers take the current snapshot
 (`Snapshot`), and can subscribe to state changes (`Subscribe`): version
 (incremented by each generation that changed the world), busy, error, dirty
 (the config differs from its file).
@@ -120,7 +141,9 @@ config is kept, and generated next. Readers take the current snapshot
 `engine.Session` ties an engine to a config file: it loads it, watches it and
 the outline image (`Watcher`: directories are watched, so that editors
 replacing files on save are handled, and events are debounced), and applies
-edits (`Patch`, a partial config in the file format), `Save` and `Export`.
+edits (`Patch`, a partial config in the file format), `Save` and `Export`,
+and the editor's maps (`SetOutline`, `SaveOutline`: the watcher ignores the
+session's own writes).
 
 ## Viewer
 
@@ -165,6 +188,12 @@ Files:
   done, not on every change: edits are sent to the session as partial
   configs, unless the value is unchanged. The panel is kept inside the
   window, as its saved position may be off screen in a smaller window.
+- `canvas.go`: the edited map (terrain colors), stamps with noisy edges,
+  strokes and their undo history. No GL: unit tested.
+- `editor.go`: the map editor in the app: painting input, brush outline,
+  its panel section, sending the map to the session after each stroke,
+  saving. The painted map is a second texture of the map view, updated by
+  regions.
 - `settings.go`: viewer settings, saved as JSON in the user config directory
   (`os.UserConfigDir()/wgen/viewer.json`, with ImGui's `imgui.ini` for the
   panel layout next to it).
