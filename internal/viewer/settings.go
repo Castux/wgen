@@ -26,6 +26,7 @@ type Settings struct {
 
 	// Map editor
 	Editing      bool    `json:"editing"`
+	LockShore    bool    `json:"lockShore"`   // brushes don't move the shoreline
 	BrushRadius  float64 `json:"brushRadius"` // pixels
 	PaintOpacity float64 `json:"paintOpacity"`
 }

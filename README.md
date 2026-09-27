@@ -99,6 +99,10 @@ edges, different every time.
 
 - `[` and `]` change the brush size, "Painting opacity" how much the
   painted map shows over the generated one.
+- "Lock shoreline" (`l`) keeps the coasts as they are: land brushes leave
+  sea and lakes alone, water brushes leave land alone (water can still
+  change between sea and lake). To repaint the relief without touching the
+  shores.
 - `Ctrl+Z` undoes a stroke, `Ctrl+Y` (or `Ctrl+Shift+Z`) redoes it.
 - Each stroke regenerates the world. With the uplift model, a coarse preview
   shows first ("Refining..."), and a new stroke cancels the generation in

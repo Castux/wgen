@@ -346,6 +346,7 @@ const (
 	shortcutShading                   // q
 	shortcutWireframe                 // w
 	shortcutEdit                      // e
+	shortcutLockShore                 // l
 	shortcutSmaller                   // [, brush
 	shortcutLarger                    // ]
 	shortcutUndo                      // ctrl+z
@@ -399,6 +400,8 @@ func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.Mod
 			a.keys = append(a.keys, shortcutWireframe)
 		case name == "e":
 			a.keys = append(a.keys, shortcutEdit)
+		case name == "l":
+			a.keys = append(a.keys, shortcutLockShore)
 		case name == "[":
 			a.keys = append(a.keys, shortcutSmaller)
 		case name == "]":
@@ -434,6 +437,8 @@ func (a *app) handleInput() {
 				if s.Editing {
 					s.View = "map"
 				}
+			case shortcutLockShore:
+				s.LockShore = !s.LockShore
 			case shortcutSmaller:
 				s.BrushRadius = math.Max(1, math.Round(s.BrushRadius/1.25))
 			case shortcutLarger:

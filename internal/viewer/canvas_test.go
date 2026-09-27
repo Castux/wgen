@@ -112,3 +112,38 @@ func TestCanvasRGBA(t *testing.T) {
 		t.Error("rows not bottom first")
 	}
 }
+
+// Protected pixels are left alone: the shoreline lock.
+func TestStampProtect(t *testing.T) {
+	c := seaCanvas(100, 100)
+	hills := config.Color{209, 184, 134}
+
+	// Land on the left half
+	for row := range 100 {
+		for x := range 50 {
+			c.pixels[c.index(x, row)] = testLand
+		}
+	}
+	before := c.count(testSea)
+
+	// Land brush, water protected: only land changes
+	c.protect = func(p config.Color) bool { return p == testSea }
+	c.stamp(50, 50, 30, hills, 1)
+	if c.count(testSea) != before || c.count(hills) == 0 {
+		t.Errorf("land brush: sea %d, was %d; hills %d", c.count(testSea), before, c.count(hills))
+	}
+	for row := range 100 {
+		for x := 50; x < 100; x++ {
+			if c.at(x, row) != testSea {
+				t.Fatalf("sea painted at %d, %d", x, row)
+			}
+		}
+	}
+
+	// Unprotected, the stamp crosses the shore
+	c.protect = nil
+	c.stamp(50, 50, 30, hills, 1)
+	if c.count(testSea) >= before {
+		t.Error("unprotected stamp left the sea alone")
+	}
+}

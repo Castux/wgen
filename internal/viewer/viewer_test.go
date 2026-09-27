@@ -179,8 +179,9 @@ func TestShortcuts(t *testing.T) {
 		{"q and w by name", []event{{key: glfw.KeyA, name: "q", action: press}, {key: glfw.KeyZ, name: "w", action: press}}, []shortcut{shortcutShading, shortcutWireframe}},
 		{"held w", []event{{key: glfw.KeyW, name: "w", action: press}, {key: glfw.KeyW, action: repeat}, {key: glfw.KeyW, action: repeat}}, []shortcut{shortcutWireframe}},
 		{"ctrl+w", []event{{key: glfw.KeyW, name: "w", action: press, mods: glfw.ModControl}}, nil},
-		{"e and brackets", []event{{key: glfw.KeyE, name: "e", action: press}, {key: glfw.KeyLeftBracket, name: "[", action: press}, {key: glfw.KeyRightBracket, name: "]", action: press}},
-			[]shortcut{shortcutEdit, shortcutSmaller, shortcutLarger}},
+		{"e, l and brackets", []event{{key: glfw.KeyE, name: "e", action: press}, {key: glfw.KeyL, name: "l", action: press},
+			{key: glfw.KeyLeftBracket, name: "[", action: press}, {key: glfw.KeyRightBracket, name: "]", action: press}},
+			[]shortcut{shortcutEdit, shortcutLockShore, shortcutSmaller, shortcutLarger}},
 		{"undo, redo, save", []event{
 			{key: glfw.KeyZ, name: "z", action: press, mods: glfw.ModControl},
 			{key: glfw.KeyZ, name: "z", action: press, mods: glfw.ModControl | glfw.ModShift},
@@ -201,5 +202,37 @@ func TestShortcuts(t *testing.T) {
 		if !slices.Equal(a.keys, test.want) {
 			t.Errorf("%s: %v, expected %v", test.name, a.keys, test.want)
 		}
+	}
+}
+
+func TestShoreLock(t *testing.T) {
+	conf, _, err := config.Parse([]byte(`{
+		"path": "map.png", "resolution": 4, "grid": "hex", "jitter": 0.5, "relax": false,
+		"smoothingRadius": 0, "erosionMinFlow": 5, "erosionFactor": 0.5,
+		"terrains": {
+			"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
+			"lake": { "r": 109, "g": 148, "b": 194, "gradient": -0.01 },
+			"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2 },
+			"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2 }
+		}
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sea, lake, plains, mountains := conf.Terrain("sea"), conf.Terrain("lake"), conf.Terrain("plains"), conf.Terrain("mountains")
+
+	a := &app{settings: defaultSettings}
+	if a.shoreLock(conf, mountains) != nil {
+		t.Error("locked by default")
+	}
+
+	a.settings.LockShore = true
+	land := a.shoreLock(conf, mountains)
+	if !land(sea.Color) || !land(lake.Color) || land(plains.Color) {
+		t.Error("land brush: should protect water only")
+	}
+	water := a.shoreLock(conf, sea)
+	if !water(plains.Color) || water(lake.Color) || water(sea.Color) {
+		t.Error("water brush: should protect land only (sea and lake can swap)")
 	}
 }

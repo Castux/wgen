@@ -19,6 +19,9 @@ type canvas struct {
 	// Stroke in progress
 	stroke *stroke
 
+	// protect tells which pixels stamps must leave alone (nil: none)
+	protect func(config.Color) bool
+
 	undo, redo []edit
 }
 
@@ -72,7 +75,10 @@ func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64) 
 				n += amplitude * gen.Noise(seed+uint64(o), float64(x)*scale+ox, float64(row)*scale+oy)
 			}
 			if d < 0.85+0.6*n {
-				c.pixels[c.index(x, row)] = color
+				i := c.index(x, row)
+				if c.protect == nil || !c.protect(c.pixels[i]) {
+					c.pixels[i] = color
+				}
 			}
 		}
 	}

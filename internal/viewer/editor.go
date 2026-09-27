@@ -108,6 +108,7 @@ func (a *app) paintInput() bool {
 	next := func() uint64 { ed.seed++; return ed.seed }
 
 	c := ed.canvas
+	c.protect = a.shoreLock(conf, t)
 	switch {
 	case c.stroke == nil && imgui.IsMouseClickedBool(imgui.MouseButtonLeft) && !io.WantCaptureMouse():
 		ed.changed = ed.changed.Union(c.beginStroke(x, y, radius, t.Color, next()))
@@ -129,6 +130,21 @@ func (a *app) paintInput() bool {
 		dl.AddCircleV(mouse, float32(radius*scale), col, 48, 1.5)
 	}
 	return c.stroke != nil
+}
+
+// shoreLock returns the pixels a brush must not paint with the shoreline
+// locked: water for land brushes, land for water brushes. Water can still
+// change between sea and lake, as the shore stays.
+func (a *app) shoreLock(conf *config.Config, brush *config.Terrain) func(config.Color) bool {
+	if !a.settings.LockShore {
+		return nil
+	}
+	terrains := conf.TerrainsByColor()
+	brushWater := brush.Gradient < 0
+	return func(c config.Color) bool {
+		t := terrains[c]
+		return t != nil && (t.Gradient < 0) != brushWater
+	}
 }
 
 func (a *app) undo() {
@@ -241,7 +257,8 @@ func (a *app) drawEditor() {
 	}
 
 	s := a.settings
-	changed := false
+	changed := imgui.Checkbox("Lock shoreline (l)", &s.LockShore)
+	imgui.SetItemTooltip("Land brushes leave sea and lakes alone, water brushes leave land alone")
 	sizeLabel := "Brush (px)"
 	if mpp != 1 {
 		sizeLabel = fmt.Sprintf("Brush (px, %.0f km)", s.BrushRadius*mpp/1000)
