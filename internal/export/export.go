@@ -13,14 +13,14 @@ import (
 
 // Options chooses the files to write.
 type Options struct {
-	Heightmap  bool // 16 bits grayscale PNG, <base>-height.png
-	Normalized bool // heightmap from the lowest to the highest point, instead of meters above sea level
-	WaterMask  bool // 8 bits PNG, white where there is water, <base>-water.png
-	Texture    bool // the map with terrain colors, hillshading and rivers, <base>-texture.png
-	OBJ        bool // mesh, <base>.obj
-	SVG        bool // terrain cells and rivers, <base>.svg
+	Heightmap  bool `json:"heightmap"`  // 16 bits grayscale PNG, <base>-height.png
+	Normalized bool `json:"normalized"` // heightmap from the lowest to the highest point, instead of meters above sea level
+	WaterMask  bool `json:"waterMask"`  // 8 bits PNG, white where there is water, <base>-water.png
+	Texture    bool `json:"texture"`    // the map with terrain colors, hillshading and rivers, <base>-texture.png
+	OBJ        bool `json:"obj"`        // mesh, <base>.obj
+	SVG        bool `json:"svg"`        // terrain cells and rivers, <base>.svg
 
-	TextureScale float64 // relative to the map image, 1 if 0
+	TextureScale float64 `json:"textureScale"` // relative to the map image, 1 if 0
 }
 
 // All writes the files chosen by the options, named from base (a path
