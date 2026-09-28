@@ -175,7 +175,9 @@ func (s *Session) ownWrite(path string) bool {
 // write writes a file, remembering it as our own.
 func (s *Session) write(path string, data []byte) error {
 	if dir := filepath.Dir(path); dir != "" {
-		os.MkdirAll(dir, 0o755)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
 	}
 	s.mu.Lock()
 	s.written[path] = sha256.Sum256(data)

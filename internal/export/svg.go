@@ -72,10 +72,18 @@ func cellColor(w *gen.World, v int) string {
 		return "#0E443D"
 
 	case terrain.Name == config.SeaName:
-		f := z / w.Lowest
+		f := ratio(z, w.Lowest)
 		return fmt.Sprintf("rgb(%.2f,%.2f,%.2f)", lerp(95, 0, f), lerp(132, 10, f), lerp(255, 100, f))
 	}
 
-	f := z / w.Highest
+	f := ratio(z, w.Highest)
 	return fmt.Sprintf("rgb(%.2f,%.2f,%.2f)", lerp(84, 255, f), lerp(169, 255, f), lerp(50, 255, f))
+}
+
+// ratio is z / extreme, 0 if the extreme is 0 (a flat world).
+func ratio(z, extreme float64) float64 {
+	if extreme == 0 {
+		return 0
+	}
+	return z / extreme
 }

@@ -120,8 +120,11 @@ func (c *Config) Validate() error {
 	if s.CriticalSlope <= 0 || s.CriticalSlope >= 90 {
 		add("criticalSlope must be between 0 and 90 degrees")
 	}
-	if s.TimeStep <= 0 || s.Steps < 1 || s.RefineSteps < 0 {
+	if s.TimeStep <= 0 || s.Steps < 1 {
 		add("timeStep and steps must be positive")
+	}
+	if s.RefineSteps < 0 {
+		add("refineSteps must not be negative")
 	}
 	if s.ErodibilityNoise < 0 || s.ErodibilityNoise > 1 {
 		add("erodibilityNoise must be between 0 and 1")
