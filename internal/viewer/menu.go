@@ -4,6 +4,7 @@ import (
 	"github.com/AllenDang/cimgui-go/imgui"
 
 	"github.com/Castux/wgen/internal/engine"
+	"github.com/Castux/wgen/internal/render"
 )
 
 // drawMenu is the main menu bar.
@@ -48,71 +49,66 @@ func (a *app) drawMenu(state engine.State) {
 			a.redo()
 		}
 		imgui.Separator()
-		s := a.settings
-		if imgui.MenuItemBoolPtrV("Paint the map", "E", &s.Editing, true) && s.Editing {
-			s.View = "map"
+		settings := a.settings
+		if editing := settings.Editing; imgui.MenuItemBoolPtrV("Paint the map", "E", &editing, true) {
+			settings.setEditing(editing)
 		}
-		imgui.MenuItemBoolPtrV("Lock the shoreline", "L", &s.LockShore, true)
+		imgui.MenuItemBoolPtrV("Lock the shoreline", "L", &settings.LockShore, true)
 		if imgui.BeginMenu("Brush") {
-			for _, b := range brushes {
-				if imgui.MenuItemBoolV(b, "", s.Brush == b, true) {
-					s.Brush = b
+			for _, brush := range brushes {
+				if imgui.MenuItemBoolV(brush, "", settings.Brush == brush, true) {
+					settings.Brush = brush
 				}
 			}
 			imgui.EndMenu()
 		}
-		if s != a.settings {
-			a.setSettings(s)
+		if settings != a.settings {
+			a.setSettings(settings)
 		}
 		imgui.EndMenu()
 	}
 
 	if imgui.BeginMenu("View") {
-		s := a.settings
-		if imgui.MenuItemBoolV("3D", "V", s.View == "orbit", true) {
-			s.View = "orbit"
+		settings := a.settings
+		choice := func(label, shortcut string, value *string, option string) {
+			if imgui.MenuItemBoolV(label, shortcut, *value == option, true) {
+				*value = option
+			}
 		}
-		if imgui.MenuItemBoolV("Map", "V", s.View == "map", true) {
-			s.View = "map"
-		}
+		choice("3D", "V", &settings.View, viewOrbit)
+		choice("Map", "V", &settings.View, viewMap)
 		imgui.Separator()
-		if imgui.MenuItemBoolV("Terrain colors", "Shift", s.Color == "terrain", true) {
-			s.Color = "terrain"
-		}
-		if imgui.MenuItemBoolV("Height colors", "Shift", s.Color == "height", true) {
-			s.Color = "height"
-		}
+		choice("Terrain colors", "Shift", &settings.Color, colorTerrain)
+		choice("Height colors", "Shift", &settings.Color, colorHeight)
 		if imgui.BeginMenu("Height scale") {
-			if imgui.MenuItemBoolV("Rainbow", "", s.HeightScale == heightScale[0], true) {
-				s.HeightScale = heightScale[0]
-			}
-			if imgui.MenuItemBoolV("Gray", "", s.HeightScale == heightScale[1], true) {
-				s.HeightScale = heightScale[1]
-			}
+			choice("Rainbow", "", &settings.HeightScale, render.ScaleRainbow)
+			choice("Gray", "", &settings.HeightScale, render.ScaleGray)
 			imgui.EndMenu()
 		}
-		imgui.MenuItemBoolPtrV("Height legend", "", &s.Legend, true)
+		imgui.MenuItemBoolPtrV("Height legend", "", &settings.Legend, true)
 		imgui.Separator()
-		lit := s.Shading == "lit"
-		if imgui.MenuItemBoolPtrV("Lit", "Q", &lit, true) {
-			s.Shading = map[bool]string{true: "lit", false: "unlit"}[lit]
+		if lit := settings.Shading == shadingLit; imgui.MenuItemBoolPtrV("Lit", "Q", &lit, true) {
+			settings.Shading = shadingUnlit
+			if lit {
+				settings.Shading = shadingLit
+			}
 		}
-		imgui.MenuItemBoolPtrV("Wireframe", "W", &s.Wireframe, true)
+		imgui.MenuItemBoolPtrV("Wireframe", "W", &settings.Wireframe, true)
 		imgui.Separator()
 		if imgui.MenuItemBoolV("Reset the view", "R", false, true) {
 			a.resetView()
 		}
-		if s != a.settings {
-			a.setSettings(s)
+		if settings != a.settings {
+			a.setSettings(settings)
 		}
 		imgui.EndMenu()
 	}
 
 	if imgui.BeginMenu("Simulation") {
-		s := a.settings
-		imgui.MenuItemBoolPtrV("Watch the simulation", "", &s.Watch, true)
-		if s != a.settings {
-			a.setSettings(s)
+		settings := a.settings
+		imgui.MenuItemBoolPtrV("Watch the simulation", "", &settings.Watch, true)
+		if settings != a.settings {
+			a.setSettings(settings)
 		}
 		if imgui.MenuItemBoolV("Replay the simulation", "", false, !state.Busy && a.world != nil) {
 			a.replay()

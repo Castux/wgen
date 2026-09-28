@@ -81,28 +81,28 @@ func (v *mapView) draw(viewWidth, viewHeight, pixelRatio float64) {
 	gl.ClearColor(mapBackground[0], mapBackground[1], mapBackground[2], 1)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-	c := &v.camera
+	camera := &v.camera
 	hasPaint := v.paint.id != 0 && v.paintOpacity > 0
-	if (v.image.id == 0 && !hasPaint) || c.width == 0 {
+	if (v.image.id == 0 && !hasPaint) || camera.width == 0 {
 		return
 	}
 
 	// Pixelated when zoomed in far past the image resolution
 	if v.image.id != 0 {
-		v.image.setSmooth(c.zoom*pixelRatio < float64(v.image.width)/c.width*2)
+		v.image.setSmooth(camera.zoom*pixelRatio < float64(v.image.width)/camera.width*2)
 	}
 	if hasPaint {
-		v.paint.setSmooth(c.zoom*pixelRatio < float64(v.paint.width)/c.width*2)
+		v.paint.setSmooth(camera.zoom*pixelRatio < float64(v.paint.width)/camera.width*2)
 	}
 
-	x0, y0 := c.offset.X(), c.offset.Y()
-	x1, y1 := x0+c.width*c.zoom, y0+c.height*c.zoom
+	x0, y0 := camera.offset.X(), camera.offset.Y()
+	x1, y1 := x0+camera.width*camera.zoom, y0+camera.height*camera.zoom
 	ndcX := func(x float64) float32 { return float32(2*x/viewWidth - 1) }
 	ndcY := func(y float64) float32 { return float32(1 - 2*y/viewHeight) }
 
-	v.program.use()
-	gl.Uniform4f(v.program.location("rect"), ndcX(x0), ndcY(y0), ndcX(x1), ndcY(y1))
 	p := v.program
+	p.use()
+	gl.Uniform4f(p.location("rect"), ndcX(x0), ndcY(y0), ndcX(x1), ndcY(y1))
 	p.setInt("hasImage", boolInt(v.image.id != 0))
 	p.setInt("image", 0)
 	gl.Uniform3f(p.location("background"), mapBackground[0], mapBackground[1], mapBackground[2])

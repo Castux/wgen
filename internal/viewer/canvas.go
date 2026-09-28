@@ -80,10 +80,9 @@ func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64, 
 		return rect
 	}
 
-	rnd := func(i uint64) float64 { return float64(hashSeed(seed, i)>>11) / (1 << 53) }
-	angle := rnd(1) * 2 * math.Pi
-	elongation := 1 + 0.5*rnd(2)
-	ox, oy := rnd(3)*1000, rnd(4)*1000
+	angle := unitRandom(seed, 1) * 2 * math.Pi
+	elongation := 1 + 0.5*unitRandom(seed, 2)
+	noiseX, noiseY := unitRandom(seed, 3)*1000, unitRandom(seed, 4)*1000
 	cos, sin := math.Cos(angle), math.Sin(angle)
 
 	reach := radius * 1.8
@@ -99,16 +98,16 @@ func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64, 
 	noise := func(x, y float64) float64 {
 		n := 0.0
 		for o, amplitude, scale := 0, 1.0, 1.2/radius; o < 3; o, amplitude, scale = o+1, amplitude/2, scale*2 {
-			n += amplitude * gen.Noise(seed+uint64(o), x*scale+ox, y*scale+oy)
+			n += amplitude * gen.Noise(seed+uint64(o), x*scale+noiseX, y*scale+noiseY)
 		}
 		return n
 	}
 	step := max(1, int(radius/32))
-	gw, gh := rect.Dx()/step+2, rect.Dy()/step+2
-	grid := make([]float64, gw*gh)
-	for j := range gh {
-		for i := range gw {
-			grid[j*gw+i] = noise(float64(rect.Min.X+i*step), float64(rect.Min.Y+j*step))
+	gridWidth, gridHeight := rect.Dx()/step+2, rect.Dy()/step+2
+	grid := make([]float64, gridWidth*gridHeight)
+	for j := range gridHeight {
+		for i := range gridWidth {
+			grid[j*gridWidth+i] = noise(float64(rect.Min.X+i*step), float64(rect.Min.Y+j*step))
 		}
 	}
 
@@ -122,8 +121,8 @@ func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64, 
 
 			i, fx := (x-rect.Min.X)/step, float64((x-rect.Min.X)%step)/float64(step)
 			n := geom.Lerp(
-				geom.Lerp(grid[j*gw+i], grid[j*gw+i+1], fx),
-				geom.Lerp(grid[(j+1)*gw+i], grid[(j+1)*gw+i+1], fx),
+				geom.Lerp(grid[j*gridWidth+i], grid[j*gridWidth+i+1], fx),
+				geom.Lerp(grid[(j+1)*gridWidth+i], grid[(j+1)*gridWidth+i+1], fx),
 				fy)
 			if d < 0.85+0.6*n {
 				paint(x, row)
@@ -132,6 +131,9 @@ func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64, 
 	}
 	return rect
 }
+
+// unitRandom is a pseudo random number in [0, 1), the i-th of a seed.
+func unitRandom(seed, i uint64) float64 { return float64(hashSeed(seed, i)>>11) / (1 << 53) }
 
 func hashSeed(seed, i uint64) uint64 {
 	h := seed*0x9e3779b97f4a7c15 + i*0xbf58476d1ce4e5b9
@@ -276,15 +278,14 @@ func (c *canvas) recolor(from, to config.Color) {
 func (c *canvas) island(land []config.Color, seed uint64) {
 	cx, cy := float64(c.width)/2, float64(c.height)/2
 	size := math.Min(float64(c.width), float64(c.height))
-	rnd := func(i uint64) float64 { return float64(hashSeed(seed, i)>>11) / (1 << 53) }
 
 	for k, color := range land {
 		// Each level: a few blobs around the center, smaller
 		radius := size * 0.22 * math.Pow(0.55, float64(k))
 		for i := range uint64(6) {
-			a := rnd(uint64(k)*100+i) * 2 * math.Pi
-			d := radius * 0.8 * rnd(uint64(k)*100+i+50)
-			x, y := cx+d*math.Cos(a)*float64(c.width)/size, cy+d*math.Sin(a)
+			angle := unitRandom(seed, uint64(k)*100+i) * 2 * math.Pi
+			distance := radius * 0.8 * unitRandom(seed, uint64(k)*100+i+50)
+			x, y := cx+distance*math.Cos(angle)*float64(c.width)/size, cy+distance*math.Sin(angle)
 			c.stamp(x, y, radius, color, seed+uint64(k)*10+i, brushNatural)
 		}
 	}

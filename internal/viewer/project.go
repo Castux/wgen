@@ -16,44 +16,40 @@ import (
 // its map image, next to it; a new project has no file until saved as.
 
 // Files the app opens
+const projectExt = ".json"
+
 var (
-	projectExts = []string{".json"}
+	projectExts = []string{projectExt}
 	imageExts   = []string{".png", ".jpg", ".jpeg"}
 	openExts    = append(append([]string{}, projectExts...), imageExts...)
 )
 
-// startup opens what the app was given, else the last project, else a new
-// one.
+// New maps, by default
+const (
+	defaultMapSize  = 2048 // pixels, width and height
+	defaultMapWidth = 1000 // km
+)
+
+// withExt replaces the extension of a path.
+func withExt(path, ext string) string { return strings.TrimSuffix(path, filepath.Ext(path)) + ext }
+
+func isProject(path string) bool { return strings.ToLower(filepath.Ext(path)) == projectExt }
+
+// startup opens the file the app was given, else the last project, else a
+// new map.
 func (a *app) startup(path string) {
 	switch {
-	case path != "" && strings.ToLower(filepath.Ext(path)) != ".json" && !isFile(strings.TrimSuffix(path, filepath.Ext(path))+".json"):
+	case path != "" && !isProject(path) && !isFile(withExt(path, projectExt)):
 		// An image to import: over a new map, if canceled
-		a.newProject(2048, 2048, 1000, true, false)
+		a.newDefaultProject()
 		a.open(path)
 	case path != "":
 		a.open(path)
 	case a.settings.LastProject != "" && isFile(a.settings.LastProject):
 		a.open(a.settings.LastProject)
 	default:
-		a.newProject(2048, 2048, 1000, true, false)
+		a.newDefaultProject()
 	}
-
-	// Development: a dialog opened, for screenshots (see WGEN_SCREENSHOT)
-	switch os.Getenv("WGEN_DIALOG") {
-	case "new":
-		a.openNewMap()
-	case "open":
-		a.openFile("Open a project or an image", "", "", false, openExts, a.open)
-	case "export":
-		a.openExport()
-	case "help":
-		a.dialogs.help = true
-	}
-}
-
-func isFile(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && !info.IsDir()
 }
 
 // unsaved tells whether the project has changes not saved.
@@ -63,10 +59,15 @@ func (a *app) unsaved() bool {
 
 // projectName is the name of the project, for the window title.
 func (a *app) projectName() string {
-	if p := a.session.ConfigPath(); p != "" {
-		return strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+	if path := a.session.ConfigPath(); path != "" {
+		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
 	return "Untitled"
+}
+
+// newDefaultProject starts a new map, of the default size, with an island.
+func (a *app) newDefaultProject() {
+	a.newProject(defaultMapSize, defaultMapSize, defaultMapWidth, true, false)
 }
 
 // newProject starts a new map of the given size, all sea or with an island,
@@ -84,15 +85,15 @@ func (a *app) newProject(width, height int, mapWidth float64, island, keepTerrai
 	for i := range pixels {
 		pixels[i] = sea
 	}
-	c := newCanvas(width, height, pixels)
+	newMap := newCanvas(width, height, pixels)
 	if island {
 		var land []config.Color
 		for _, t := range conf.Land() {
 			land = append(land, t.Color)
 		}
-		c.island(land, uint64(a.start.UnixNano()))
+		newMap.island(land, uint64(a.start.UnixNano()))
 	}
-	a.startProject(conf, c, "")
+	a.startProject(conf, newMap, "")
 }
 
 // startProject switches to a new project: a config and its map, not saved
@@ -100,8 +101,13 @@ func (a *app) newProject(width, height int, mapWidth float64, island, keepTerrai
 func (a *app) startProject(conf *config.Config, c *canvas, suggested string) {
 	a.setCanvas(c, true)
 	a.session.New(conf, a.canvasOutline())
-	a.editor.sent = nil
 	a.suggestedPath = suggested
+	a.projectChanged()
+}
+
+// projectChanged forgets the state of the previous project.
+func (a *app) projectChanged() {
+	a.editor.sent = nil
 	a.version = -1
 	a.fitMap = true
 	a.message = nil
@@ -111,16 +117,21 @@ func (a *app) startProject(conf *config.Config, c *canvas, suggested string) {
 // open opens a project file, or an image: with its project if there is one
 // next to it (same name, .json), else to import it.
 func (a *app) open(path string) {
-	ext := strings.ToLower(filepath.Ext(path))
-	if ext != ".json" {
-		if project := strings.TrimSuffix(path, filepath.Ext(path)) + ".json"; isFile(project) {
-			a.openProject(project)
-			return
-		}
+	project := withExt(path, projectExt)
+	switch {
+	case isProject(path):
+		a.openProject(path)
+	case isFile(project):
+		a.openProject(project)
+	default:
 		a.importImage(path)
-		return
 	}
-	a.openProject(path)
+}
+
+// openOther opens a file instead of the current project, after asking about
+// unsaved changes.
+func (a *app) openOther(path string) {
+	a.unsavedThen("open another map", func() { a.open(path) })
 }
 
 func (a *app) openProject(path string) {
@@ -130,12 +141,8 @@ func (a *app) openProject(path string) {
 	}
 	a.editor.canvas = nil
 	a.editor.dirty = false
-	a.editor.sent = nil
-	a.version = -1
-	a.fitMap = true
-	a.message = nil
-	a.paramsConf = nil
 	a.suggestedPath = ""
+	a.projectChanged()
 	a.rememberProject(path)
 }
 
@@ -160,9 +167,9 @@ func (a *app) rememberProject(path string) {
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	s := a.settings
-	s.LastProject = path
-	a.setSettings(s)
+	settings := a.settings
+	settings.LastProject = path
+	a.setSettings(settings)
 }
 
 // saveProject saves the project, then does then (if not nil). A new
@@ -185,10 +192,10 @@ func (a *app) saveProject(then func()) {
 
 // saveProjectAs asks where to save the project, and saves it there.
 func (a *app) saveProjectAs(then func()) {
-	dir, name := "", "map.json"
-	switch p := a.session.ConfigPath(); {
-	case p != "":
-		dir, name = filepath.Dir(p), filepath.Base(p)
+	dir, name := "", "map"+projectExt
+	switch path := a.session.ConfigPath(); {
+	case path != "":
+		dir, name = filepath.Dir(path), filepath.Base(path)
 	case a.suggestedPath != "":
 		dir, name = filepath.Dir(a.suggestedPath), filepath.Base(a.suggestedPath)
 	}
@@ -215,10 +222,10 @@ func (a *app) saved(path string) {
 func (a *app) openDialog() {
 	a.unsavedThen("open another map", func() {
 		dir := ""
-		if p := a.session.ConfigPath(); p != "" {
-			dir = filepath.Dir(p)
-		} else if p := a.settings.LastProject; p != "" {
-			dir = filepath.Dir(p)
+		if path := a.session.ConfigPath(); path != "" {
+			dir = filepath.Dir(path)
+		} else if path := a.settings.LastProject; path != "" {
+			dir = filepath.Dir(path)
 		}
 		a.openFile("Open a project or an image", dir, "", false, openExts, a.open)
 	})
@@ -229,13 +236,13 @@ func (a *app) newDialog() {
 }
 
 // exportFiles writes the chosen files in the background.
-func (a *app) exportFiles(base string, o export.Options) {
+func (a *app) exportFiles(base string, options export.Options) {
 	a.exporting.Store(true)
 	go func() {
 		defer a.wakeUp()
 		defer a.exporting.Store(false)
 
-		files, err := a.session.Export(base, o)
+		files, err := a.session.Export(base, options)
 		switch {
 		case err != nil:
 			a.results <- message{text: err.Error(), error: true}

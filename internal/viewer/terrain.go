@@ -14,10 +14,10 @@ import (
 // terrainView draws the mesh in 3D: terrain colors or elevation per vertex,
 // flat shading, and the overlay (rivers, contour lines, grid) as a texture.
 //
-// Lighting and colors reproduce what three.js did in the web viewer: lit is
-// its Lambert material with an ambient light of intensity 1 and a directional
-// light of intensity 3, unlit its basic material, computed in linear colors
-// and displayed in sRGB.
+// Lighting and colors are those of three.js: lit is its Lambert material
+// with an ambient light of intensity 1 and a directional light of intensity
+// 3, unlit its basic material, computed in linear colors and displayed in
+// sRGB.
 type terrainView struct {
 	program       *program
 	vao, vbo, ebo uint32
@@ -33,7 +33,7 @@ type terrainView struct {
 	orbit orbitCamera
 }
 
-// Background color: three.js took these as linear values.
+// Background color, as linear values (as three.js takes them).
 var skyColor = [3]float64{156.0 / 255, 196.0 / 255, 240.0 / 255}
 
 // Direction toward the light, as in render: from the top left.
@@ -49,7 +49,6 @@ uniform mat4 view;
 uniform mat4 projection;
 uniform vec2 size;
 uniform float lowest;
-uniform float span;
 uniform bool heightColors;
 uniform bool rainbow;
 uniform float highest;
@@ -179,25 +178,25 @@ func newTerrainView() (*terrainView, error) {
 }
 
 // setMesh uploads the mesh of a world. It returns whether the map size
-// changed (which resets the cameras).
+// changed: the camera needs resetting then.
 func (v *terrainView) setMesh(w *gen.World) bool {
-	m := w.Mesh
+	mesh := w.Mesh
 
-	vertices := make([]terrainVertex, len(m.Points))
-	for i, p := range m.Points {
+	vertices := make([]terrainVertex, len(mesh.Points))
+	for i, p := range mesh.Points {
 		z := w.Z[i]
 		if math.IsNaN(z) || math.IsInf(z, 0) {
 			z = 0
 		}
-		c := render.VertexColor(w, int32(i))
-		vertices[i] = terrainVertex{x: float32(p.X), y: float32(p.Y), z: float32(z), r: c[0], g: c[1], b: c[2]}
+		color := render.VertexColor(w, int32(i))
+		vertices[i] = terrainVertex{x: float32(p.X), y: float32(p.Y), z: float32(z), r: color[0], g: color[1], b: color[2]}
 		if w.IsWater(int32(i)) {
 			vertices[i].a = 255
 		}
 	}
 
-	indices := make([]uint32, 0, 3*len(m.Triangles))
-	for _, t := range m.Triangles {
+	indices := make([]uint32, 0, 3*len(mesh.Triangles))
+	for _, t := range mesh.Triangles {
 		indices = append(indices, uint32(t[0]), uint32(t[1]), uint32(t[2]))
 	}
 
@@ -220,14 +219,11 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 	if v.metersPerPixel <= 0 {
 		v.metersPerPixel = 1
 	}
-
-	if changed {
-		v.resetCameras()
-	}
 	return changed
 }
 
-func (v *terrainView) resetCameras() {
+// resetCamera frames the whole map.
+func (v *terrainView) resetCamera() {
 	if v.width == 0 {
 		return
 	}
@@ -243,7 +239,7 @@ func (v *terrainView) overlayScale() float64 {
 	return math.Min(4, math.Min(8192, float64(maxSize))/2/extent)
 }
 
-func (v *terrainView) draw(s *Settings, aspect float64) {
+func (v *terrainView) draw(settings *Settings, aspect float64) {
 	gl.ClearColor(float32(srgbEncode(skyColor[0])), float32(srgbEncode(skyColor[1])), float32(srgbEncode(skyColor[2])), 1)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
@@ -258,7 +254,7 @@ func (v *terrainView) draw(s *Settings, aspect float64) {
 	gl.Enable(gl.CULL_FACE)
 	gl.CullFace(gl.BACK)
 	gl.FrontFace(gl.CCW)
-	if s.Wireframe {
+	if settings.Wireframe {
 		gl.PolygonMode(gl.FRONT_AND_BACK, gl.LINE)
 	}
 
@@ -268,16 +264,11 @@ func (v *terrainView) draw(s *Settings, aspect float64) {
 	p.setMat4("projection", projection)
 	p.setVec2("size", v.width, v.height)
 	p.setFloat("lowest", v.lowest)
-	span := v.highest - v.lowest
-	if span == 0 {
-		span = 1
-	}
-	p.setFloat("span", span)
-	p.setInt("heightColors", boolInt(s.Color == "height"))
-	p.setInt("rainbow", boolInt(s.HeightScale == render.ScaleRainbow))
+	p.setInt("heightColors", boolInt(settings.Color == colorHeight))
+	p.setInt("rainbow", boolInt(settings.HeightScale == render.ScaleRainbow))
 	p.setFloat("highest", v.highest)
-	p.setFloat("zScale", s.VerticalScale/v.metersPerPixel)
-	p.setInt("lit", boolInt(s.Shading == "lit"))
+	p.setFloat("zScale", settings.VerticalScale/v.metersPerPixel)
+	p.setInt("lit", boolInt(settings.Shading == shadingLit))
 	p.setVec3("lightDirection", view.Mat3().Mul3x1(lightDirection).Normalize())
 	p.setInt("hasOverlay", boolInt(v.hasOverlay))
 	p.setInt("overlay", 0)

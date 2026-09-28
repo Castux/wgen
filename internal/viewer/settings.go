@@ -43,27 +43,48 @@ type Settings struct {
 	Export      export.Options `json:"export"`
 }
 
-var (
-	views       = []string{"orbit", "map"}
-	colors      = []string{"terrain", "height"}
-	shadings    = []string{"lit", "unlit"}
-	heightScale = []string{render.ScaleRainbow, render.ScaleGray}
-	brushes     = []string{brushNatural, brushRound, brushSquare}
-)
-
-// Brush shapes
+// Values of the settings, as saved
 const (
+	// Views
+	viewOrbit = "orbit"
+	viewMap   = "map"
+
+	// Colors: the render bases of the same names
+	colorTerrain = string(render.BaseTerrain)
+	colorHeight  = string(render.BaseHeight)
+
+	// Shadings
+	shadingLit   = "lit"
+	shadingUnlit = "unlit"
+
+	// Brush shapes
 	brushNatural = "natural"
 	brushRound   = "round"
 	brushSquare  = "square"
 )
 
+var (
+	views        = []string{viewOrbit, viewMap}
+	colorModes   = []string{colorTerrain, colorHeight}
+	shadings     = []string{shadingLit, shadingUnlit}
+	heightScales = []string{render.ScaleRainbow, render.ScaleGray}
+	brushes      = []string{brushNatural, brushRound, brushSquare}
+)
+
+// Brush radius, in map pixels: its limits, and the factor of the [ and ]
+// shortcuts
+const (
+	minBrushRadius  = 1
+	maxBrushRadius  = 500
+	brushRadiusStep = 1.25
+)
+
 var defaultSettings = Settings{
-	View:        "orbit",
-	Color:       "terrain",
+	View:        viewOrbit,
+	Color:       colorTerrain,
 	HeightScale: render.ScaleRainbow,
 	Legend:      true,
-	Shading:     "lit",
+	Shading:     shadingLit,
 	RiverPower:  0.5,
 	RiverWidth:  10,
 
@@ -91,42 +112,42 @@ func settingsDir() string {
 // loadSettings reads the saved settings. Missing or invalid values get their
 // default.
 func loadSettings(path string) Settings {
-	s := defaultSettings
+	settings := defaultSettings
 	if data, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(data, &s); err != nil {
+		if err := json.Unmarshal(data, &settings); err != nil {
 			slog.Warn("ignoring broken viewer settings", "path", path, "err", err)
 			return defaultSettings
 		}
 	}
 
-	valid := func(value *string, values []string, def string) {
+	valid := func(value *string, values []string, fallback string) {
 		if !slices.Contains(values, *value) {
-			*value = def
+			*value = fallback
 		}
 	}
-	valid(&s.View, views, defaultSettings.View)
-	valid(&s.Color, colors, defaultSettings.Color)
-	valid(&s.Shading, shadings, defaultSettings.Shading)
-	valid(&s.HeightScale, heightScale, defaultSettings.HeightScale)
-	valid(&s.Brush, brushes, defaultSettings.Brush)
-	positive := func(value *float64, def float64) {
+	valid(&settings.View, views, defaultSettings.View)
+	valid(&settings.Color, colorModes, defaultSettings.Color)
+	valid(&settings.Shading, shadings, defaultSettings.Shading)
+	valid(&settings.HeightScale, heightScales, defaultSettings.HeightScale)
+	valid(&settings.Brush, brushes, defaultSettings.Brush)
+	positive := func(value *float64, fallback float64) {
 		if !(*value > 0) {
-			*value = def
+			*value = fallback
 		}
 	}
-	positive(&s.VerticalScale, defaultSettings.VerticalScale)
-	positive(&s.WatchSteps, defaultSettings.WatchSteps)
-	positive(&s.BrushRadius, defaultSettings.BrushRadius)
-	if !(s.PaintOpacity >= 0 && s.PaintOpacity <= 1) {
-		s.PaintOpacity = defaultSettings.PaintOpacity
+	positive(&settings.VerticalScale, defaultSettings.VerticalScale)
+	positive(&settings.WatchSteps, defaultSettings.WatchSteps)
+	positive(&settings.BrushRadius, defaultSettings.BrushRadius)
+	if !(settings.PaintOpacity >= 0 && settings.PaintOpacity <= 1) {
+		settings.PaintOpacity = defaultSettings.PaintOpacity
 	}
-	positive(&s.Export.TextureScale, 1)
+	positive(&settings.Export.TextureScale, 1)
 
-	return s
+	return settings
 }
 
-func saveSettings(path string, s Settings) {
-	data, _ := json.MarshalIndent(s, "", "\t")
+func saveSettings(path string, settings Settings) {
+	data, _ := json.MarshalIndent(settings, "", "\t")
 	err := os.MkdirAll(filepath.Dir(path), 0o755)
 	if err == nil {
 		err = os.WriteFile(path, data, 0o644)
@@ -151,4 +172,48 @@ func (s *Settings) overlayOptions() render.Options {
 		Grid:        s.Grid,
 		HeightScale: s.HeightScale,
 	}
+}
+
+// painting tells whether the map is being painted: the left button paints
+// in the map view.
+func (s *Settings) painting() bool { return s.Editing && s.View == viewMap }
+
+// setEditing turns painting on or off. Painting shows the map, where it
+// happens.
+func (s *Settings) setEditing(editing bool) {
+	s.Editing = editing
+	if editing {
+		s.View = viewMap
+	}
+}
+
+// initSettings loads the settings saved in dir, if any.
+func (a *app) initSettings(dir string) {
+	if dir == "" {
+		a.settings = defaultSettings
+		return
+	}
+	a.settingsPath = filepath.Join(dir, "viewer.json")
+	a.settings = loadSettings(a.settingsPath)
+}
+
+// setSettings changes the settings, and saves them.
+func (a *app) setSettings(settings Settings) {
+	watch := settings.Watch != a.settings.Watch || settings.WatchSteps != a.settings.WatchSteps
+	a.settings = settings
+	if watch {
+		a.applyWatch()
+	}
+	if a.settingsPath != "" {
+		saveSettings(a.settingsPath, settings)
+	}
+}
+
+// applyWatch tells the engine whether to show the simulation as it runs.
+func (a *app) applyWatch() {
+	steps := 0
+	if a.settings.Watch {
+		steps = max(1, int(a.settings.WatchSteps))
+	}
+	a.session.Engine.SetWatch(steps)
 }

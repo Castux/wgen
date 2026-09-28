@@ -64,39 +64,38 @@ func (a *app) drawDisplay() {
 		return
 	}
 
-	s := a.settings
+	settings := a.settings
 	changed := false
-	edit := func(c bool) { changed = changed || c }
+	editCombo := func(label string, value *string, options []string) {
+		var edited bool
+		*value, edited = combo(label, *value, options)
+		changed = changed || edited
+	}
+	editNumber := func(key, label string, value *float64, lo, hi, step float64, tooltip string) {
+		var edited bool
+		*value, edited = a.number(key, label, *value, lo, hi, step, false, false, tooltip)
+		changed = changed || edited
+	}
 
-	var c bool
-	s.View, c = combo("View (v)", s.View, views)
-	edit(c)
-	s.Color, c = combo("Colors (shift)", s.Color, colors)
-	edit(c)
-	s.HeightScale, c = combo("Height scale", s.HeightScale, heightScale)
-	edit(c)
-	edit(imgui.Checkbox("Height legend", &s.Legend))
-	s.Shading, c = combo("Shading (q)", s.Shading, shadings)
-	edit(c)
-	edit(imgui.Checkbox("Wireframe (w)", &s.Wireframe))
-	s.VerticalScale, c = a.number("view.verticalScale", "Vertical exaggeration", s.VerticalScale, 0.1, 100, 0.5, false, false,
+	editCombo("View (v)", &settings.View, views)
+	editCombo("Colors (shift)", &settings.Color, colorModes)
+	editCombo("Height scale", &settings.HeightScale, heightScales)
+	changed = imgui.Checkbox("Height legend", &settings.Legend) || changed
+	editCombo("Shading (q)", &settings.Shading, shadings)
+	changed = imgui.Checkbox("Wireframe (w)", &settings.Wireframe) || changed
+	editNumber("view.verticalScale", "Vertical exaggeration", &settings.VerticalScale, 0.1, 100, 0.5,
 		"Of the 3D view: at 1, mountains have their true proportions")
-	edit(c)
 
 	imgui.SeparatorText("Overlay")
-	s.RiverWidth, c = a.number("view.riverWidth", "River width (px)", s.RiverWidth, 0, 100, 0.1, false, false,
+	editNumber("view.riverWidth", "River width (px)", &settings.RiverWidth, 0, 100, 0.1,
 		"Width of the largest river, in map pixels (0: no rivers)")
-	edit(c)
-	s.RiverPower, c = a.number("view.riverPower", "River width growth", s.RiverPower, 0, 1, 0.01, false, false,
+	editNumber("view.riverPower", "River width growth", &settings.RiverPower, 0, 1, 0.01,
 		"How much wider big rivers are than small ones")
-	edit(c)
-	s.Contours, c = a.number("view.contours", "Contour interval (m)", s.Contours, 0, 10000, 1, false, false, "0: no contour lines")
-	edit(c)
-	s.Grid, c = a.number("view.grid", "Grid size (px)", s.Grid, 0, 10000, 10, false, false, "0: no grid")
-	edit(c)
+	editNumber("view.contours", "Contour interval (m)", &settings.Contours, 0, 10000, 1, "0: no contour lines")
+	editNumber("view.grid", "Grid size (px)", &settings.Grid, 0, 10000, 10, "0: no grid")
 
 	if changed {
-		a.setSettings(s)
+		a.setSettings(settings)
 	}
 }
 
@@ -130,13 +129,13 @@ func (a *app) drawParams(conf *config.Config, state engine.State) {
 
 // drawWatch is about watching the simulation.
 func (a *app) drawWatch(state engine.State) {
-	s := a.settings
-	changed := imgui.Checkbox("Watch the simulation", &s.Watch)
+	settings := a.settings
+	changed := imgui.Checkbox("Watch the simulation", &settings.Watch)
 	imgui.SetItemTooltip("Show the landscape as it is simulated, instead of the result only")
-	var c bool
-	s.WatchSteps, c = a.number("simulation.watchSteps", "Time steps per frame", s.WatchSteps, 1, 1000, 1, true, false, "")
-	if changed || c {
-		a.setSettings(s)
+	var edited bool
+	settings.WatchSteps, edited = a.number("simulation.watchSteps", "Time steps per frame", settings.WatchSteps, 1, 1000, 1, true, false, "")
+	if changed || edited {
+		a.setSettings(settings)
 	}
 
 	imgui.BeginDisabledV(state.Busy)
@@ -149,9 +148,9 @@ func (a *app) drawWatch(state engine.State) {
 
 func (a *app) replay() {
 	if !a.settings.Watch {
-		s := a.settings
-		s.Watch = true
-		a.setSettings(s)
+		settings := a.settings
+		settings.Watch = true
+		a.setSettings(settings)
 	}
 	a.session.Engine.Rerun()
 }
@@ -176,48 +175,47 @@ func (a *app) patch(path []string, value any) {
 
 // drawLegend shows what colors are what elevations, with height colors.
 func (a *app) drawLegend() {
-	w := a.world
-	if !a.settings.Legend || a.settings.Color != "height" || w == nil {
+	world := a.world
+	if !a.settings.Legend || a.settings.Color != colorHeight || world == nil {
 		return
 	}
 
 	// Top left, under the menu
 	imgui.SetNextWindowPosV(imgui.NewVec2(8, a.menuHeight+8), imgui.CondAlways, imgui.NewVec2(0, 0))
 	imgui.SetNextWindowBgAlpha(0.7)
-	flags := imgui.WindowFlagsNoDecoration | imgui.WindowFlagsAlwaysAutoResize | imgui.WindowFlagsNoSavedSettings |
-		imgui.WindowFlagsNoFocusOnAppearing | imgui.WindowFlagsNoNav | imgui.WindowFlagsNoInputs
 
-	if imgui.BeginV("##legend", nil, flags) {
-		barWidth, barHeight := 18*a.uiScale, 180*a.uiScale
-		draw := imgui.WindowDrawList()
-
-		bar := func(title string, low, high float64, color func(t float64) [3]float64) {
-			imgui.TextUnformatted(title)
-			origin := imgui.CursorScreenPos()
-			const steps = 48
-			for i := range steps {
-				t0, t1 := float64(i)/steps, float64(i+1)/steps
-				c := color((t0 + t1) / 2)
-				col := imgui.ColorConvertFloat4ToU32(imgui.NewVec4(float32(c[0]), float32(c[1]), float32(c[2]), 1))
-				// Highest at the top
-				y0 := origin.Y + barHeight*float32(1-t1)
-				y1 := origin.Y + barHeight*float32(1-t0)
-				draw.AddRectFilled(imgui.NewVec2(origin.X, y0), imgui.NewVec2(origin.X+barWidth, y1), col)
-			}
-			for i := range 5 {
-				t := float64(i) / 4
-				y := origin.Y + barHeight*float32(1-t) - imgui.TextLineHeight()/2
-				draw.AddTextVec2(imgui.NewVec2(origin.X+barWidth+6*a.uiScale, y), 0xffeeeeee, formatMeters(low+(high-low)*t))
-			}
-			imgui.Dummy(imgui.NewVec2(barWidth+70*a.uiScale, barHeight))
-		}
-
+	if imgui.BeginV("##legend", nil, overlayWindowFlags) {
 		scale := a.settings.HeightScale
-		bar("Land", 0, w.Highest, func(t float64) [3]float64 { return render.HeightColor(scale, t) })
-		if w.Lowest < 0 {
+		a.drawLegendBar("Land", 0, world.Highest, func(t float64) [3]float64 { return render.HeightColor(scale, t) })
+		if world.Lowest < 0 {
 			imgui.Spacing()
-			bar("Water", w.Lowest, 0, render.WaterColor)
+			a.drawLegendBar("Water", world.Lowest, 0, render.WaterColor)
 		}
 	}
 	imgui.End()
+}
+
+// drawLegendBar is a color scale from low to high, the highest at the top,
+// with a few elevations.
+func (a *app) drawLegendBar(title string, low, high float64, color func(t float64) [3]float64) {
+	barWidth, barHeight := 18*a.uiScale, 180*a.uiScale
+	drawList := imgui.WindowDrawList()
+
+	imgui.TextUnformatted(title)
+	origin := imgui.CursorScreenPos()
+	const steps = 48
+	for i := range steps {
+		t0, t1 := float64(i)/steps, float64(i+1)/steps
+		c := color((t0 + t1) / 2)
+		packed := imgui.ColorConvertFloat4ToU32(imgui.NewVec4(float32(c[0]), float32(c[1]), float32(c[2]), 1))
+		y0 := origin.Y + barHeight*float32(1-t1)
+		y1 := origin.Y + barHeight*float32(1-t0)
+		drawList.AddRectFilled(imgui.NewVec2(origin.X, y0), imgui.NewVec2(origin.X+barWidth, y1), packed)
+	}
+	for i := range 5 {
+		t := float64(i) / 4
+		y := origin.Y + barHeight*float32(1-t) - imgui.TextLineHeight()/2
+		drawList.AddTextVec2(imgui.NewVec2(origin.X+barWidth+6*a.uiScale, y), 0xffeeeeee, formatMeters(low+(high-low)*t))
+	}
+	imgui.Dummy(imgui.NewVec2(barWidth+70*a.uiScale, barHeight))
 }

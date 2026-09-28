@@ -4,9 +4,34 @@ import (
 	"math"
 
 	"github.com/AllenDang/cimgui-go/imgui"
+
+	"github.com/Castux/wgen/internal/config"
 )
 
 // Widgets shared by the panel and the dialogs.
+
+// widgetEdit is the value of the widget being edited, kept between frames,
+// as ImGui only writes it back when it changes, and edits are committed
+// when done.
+type widgetEdit struct {
+	key   string // of the widget, empty if none
+	value float64
+	text  string
+	color [3]float32
+}
+
+// track records whether the widget of key, just drawn, is being edited, and
+// returns it. The caller then stores its value.
+func (w *widgetEdit) track(key string) bool {
+	if imgui.IsItemActive() {
+		w.key = key
+		return true
+	}
+	if w.key == key {
+		w.key = ""
+	}
+	return false
+}
 
 // number edits a value in a field, committed when done (Enter pressed or
 // the field left): the new value is returned, with true, then. Values are
@@ -27,36 +52,27 @@ func (a *app) number(key, label string, value, lo, hi, step float64, integer, sl
 		}
 		return v
 	}
-
-	// The value being edited is kept between frames, as ImGui only writes
-	// it back when it changes
-	edited := func(id string, v float64) float64 {
-		if a.editKey == key+id {
-			return a.editValue
+	edited := func(key string, v float64) float64 {
+		if a.widget.key == key {
+			return a.widget.value
 		}
 		return v
-	}
-	track := func(id string, v float64) {
-		if imgui.IsItemActive() {
-			a.editKey, a.editValue = key+id, v
-		} else if a.editKey == key+id {
-			a.editKey = ""
-		}
 	}
 
 	shown := value
 	fieldWidth := width
 	if slider {
+		sliderKey := key + "/slider"
 		fieldWidth = 70 * a.uiScale
-		s := float32(edited("/slider", value))
+		sliderValue := float32(edited(sliderKey, value))
 		imgui.SetNextItemWidth(max(width-fieldWidth-spacing, 1))
-		imgui.SliderFloatV("##slider", &s, float32(lo), float32(hi), "", imgui.SliderFlagsNoInput)
-		track("/slider", float64(s))
-		if imgui.IsItemDeactivatedAfterEdit() {
-			committed, done = clamp(roundToStep(float64(s), step)), true
+		imgui.SliderFloatV("##slider", &sliderValue, float32(lo), float32(hi), "", imgui.SliderFlagsNoInput)
+		if a.widget.track(sliderKey) {
+			a.widget.value = float64(sliderValue)
+			shown = roundToStep(float64(sliderValue), step)
 		}
-		if a.editKey == key+"/slider" {
-			shown = roundToStep(float64(s), step)
+		if imgui.IsItemDeactivatedAfterEdit() {
+			committed, done = clamp(roundToStep(float64(sliderValue), step)), true
 		}
 		imgui.SameLineV(0, spacing)
 	}
@@ -65,12 +81,15 @@ func (a *app) number(key, label string, value, lo, hi, step float64, integer, sl
 	if integer {
 		format = "%.0f"
 	}
-	f := edited("/field", shown)
+	fieldKey := key + "/field"
+	fieldValue := edited(fieldKey, shown)
 	imgui.SetNextItemWidth(fieldWidth)
-	imgui.InputDoubleV("##field", &f, 0, 0, format, imgui.InputTextFlagsAutoSelectAll)
-	track("/field", f)
+	imgui.InputDoubleV("##field", &fieldValue, 0, 0, format, imgui.InputTextFlagsAutoSelectAll)
+	if a.widget.track(fieldKey) {
+		a.widget.value = fieldValue
+	}
 	if imgui.IsItemDeactivatedAfterEdit() {
-		committed, done = clamp(f), true
+		committed, done = clamp(fieldValue), true
 	}
 
 	imgui.SameLineV(0, spacing)
@@ -88,17 +107,14 @@ func (a *app) text(key, label string, value string) (string, bool) {
 	imgui.PushIDStr(key)
 	defer imgui.PopID()
 
-	if a.editKey == key {
-		value = a.editText
+	if a.widget.key == key {
+		value = a.widget.text
 	}
-	v := value
-	imgui.InputTextWithHint(label, "", &v, imgui.InputTextFlagsNone, nil)
-	if imgui.IsItemActive() {
-		a.editKey, a.editText = key, v
-	} else if a.editKey == key {
-		a.editKey = ""
+	imgui.InputTextWithHint(label, "", &value, imgui.InputTextFlagsNone, nil)
+	if a.widget.track(key) {
+		a.widget.text = value
 	}
-	return v, imgui.IsItemDeactivatedAfterEdit()
+	return value, imgui.IsItemDeactivatedAfterEdit()
 }
 
 // decimals is the number of decimals worth showing for values rounded to
@@ -124,9 +140,9 @@ func roundToStep(v, step float64) float64 {
 func combo(label, value string, options []string) (string, bool) {
 	changed := false
 	if imgui.BeginCombo(label, value) {
-		for _, o := range options {
-			if imgui.SelectableBoolV(o, o == value, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && o != value {
-				value, changed = o, true
+		for _, option := range options {
+			if imgui.SelectableBoolV(option, option == value, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && option != value {
+				value, changed = option, true
 			}
 		}
 		imgui.EndCombo()
@@ -155,6 +171,16 @@ func keepInside(display imgui.Vec2) {
 
 func fullWidth() imgui.Vec2 { return imgui.NewVec2(-math.SmallestNonzeroFloat32, 0) }
 
-func colorVec(c [3]uint8) imgui.Vec4 {
+func colorVec(c config.Color) imgui.Vec4 {
 	return imgui.NewVec4(float32(c[0])/255, float32(c[1])/255, float32(c[2])/255, 1)
+}
+
+// colorFloats converts a color to the components of ImGui's color widgets.
+func colorFloats(c config.Color) [3]float32 {
+	return [3]float32{float32(c[0]) / 255, float32(c[1]) / 255, float32(c[2]) / 255}
+}
+
+// colorBytes converts the components of ImGui's color widgets to a color.
+func colorBytes(c [3]float32) config.Color {
+	return config.Color{uint8(math.Round(float64(c[0]) * 255)), uint8(math.Round(float64(c[1]) * 255)), uint8(math.Round(float64(c[2]) * 255))}
 }

@@ -51,6 +51,19 @@ func (a *app) sendCanvas() {
 	a.session.SetOutline(&engine.Outline{Width: c.width, Height: c.height, Pixels: a.editor.sent})
 }
 
+// recolorCanvas replaces a color in the edited map, a terrain's that
+// changed. It returns whether there is a map.
+func (a *app) recolorCanvas(from, to config.Color) bool {
+	c := a.editor.canvas
+	if c == nil {
+		return false
+	}
+	c.recolor(from, to)
+	a.editor.stale = true
+	a.editor.dirty = true
+	return true
+}
+
 // canvasOutline is the edited map, for saving.
 func (a *app) canvasOutline() *engine.Outline {
 	c := a.editor.canvas
@@ -109,11 +122,11 @@ func (a *app) canvasPosition(x, y float64) (float64, float64) {
 func (a *app) paintInput() bool {
 	ed := &a.editor
 	conf := a.session.Engine.Config()
-	if !a.settings.Editing || a.settings.View != "map" || ed.canvas == nil || conf == nil || a.mapView.camera.width == 0 {
+	if !a.settings.painting() || ed.canvas == nil || conf == nil || a.mapView.camera.width == 0 {
 		return false
 	}
-	t := a.brushTerrain(conf)
-	if t == nil {
+	brush := a.brushTerrain(conf)
+	if brush == nil {
 		return false
 	}
 
@@ -124,35 +137,40 @@ func (a *app) paintInput() bool {
 	shape := a.settings.Brush
 	next := func() uint64 { ed.seed++; return ed.seed }
 
-	c := ed.canvas
-	c.protect = a.shoreLock(conf, t)
+	canvas := ed.canvas
+	canvas.protect = a.shoreLock(conf, brush)
 	switch {
-	case c.stroke == nil && imgui.IsMouseClickedBool(imgui.MouseButtonLeft) && !io.WantCaptureMouse():
-		ed.changed = ed.changed.Union(c.beginStroke(x, y, radius, t.Color, next(), shape))
-	case c.stroke != nil && imgui.IsMouseDown(imgui.MouseButtonLeft):
-		ed.changed = ed.changed.Union(c.continueStroke(x, y, radius, t.Color, next))
-	case c.stroke != nil:
-		if c.endStroke() {
+	case canvas.stroke == nil && imgui.IsMouseClickedBool(imgui.MouseButtonLeft) && !io.WantCaptureMouse():
+		ed.changed = ed.changed.Union(canvas.beginStroke(x, y, radius, brush.Color, next(), shape))
+	case canvas.stroke != nil && imgui.IsMouseDown(imgui.MouseButtonLeft):
+		ed.changed = ed.changed.Union(canvas.continueStroke(x, y, radius, brush.Color, next))
+	case canvas.stroke != nil:
+		if canvas.endStroke() {
 			ed.dirty = true
 			a.sendCanvas()
 		}
 	}
 
-	// Brush outline, in the brush's color
-	if !io.WantCaptureMouse() || c.stroke != nil {
-		r := float32(radius * a.mapView.camera.zoom * a.mapView.camera.width / float64(c.width))
-		col := imgui.ColorConvertFloat4ToU32(colorVec(t.Color))
-		dl := imgui.ForegroundDrawListViewportPtr()
-		if shape == brushSquare {
-			p0, p1 := imgui.NewVec2(mouse.X-r, mouse.Y-r), imgui.NewVec2(mouse.X+r, mouse.Y+r)
-			dl.AddRectV(p0, p1, 0xff000000, 0, 0, 3)
-			dl.AddRectV(p0, p1, col, 0, 0, 1.5)
-		} else {
-			dl.AddCircleV(mouse, r, 0xff000000, 48, 3)
-			dl.AddCircleV(mouse, r, col, 48, 1.5)
-		}
+	if !io.WantCaptureMouse() || canvas.stroke != nil {
+		screenRadius := float32(radius * a.mapView.camera.zoom * a.mapView.camera.width / float64(canvas.width))
+		drawBrushOutline(mouse, screenRadius, shape, brush.Color)
 	}
-	return c.stroke != nil
+	return canvas.stroke != nil
+}
+
+// drawBrushOutline shows the brush around the mouse, in its color over a
+// black outline.
+func drawBrushOutline(mouse imgui.Vec2, radius float32, shape string, color config.Color) {
+	packed := imgui.ColorConvertFloat4ToU32(colorVec(color))
+	drawList := imgui.ForegroundDrawListViewportPtr()
+	if shape == brushSquare {
+		topLeft, bottomRight := imgui.NewVec2(mouse.X-radius, mouse.Y-radius), imgui.NewVec2(mouse.X+radius, mouse.Y+radius)
+		drawList.AddRectV(topLeft, bottomRight, 0xff000000, 0, 0, 3)
+		drawList.AddRectV(topLeft, bottomRight, packed, 0, 0, 1.5)
+	} else {
+		drawList.AddCircleV(mouse, radius, 0xff000000, 48, 3)
+		drawList.AddCircleV(mouse, radius, packed, 48, 1.5)
+	}
 }
 
 // shoreLock returns the pixels a brush must not paint with the shoreline

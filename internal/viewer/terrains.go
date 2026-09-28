@@ -29,10 +29,10 @@ func (a *app) drawTerrains(conf *config.Config) {
 		}
 		imgui.SameLine()
 		label := t.Name
-		switch {
-		case t.Kind == config.Sea:
+		switch t.Kind {
+		case config.Sea:
 			label += "  (sea level)"
-		case t.Kind == config.Lake:
+		case config.Lake:
 			label += "  (lakes)"
 		default:
 			label += "  " + formatMeters(t.Height)
@@ -64,15 +64,17 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 	}
 
 	// Color: edited live in the widget, applied when done
-	col := a.terrainColorEdit(key, t.Color)
-	imgui.ColorEdit3V("Color##"+key, &col, imgui.ColorEditFlagsNoInputs|imgui.ColorEditFlagsPickerHueWheel)
-	if imgui.IsItemActive() {
-		a.editKey, a.editColor = key+"color", col
-	} else if a.editKey == key+"color" {
-		a.editKey = ""
+	colorKey := key + "color"
+	color := colorFloats(t.Color)
+	if a.widget.key == colorKey {
+		color = a.widget.color
+	}
+	imgui.ColorEdit3V("Color##"+key, &color, imgui.ColorEditFlagsNoInputs|imgui.ColorEditFlagsPickerHueWheel)
+	if a.widget.track(colorKey) {
+		a.widget.color = color
 	}
 	if imgui.IsItemDeactivatedAfterEdit() {
-		a.recolorTerrain(conf, t, config.Color{uint8(math.Round(float64(col[0]) * 255)), uint8(math.Round(float64(col[1]) * 255)), uint8(math.Round(float64(col[2]) * 255))})
+		a.recolorTerrain(conf, t, colorBytes(color))
 	}
 
 	if t.Kind == config.Land {
@@ -101,23 +103,14 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 	}
 }
 
-// terrainColorEdit is the color shown in a terrain's color widget: being
-// edited, or the terrain's.
-func (a *app) terrainColorEdit(key string, c config.Color) [3]float32 {
-	if a.editKey == key+"color" {
-		return a.editColor
-	}
-	return [3]float32{float32(c[0]) / 255, float32(c[1]) / 255, float32(c[2]) / 255}
-}
-
 func formatMeters(z float64) string { return fmt.Sprintf("%.0f m", math.Round(z)) }
 
 // editConfig applies a change to a copy of the config, and regenerates with
 // it. The error is shown if the change makes it invalid.
 func (a *app) editConfig(conf *config.Config, f func(*config.Config)) bool {
-	n := conf.Clone()
-	f(n)
-	if err := a.session.SetConfig(n); err != nil {
+	edited := conf.Clone()
+	f(edited)
+	if err := a.session.SetConfig(edited); err != nil {
 		a.message = &message{text: err.Error(), error: true}
 		return false
 	}
@@ -157,10 +150,7 @@ func (a *app) recolorTerrain(conf *config.Config, t *config.Terrain, color confi
 	if !a.editConfig(conf, func(c *config.Config) { c.Terrain(t.Name).Color = color }) {
 		return
 	}
-	if c := a.editor.canvas; c != nil {
-		c.recolor(old, color)
-		a.editor.stale = true
-		a.editor.dirty = true
+	if a.recolorCanvas(old, color) {
 		a.sendCanvas()
 	}
 }
@@ -172,7 +162,8 @@ func (a *app) addTerrain(conf *config.Config) {
 		name = fmt.Sprintf("terrain %d", i)
 	}
 	// A color of its own, away from the others
-	color := conf.FreeColor(config.Color{uint8(40 + 53*len(conf.Terrains)%200), uint8(90 + 97*len(conf.Terrains)%150), uint8(60 + 31*len(conf.Terrains)%180)})
+	n := len(conf.Terrains)
+	color := conf.FreeColor(config.Color{uint8(40 + 53*n%200), uint8(90 + 97*n%150), uint8(60 + 31*n%180)})
 	if a.editConfig(conf, func(c *config.Config) {
 		c.Terrains = append(c.Terrains, &config.Terrain{Name: name, Color: color, Height: 1000, Erodibility: 1, Detail: config.DetailAuto})
 	}) {
@@ -195,11 +186,7 @@ func (a *app) removeTerrain(conf *config.Config, t *config.Terrain) {
 	}
 
 	// Repainted first: the map must not have the removed color
-	if c := a.editor.canvas; c != nil {
-		c.recolor(t.Color, replacement.Color)
-		a.editor.stale = true
-		a.editor.dirty = true
-	}
+	a.recolorCanvas(t.Color, replacement.Color)
 	name := t.Name
 	if a.editConfig(conf, func(c *config.Config) {
 		for i, other := range c.Terrains {
@@ -220,15 +207,11 @@ func (a *app) drawBrush() {
 		return
 	}
 
-	s := a.settings
+	settings := a.settings
 	changed := false
-	edit := func(c bool) { changed = changed || c }
 
-	if editing := s.Editing; imgui.Checkbox("Paint the map (e)", &editing) {
-		s.Editing = editing
-		if editing {
-			s.View = "map"
-		}
+	if editing := settings.Editing; imgui.Checkbox("Paint the map (e)", &editing) {
+		settings.setEditing(editing)
 		changed = true
 	}
 	imgui.SetItemTooltip("In the map view: the left button paints the selected terrain, the others pan")
@@ -237,8 +220,8 @@ func (a *app) drawBrush() {
 		if i > 0 {
 			imgui.SameLine()
 		}
-		if imgui.RadioButtonBool(shape, s.Brush == shape) {
-			s.Brush = shape
+		if imgui.RadioButtonBool(shape, settings.Brush == shape) {
+			settings.Brush = shape
 			changed = true
 		}
 	}
@@ -246,17 +229,18 @@ func (a *app) drawBrush() {
 	world, _ := a.session.Engine.Snapshot()
 	sizeLabel := "Size (px)"
 	if world != nil && world.MetersPerPixel > 0 {
-		sizeLabel = fmt.Sprintf("Size (px, %.0f km)", s.BrushRadius*world.MetersPerPixel/1000)
+		sizeLabel = fmt.Sprintf("Size (px, %.0f km)", settings.BrushRadius*world.MetersPerPixel/1000)
 	}
-	var c bool
-	s.BrushRadius, c = a.number("brush.radius", sizeLabel, s.BrushRadius, 1, 500, 1, false, true, "Radius, [ and ] to change it")
-	edit(c)
+	var edited bool
+	settings.BrushRadius, edited = a.number("brush.radius", sizeLabel, settings.BrushRadius, minBrushRadius, maxBrushRadius, 1, false, true,
+		"Radius, [ and ] to change it")
+	changed = changed || edited
 
-	edit(imgui.Checkbox("Lock shoreline (l)", &s.LockShore))
+	changed = imgui.Checkbox("Lock shoreline (l)", &settings.LockShore) || changed
 	imgui.SetItemTooltip("Land brushes leave sea and lakes alone, water brushes leave land alone")
-	s.PaintOpacity, c = a.number("brush.opacity", "Painting opacity", s.PaintOpacity, 0, 1, 0.05, false, false,
+	settings.PaintOpacity, edited = a.number("brush.opacity", "Painting opacity", settings.PaintOpacity, 0, 1, 0.05, false, false,
 		"How much the painted map shows over the generated one, while painting")
-	edit(c)
+	changed = changed || edited
 
 	half := imgui.NewVec2(imgui.ContentRegionAvail().X/2-imgui.CurrentStyle().ItemSpacing().X/2, 0)
 	canvas := a.editor.canvas
@@ -273,6 +257,6 @@ func (a *app) drawBrush() {
 	imgui.EndDisabled()
 
 	if changed {
-		a.setSettings(s)
+		a.setSettings(settings)
 	}
 }

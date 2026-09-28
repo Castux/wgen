@@ -208,8 +208,8 @@ func TestShortcuts(t *testing.T) {
 			}
 			a.onKey(e.key, e.name, e.action, e.mods)
 		}
-		if !slices.Equal(a.keys, test.want) {
-			t.Errorf("%s: %v, expected %v", test.name, a.keys, test.want)
+		if !slices.Equal(a.input.shortcuts, test.want) {
+			t.Errorf("%s: %v, expected %v", test.name, a.input.shortcuts, test.want)
 		}
 	}
 }

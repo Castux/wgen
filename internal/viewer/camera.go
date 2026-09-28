@@ -6,10 +6,9 @@ import (
 	"github.com/go-gl/mathgl/mgl64"
 )
 
-// Cameras of the 3D views. World coordinates have z up, the map centered on
-// the origin. Mouse movements are in window coordinates (y down), and the
-// speeds are those of three.js OrbitControls, which the previous web viewer
-// used.
+// Cameras of the 3D and map views. In 3D, world coordinates have z up, the
+// map centered on the origin. Mouse movements are in window coordinates (y
+// down), and the orbit speeds are those of three.js OrbitControls.
 
 // orbitCamera is a perspective camera orbiting around a target.
 type orbitCamera struct {
