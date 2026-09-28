@@ -65,9 +65,14 @@ func previewPixels(width, height int, pixels []config.Color) (int, int, []byte) 
 
 // addPick picks a color, as the first land terrain, unless it is already.
 func (d *importDialog) addPick(color config.Color) {
-	if !slices.ContainsFunc(d.picks, func(p pick) bool { return p.color == color }) {
-		d.picks = append(d.picks, pick{color, d.conf.Land()[0].Name})
+	if slices.ContainsFunc(d.picks, func(p pick) bool { return p.color == color }) {
+		return
 	}
+	terrain := config.SeaName
+	if land := d.conf.Land(); len(land) > 0 {
+		terrain = land[0].Name
+	}
+	d.picks = append(d.picks, pick{color, terrain})
 }
 
 func (a *app) drawImport() {

@@ -185,25 +185,38 @@ func (a *app) handleInput() {
 
 // applyShortcuts runs the shortcuts pressed since the last frame.
 func (a *app) applyShortcuts() {
-	settings := a.settings
+	// Settings changes apply one by one: commands can change settings too
+	// (saving remembers the project)
+	change := func(edit func(settings *Settings)) {
+		settings := a.settings
+		edit(&settings)
+		if settings != a.settings {
+			a.setSettings(settings)
+		}
+	}
+
 	for _, s := range a.input.shortcuts {
 		switch s {
 		case shortcutView:
-			settings.View = cycle(views, settings.View)
+			change(func(settings *Settings) { settings.View = cycle(views, settings.View) })
 		case shortcutColor:
-			settings.Color = cycle(colorModes, settings.Color)
+			change(func(settings *Settings) { settings.Color = cycle(colorModes, settings.Color) })
 		case shortcutShading:
-			settings.Shading = cycle(shadings, settings.Shading)
+			change(func(settings *Settings) { settings.Shading = cycle(shadings, settings.Shading) })
 		case shortcutWireframe:
-			settings.Wireframe = !settings.Wireframe
+			change(func(settings *Settings) { settings.Wireframe = !settings.Wireframe })
 		case shortcutEdit:
-			settings.setEditing(!settings.Editing)
+			change(func(settings *Settings) { settings.setEditing(!settings.Editing) })
 		case shortcutLockShore:
-			settings.LockShore = !settings.LockShore
+			change(func(settings *Settings) { settings.LockShore = !settings.LockShore })
 		case shortcutSmaller:
-			settings.BrushRadius = math.Max(minBrushRadius, math.Round(settings.BrushRadius/brushRadiusStep))
+			change(func(settings *Settings) {
+				settings.BrushRadius = math.Max(minBrushRadius, math.Round(settings.BrushRadius/brushRadiusStep))
+			})
 		case shortcutLarger:
-			settings.BrushRadius = math.Min(maxBrushRadius, math.Round(settings.BrushRadius*brushRadiusStep+0.5))
+			change(func(settings *Settings) {
+				settings.BrushRadius = math.Min(maxBrushRadius, math.Round(settings.BrushRadius*brushRadiusStep+0.5))
+			})
 		case shortcutUndo:
 			a.undo()
 		case shortcutRedo:
@@ -225,9 +238,6 @@ func (a *app) applyShortcuts() {
 		case shortcutReset:
 			a.resetView()
 		}
-	}
-	if settings != a.settings {
-		a.setSettings(settings)
 	}
 }
 

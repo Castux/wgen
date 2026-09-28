@@ -47,6 +47,9 @@ func (a *app) setCanvas(c *canvas, dirty bool) {
 // sendCanvas regenerates with the edited map.
 func (a *app) sendCanvas() {
 	c := a.editor.canvas
+	if c == nil {
+		return // not loaded yet
+	}
 	a.editor.sent = slices.Clone(c.pixels)
 	a.session.SetOutline(&engine.Outline{Width: c.width, Height: c.height, Pixels: a.editor.sent})
 }
