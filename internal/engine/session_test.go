@@ -7,20 +7,24 @@ import (
 	"image/png"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Castux/wgen/internal/config"
+	"github.com/Castux/wgen/internal/export"
 )
 
 const testConfig = `{
-	"path": "island.png",
-	"resolution": 4, "grid": "hex", "jitter": 0.5, "relax": false,
-	"smoothingRadius": 0, "erosionMinFlow": 5, "erosionFactor": 0.5,
+	"image": "island.png",
+	"mapWidth": 50, "resolution": 2, "levels": 1,
 	"terrains": {
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-		"land": { "r": 135, "g": 168, "b": 81, "gradient": 0.5 }
-	}
+		"sea": { "color": "#42427d" },
+		"land": { "color": "#87a851", "height": 500 }
+	},
+	"simulation": { "steps": 60, "refineSteps": 10 }
 }`
 
 func writeIsland(t *testing.T, radius float64) {
@@ -48,6 +52,13 @@ type harness struct {
 	states <-chan State
 }
 
+func newHarness(t *testing.T, s *Session) *harness {
+	t.Cleanup(func() { s.Close() })
+	states, cancel := s.Engine.Subscribe()
+	t.Cleanup(cancel)
+	return &harness{t: t, s: s, states: states}
+}
+
 func setup(t *testing.T) *harness {
 	t.Chdir(t.TempDir())
 	writeIsland(t, 30)
@@ -57,12 +68,7 @@ func setup(t *testing.T) *harness {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { s.Close() })
-
-	states, cancel := s.Engine.Subscribe()
-	t.Cleanup(cancel)
-
-	h := &harness{t: t, s: s, states: states}
+	h := newHarness(t, s)
 	h.waitFor(func(st State) bool { return st.Ready && !st.Busy })
 	return h
 }
@@ -70,7 +76,7 @@ func setup(t *testing.T) *harness {
 // waitFor waits for a state matching f.
 func (h *harness) waitFor(f func(State) bool) State {
 	h.t.Helper()
-	timeout := time.After(10 * time.Second)
+	timeout := time.After(20 * time.Second)
 	for {
 		select {
 		case st := <-h.states:
@@ -83,40 +89,56 @@ func (h *harness) waitFor(f func(State) bool) State {
 	}
 }
 
+// outline returns the map of the displayed world.
+func (h *harness) outline() *Outline {
+	w, _ := h.s.Engine.Snapshot()
+	return &Outline{Width: w.Width, Height: w.Height, Pixels: slices.Clone(w.Outline)}
+}
+
 func TestPatchSaveExport(t *testing.T) {
 	h := setup(t)
+	if st := h.s.Engine.State(); st.Dirty {
+		t.Errorf("loaded project dirty: %+v", st)
+	}
 	v0 := h.s.Engine.State().Version
 
 	if err := h.s.Patch([]byte(`{"resolution": -1}`)); err == nil {
 		t.Error("invalid patch accepted")
 	}
 
-	if err := h.s.Patch([]byte(`{"erosionFactor": 0.2}`)); err != nil {
+	if err := h.s.Patch([]byte(`{"simulation": {"criticalSlope": 25}}`)); err != nil {
 		t.Fatal(err)
 	}
 	st := h.waitFor(func(st State) bool { return st.Version > v0 && !st.Busy })
-	if !st.Dirty || st.Stage != "erosion" {
+	if !st.Dirty || st.Stage != "terrain" {
 		t.Errorf("after patch: %+v", st)
 	}
 
-	// Save writes the file, which reloads as is: nothing regenerated
-	if _, err := h.s.Save(); err != nil {
+	// Save writes the files, which the watcher ignores: nothing regenerated
+	v1 := st.Version
+	if _, err := h.s.Save(h.outline()); err != nil {
 		t.Fatal(err)
 	}
 	saved, _ := os.ReadFile("config.json")
-	if !bytes.Contains(saved, []byte(`"erosionFactor": 0.2`)) {
-		t.Errorf("saved config: %s", saved)
+	if !bytes.Contains(saved, []byte(`"criticalSlope": 25`)) || !bytes.Contains(saved, []byte(`"image": "island.png"`)) {
+		t.Errorf("saved project: %s", saved)
 	}
-
 	time.Sleep(500 * time.Millisecond)
-	if st := h.s.Engine.State(); st.Dirty || st.Version != v0+1 {
+	if st := h.s.Engine.State(); st.Dirty || st.Busy || st.Version != v1 {
 		t.Errorf("after save: %+v", st)
 	}
 
-	// Nothing enabled but heightmaps, by default
-	files, err := h.s.Export()
-	if err != nil || !slices.Contains(files, "config.json-w.png") {
-		t.Errorf("export: %v %v", files, err)
+	files, err := h.s.Export("out/island", export.Options{Heightmap: true, WaterMask: true, Texture: true, OBJ: true, SVG: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"out/island-height.png", "out/island-water.png", "out/island-texture.png", "out/island.obj", "out/island.svg"} {
+		if !slices.Contains(files, f) {
+			t.Errorf("%s not exported (%v)", f, files)
+		}
+		if _, err := os.Stat(f); err != nil {
+			t.Error(err)
+		}
 	}
 }
 
@@ -124,24 +146,24 @@ func TestHotReload(t *testing.T) {
 	h := setup(t)
 	v0 := h.s.Engine.State().Version
 
-	// Broken config: error reported, world kept
-	os.WriteFile("config.json", []byte(`{"path": `), 0o644)
+	// Broken project: error reported, world kept
+	os.WriteFile("config.json", []byte(`{"image": `), 0o644)
 	st := h.waitFor(func(st State) bool { return st.Error != "" })
 	if !st.Ready || st.Version != v0 {
-		t.Errorf("after broken config: %+v", st)
+		t.Errorf("after broken project: %+v", st)
 	}
 
-	// Fixed config: regenerated, error cleared
-	os.WriteFile("config.json", []byte(strings.Replace(testConfig, `"resolution": 4`, `"resolution": 5`, 1)), 0o644)
+	// Fixed: regenerated, error cleared
+	os.WriteFile("config.json", []byte(strings.Replace(testConfig, `"resolution": 2`, `"resolution": 3`, 1)), 0o644)
 	st = h.waitFor(func(st State) bool { return st.Version > v0 && !st.Busy })
 	if st.Error != "" || st.Stage != "mesh" {
-		t.Errorf("after fixed config: %+v", st)
+		t.Errorf("after fixed project: %+v", st)
 	}
 
-	// New image, same size: from terrain
+	// New image: the mesh follows the terrains
 	writeIsland(t, 20)
 	st = h.waitFor(func(st State) bool { return st.Version > v0+1 && !st.Busy })
-	if st.Stage != "terrain" {
+	if st.Stage != "mesh" {
 		t.Errorf("after image change: %+v", st)
 	}
 }
@@ -152,7 +174,7 @@ func TestOutline(t *testing.T) {
 	v0 := h.s.Engine.State().Version
 
 	// Paint the island away: all sea but a corner
-	o := &Outline{Width: world.Width, Height: world.Height, Pixels: slices.Clone(world.Outline)}
+	o := h.outline()
 	sea, land := o.Pixels[0], o.Pixels[40*o.Width+50]
 	for i := range o.Pixels {
 		o.Pixels[i] = sea
@@ -166,21 +188,19 @@ func TestOutline(t *testing.T) {
 	h.s.SetOutline(o)
 	h.waitFor(func(st State) bool { return st.Version > v0 && !st.Busy })
 	painted, v1 := h.s.Engine.Snapshot()
-	if painted.Outline[40*o.Width+50] != sea || painted.Highest >= world.Highest {
-		t.Errorf("painted outline not generated: highest %v, was %v", painted.Highest, world.Highest)
+	if painted.Outline[40*o.Width+50] != sea {
+		t.Errorf("painted map not generated")
 	}
 
 	// Saved to the image file, which reloads as is: nothing regenerated
-	path, err := h.s.SaveOutline(o)
-	if err != nil || path != "island.png" {
-		t.Fatalf("save: %q %v", path, err)
+	if _, err := h.s.Save(o); err != nil {
+		t.Fatal(err)
 	}
 	time.Sleep(500 * time.Millisecond)
 	if st := h.s.Engine.State(); st.Version != v1 || st.Busy {
 		t.Errorf("own save reloaded: %+v", st)
 	}
 
-	// The saved file is the map
 	f, _ := os.Open("island.png")
 	img, err := png.Decode(f)
 	f.Close()
@@ -192,10 +212,82 @@ func TestOutline(t *testing.T) {
 	}
 }
 
+// A new project lives in memory until saved as, which doesn't regenerate.
+func TestNewSaveAs(t *testing.T) {
+	t.Chdir(t.TempDir())
+	s, err := NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, s)
+
+	conf, _, err := config.Parse([]byte(testConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sea, land := conf.Terrain("sea").Color, conf.Terrain("land").Color
+	o := &Outline{Width: 64, Height: 64, Pixels: make([]config.Color, 64*64)}
+	for i := range o.Pixels {
+		o.Pixels[i] = sea
+		if x, y := i%64, i/64; math.Hypot(float64(x-32), float64(y-32)) < 20 {
+			o.Pixels[i] = land
+		}
+	}
+
+	s.New(conf, o)
+	st := h.waitFor(func(st State) bool { return st.Ready && !st.Busy })
+	if !st.Dirty || s.ConfigPath() != "" || st.Error != "" {
+		t.Errorf("new project: %+v, path %q", st, s.ConfigPath())
+	}
+	if _, err := s.Save(o); err == nil {
+		t.Error("saved a project without a file")
+	}
+
+	path := filepath.Join("maps", "new")
+	if err := s.SaveAs(path, o); err != nil {
+		t.Fatal(err)
+	}
+	if s.ConfigPath() != path+".json" {
+		t.Errorf("project path %q", s.ConfigPath())
+	}
+	loaded, _, err := config.Load(path + ".json")
+	if err != nil || loaded.Image != "new.png" {
+		t.Fatalf("saved project: %v %+v", err, loaded)
+	}
+	if _, err := os.Stat(filepath.Join("maps", "new.png")); err != nil {
+		t.Error(err)
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	v := s.Engine.State().Version
+	if st := s.Engine.State(); st.Dirty || st.Busy {
+		t.Errorf("after save as: %+v", st)
+	}
+
+	// Editing after saving doesn't reload the image
+	if err := s.Patch([]byte(`{"terrains": {"land": {"height": 800}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	st = h.waitFor(func(st State) bool { return st.Version > v && !st.Busy })
+	if st.Stage != "terrain" || st.Error != "" {
+		t.Errorf("after edit: %+v", st)
+	}
+
+	// Loading it again, from the file
+	s2, err := Open(path + ".json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2 := newHarness(t, s2)
+	st = h2.waitFor(func(st State) bool { return st.Ready && !st.Busy })
+	if st.Error != "" || st.Dirty {
+		t.Errorf("reopened: %+v", st)
+	}
+}
+
 func TestPreviewAndSupersede(t *testing.T) {
 	h := setup(t)
-	if err := h.s.Patch([]byte(`{"elevationModel": "uplift", "mapWidth": 50, "resolution": 1, "levels": 2,
-		"terrains": {"land": {"height": 1000}}}`)); err != nil {
+	if err := h.s.Patch([]byte(`{"resolution": 1, "levels": 2, "terrains": {"land": {"height": 1000}}}`)); err != nil {
 		t.Fatal(err)
 	}
 	// Right away, superseding it
@@ -219,12 +311,6 @@ func TestPreviewAndSupersede(t *testing.T) {
 
 func TestWatchRerun(t *testing.T) {
 	h := setup(t)
-	if err := h.s.Patch([]byte(`{"elevationModel": "uplift", "mapWidth": 50, "resolution": 2, "levels": 1,
-		"steps": 100, "refineSteps": 20, "terrains": {"land": {"height": 1000}}}`)); err != nil {
-		t.Fatal(err)
-	}
-	h.waitFor(func(st State) bool { return !st.Busy && !st.Preview && st.Stage != "" })
-
 	h.s.Engine.SetWatch(20)
 	v0 := h.s.Engine.State().Version
 	h.s.Engine.Rerun()

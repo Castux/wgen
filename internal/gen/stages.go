@@ -15,14 +15,11 @@ import (
 	_ "image/png"
 
 	"github.com/Castux/wgen/internal/config"
-	"github.com/Castux/wgen/internal/geom"
-	"github.com/Castux/wgen/internal/mesh"
 )
 
 // Random streams, so that each stage's randomness only depends on the seed
 const (
 	streamMesh = iota + 1
-	streamSmoothing
 	streamNoise
 )
 
@@ -30,114 +27,47 @@ func (w *World) rng(stream uint64) *rand.Rand {
 	return rand.New(rand.NewPCG(w.Conf.Seed, stream))
 }
 
-func uniform(r *rand.Rand, a, b float64) float64 {
-	return a + (b-a)*r.Float64()
-}
-
 func (w *World) loadOutline() error {
-	f, err := os.Open(w.Conf.Path)
+	path := w.Conf.ImagePath()
+	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("could not load outline: %w", err)
+		return fmt.Errorf("could not load the map: %w", err)
 	}
 	defer f.Close()
 
 	img, _, err := image.Decode(f)
 	if err != nil {
-		return fmt.Errorf("could not load outline %s: %w", w.Conf.Path, err)
+		return fmt.Errorf("could not load the map %s: %w", path, err)
 	}
 
+	w.Width, w.Height, w.Outline = Outline(img)
+	return nil
+}
+
+// Outline converts an image to a map: its colors, bottom row first.
+func Outline(img image.Image) (width, height int, outline []config.Color) {
 	b := img.Bounds()
-	w.Width, w.Height = b.Dx(), b.Dy()
-	w.Outline = make([]config.Color, w.Width*w.Height)
+	width, height = b.Dx(), b.Dy()
+	outline = make([]config.Color, width*height)
 
 	// Flip vertically: world y goes up
-	for y := range w.Height {
-		row := w.Height - 1 - y
-		for x := range w.Width {
+	for y := range height {
+		row := height - 1 - y
+		for x := range width {
 			c := color.NRGBAModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.NRGBA)
-			w.Outline[row*w.Width+x] = config.Color{c.R, c.G, c.B}
+			outline[row*width+x] = config.Color{c.R, c.G, c.B}
 		}
 	}
-
-	return nil
-}
-
-// Test hook to replace the generated points
-var pointsHook func(w *World) []geom.Vec2
-
-func (w *World) generatePoints() []geom.Vec2 {
-	if pointsHook != nil {
-		return pointsHook(w)
-	}
-
-	var points []geom.Vec2
-	res := w.Conf.Resolution
-	jitter := w.Conf.Jitter
-	margin := w.margin()
-	r := w.rng(streamMesh)
-
-	jittered := func(x, y float64) geom.Vec2 {
-		return geom.Vec2{
-			X: x + uniform(r, -res, res)*jitter,
-			Y: y + uniform(r, -res, res)*jitter,
-		}
-	}
-
-	switch w.Conf.Grid {
-	case config.GridSquare:
-		for x := -margin; x < float64(w.Width)+margin; x += res {
-			for y := -margin; y < float64(w.Height)+margin; y += res {
-				points = append(points, jittered(x, y))
-			}
-		}
-
-	case config.GridHex:
-		for x := -margin; x < float64(w.Width)+margin; x += res {
-			row := 0
-			for y := -margin; y < float64(w.Height)+margin; y += res * math.Sqrt(3) / 2 {
-				row++
-				points = append(points, jittered(x+float64(row%2)*0.5*res, y))
-			}
-		}
-	}
-
-	return points
-}
-
-func (w *World) generateMesh() error {
-	if w.upliftModel() {
-		return w.generateUpliftMeshes()
-	}
-	w.levels = nil
-
-	m, err := mesh.Build(w.generatePoints())
-	if err != nil {
-		return err
-	}
-
-	if w.Conf.Relax {
-		m, err = m.Relax(func(p geom.Vec2) bool { return !w.inBoundsPlusHalfMargin(p) })
-		if err != nil {
-			return err
-		}
-	}
-
-	w.Mesh = m
-	return nil
+	return width, height, outline
 }
 
 func (w *World) assignTerrainTypes() error {
 	numVertices := len(w.Mesh.Points)
 	w.Terrain = make([]*config.Terrain, numVertices)
-	w.Gradient = nanSlice(numVertices)
 	w.Shore = make([]bool, numVertices)
 	w.Shores = nil
 
 	terrains := w.Conf.TerrainsByColor()
-	r := w.rng(streamSmoothing)
-	radius := w.Conf.SmoothingRadius
-	numSamples := int(math.Ceil(math.Pow(radius/w.Conf.Resolution, 2)))
-
 	badPixels := map[config.Color]int{}
 
 	for v, p := range w.Mesh.Points {
@@ -152,49 +82,10 @@ func (w *World) assignTerrainTypes() error {
 			continue
 		}
 		w.Terrain[v] = terrain
-
-		if !terrain.Smoothing || radius <= 0 {
-			w.Gradient[v] = terrain.Gradient
-			continue
-		}
-
-		// Average the gradient over random samples around the vertex. Only
-		// consider gradients of the same sign, so that shores don't move.
-
-		sum := terrain.Gradient
-		count := 1
-
-		for range numSamples {
-			dx := uniform(r, -radius, radius)
-			dy := uniform(r, -radius, radius)
-			sample := p.Add(geom.Vec2{X: dx, Y: dy})
-
-			if !w.inBounds(sample) {
-				continue
-			}
-
-			other := terrains[w.pixel(sample)]
-			if other != nil && other.Gradient*terrain.Gradient > 0 {
-				sum += other.Gradient
-				count++
-			}
-		}
-
-		w.Gradient[v] = sum / float64(count)
 	}
 
 	for pixel, count := range badPixels {
 		slog.Warn("pixel color matches no terrain", "color", pixel.String(), "vertices", count)
-	}
-
-	// Land slopes varied by noise
-	if noise := slopeNoise(w.Conf.Noise, w.rng(streamNoise).Uint64()); noise != nil {
-		amplitude := w.Conf.Noise.Amplitude
-		for v, p := range w.Mesh.Points {
-			if w.Terrain[v] != nil && w.Gradient[v] > 0 {
-				w.Gradient[v] *= 1 + amplitude*noise(p)
-			}
-		}
 	}
 
 	for v := range w.Mesh.Points {
@@ -206,205 +97,68 @@ func (w *World) assignTerrainTypes() error {
 	}
 
 	if !slices.ContainsFunc(w.Shores, w.IsSea) {
-		return fmt.Errorf("no sea defined: at least one terrain with a fixedShore must touch land")
+		return fmt.Errorf("no coast: the map needs some sea next to land")
 	}
 
 	return nil
 }
 
-// elevation computes the elevation, and with the uplift model the rivers.
-func (w *World) elevation() error {
-	if w.upliftModel() {
-		w.MetersPerPixel = w.Conf.Uplift.MapWidth * 1000 / float64(w.Width)
-		return w.simulate()
-	}
-	w.MetersPerPixel = 1
-	w.computeElevation(false)
-	return nil
-}
-
-// rivers computes river flow (done by the simulation with the uplift model).
-func (w *World) rivers() {
-	if !w.upliftModel() {
-		w.computeRiverFlow()
-	}
-}
-
-// erosion erodes along rivers (done by the simulation with the uplift model).
-func (w *World) erosion() {
-	if !w.upliftModel() {
-		w.erode()
-	}
-}
-
-// computeElevation builds elevation up from the sea shores: each vertex is at
-// the lowest elevation reachable by climbing from the sea, with the slope
-// given by its gradient. It is a shortest path problem, solved with Dijkstra.
-//
-// In the erosion pass, the slope is reduced along rivers big enough.
-func (w *World) computeElevation(erosion bool) {
-	m := w.Mesh
-	z := nanSlice(len(m.Points))
-	q := &vertexQueue{z: z}
-
-	for _, s := range w.Shores {
-		if w.IsSea(s) {
-			z[s] = w.Terrain[s].FixedShore
-			q.push(s)
-		}
-	}
-
-	for q.Len() > 0 {
-		c, cz := q.pop()
-		if cz != z[c] {
-			continue // stale entry
-		}
-
-		for _, n := range m.Neighbours[c] {
-			if w.Terrain[n] == nil || w.IsSea(n) {
-				continue
-			}
-
-			gradient := w.Gradient[n]
-			if w.IsLake(n) {
-				gradient = 0.00001
-			}
-
-			if erosion && w.Terrain[n].Erosion && w.Downhill[n] == c {
-				gradient *= w.erosionFactor(n)
-			}
-
-			newZ := cz + gradient*m.Points[c].Dist(m.Points[n])
-			if math.IsNaN(z[n]) || newZ < z[n] {
-				z[n] = newZ
-				q.push(n)
-			}
-		}
-	}
-
-	w.Z = z
-}
-
-// computeRiverFlow finds the steepest downhill neighbour of every vertex, and
-// the flow of each vertex: 1 for itself plus the flow of everything uphill.
-// erosionFactor is the slope multiplier along the river flowing out of v.
-func (w *World) erosionFactor(v int32) float64 {
-	e := w.Conf.Erosion
-	if e.Model == config.ErosionPower {
-		area := float64(w.Flow[v]) * w.cellArea()
-		if area <= e.ChannelArea {
-			return 1
-		}
-		return math.Max(e.Floor, math.Pow(area/e.ChannelArea, -e.Theta))
-	}
-
-	if int(w.Flow[v]) > w.Conf.ErosionMinFlow {
-		return w.Conf.ErosionFactor
-	}
-	return 1
-}
-
-// cellArea is the average area of the Voronoi cell of a vertex, in square
-// pixels.
-func (w *World) cellArea() float64 {
-	res := w.Conf.Resolution
-	if w.Conf.Grid == config.GridHex {
-		return res * res * math.Sqrt(3) / 2
-	}
-	return res * res
-}
-
-// erode reduces slopes along rivers. With the power model, the rivers are
-// computed again on the eroded terrain, and the terrain eroded again by the
-// new rivers, a number of times: capturing more drainage makes a valley
-// deeper, which lets it capture more, which gives rivers their tree shapes.
-func (w *World) erode() {
-	if w.Conf.Erosion.Model != config.ErosionPower {
-		w.computeElevation(true)
-		return
-	}
-
-	// From the uneroded terrain: the rivers of the world may be those of a
-	// previous erosion
-	w.computeElevation(false)
-	w.computeRiverFlow()
-
-	for range w.Conf.Erosion.Iterations {
-		w.computeElevation(true)
-		w.computeRiverFlow()
-	}
-}
-
-func (w *World) computeRiverFlow() {
-	m := w.Mesh
-	z := w.Z
-	w.Downhill = make([]int32, len(m.Points))
-	w.Flow = make([]int32, len(m.Points))
-	w.Drainage = CellAreas(m)
-
-	var order []int32
-
-	for v := range m.Points {
-		w.Downhill[v] = -1
-		w.Flow[v] = 1
-
-		if math.IsNaN(z[v]) {
-			continue
-		}
-		order = append(order, int32(v))
-
-		// It needs to be actually downhill (avoid rivers along shores)
-		lowest := int32(-1)
-		for _, n := range m.Neighbours[v] {
-			if z[n] < z[v] && (lowest < 0 || z[n] < z[lowest]) {
-				lowest = n
-			}
-		}
-		w.Downhill[v] = lowest
-	}
-
-	// Accumulate from the top down. Downhill is strictly lower, so every
-	// vertex is done before the one it flows into.
-
-	slices.SortFunc(order, func(a, b int32) int {
-		switch {
-		case z[a] > z[b]:
-			return -1
-		case z[a] < z[b]:
-			return 1
-		}
-		return 0
-	})
-
-	for _, v := range order {
-		if d := w.Downhill[v]; d >= 0 {
-			w.Flow[d] += w.Flow[v]
-			w.Drainage[d] += w.Drainage[v]
-		}
-	}
-}
-
-// computeWaterDepth builds the depth of water bodies down from their shores,
-// the same way as elevation. Lakes get the water level of their shore.
+// computeWaterDepth gives the sea and lakes their level and depth. The sea is
+// at level 0, each lake at the level of its lowest shore (where it spills).
+// Their floors go down from their shores, with the floor slope.
 func (w *World) computeWaterDepth() {
 	m := w.Mesh
 	z := slices.Clone(w.Z)
 	water := nanSlice(len(m.Points))
+	slope := w.Conf.Simulation.FloorSlope * w.MetersPerPixel // meters per pixel
 
-	for v := range m.Points {
-		if w.IsWater(int32(v)) && !w.Shore[v] {
-			z[v] = math.NaN()
+	// Lake levels, per lake
+	visited := make([]bool, len(m.Points))
+	for start := range int32(len(m.Points)) {
+		if !w.IsLake(start) || visited[start] {
+			continue
+		}
+		lake := []int32{start}
+		visited[start] = true
+		level := math.Inf(1)
+		for i := 0; i < len(lake); i++ {
+			v := lake[i]
+			if w.Shore[v] && !math.IsNaN(w.Z[v]) {
+				level = math.Min(level, w.Z[v])
+			}
+			for _, n := range m.Neighbours[v] {
+				if w.IsLake(n) && !visited[n] {
+					visited[n] = true
+					lake = append(lake, n)
+				}
+			}
+		}
+		if math.IsInf(level, 1) {
+			level = 0
+		}
+		for _, v := range lake {
+			water[v] = level
 		}
 	}
 
-	// Water gradients are negative: explore the highest vertices first
+	// Floors: from the shores down, the highest first
+	for v := range m.Points {
+		switch {
+		case w.IsSea(int32(v)):
+			water[v] = 0
+			z[v] = math.NaN()
+		case w.IsLake(int32(v)):
+			z[v] = math.NaN()
+		}
+	}
+	for _, s := range w.Shores {
+		z[s] = water[s]
+	}
+
 	neg := func(x float64) float64 { return -x }
 	q := &vertexQueue{z: z, key: neg}
-
 	for _, s := range w.Shores {
-		if !math.IsNaN(z[s]) {
-			q.push(s)
-		}
+		q.push(s)
 	}
 
 	for q.Len() > 0 {
@@ -412,26 +166,22 @@ func (w *World) computeWaterDepth() {
 		if cz != z[c] {
 			continue
 		}
-
-		if w.IsSea(c) {
-			water[c] = w.Terrain[c].FixedShore
-		} else if w.IsLake(c) && w.Shore[c] {
-			water[c] = cz
-		}
-
 		for _, n := range m.Neighbours[c] {
-			if w.Terrain[n] == nil || w.IsLand(n) {
+			if !w.IsWater(n) || (w.IsSea(c) != w.IsSea(n)) {
 				continue
 			}
-
-			newZ := cz + w.Gradient[n]*m.Points[c].Dist(m.Points[n])*w.MetersPerPixel
+			newZ := cz - slope*m.Points[c].Dist(m.Points[n])
 			if math.IsNaN(z[n]) || newZ > z[n] {
 				z[n] = newZ
-				if w.IsLake(n) {
-					water[n] = water[c]
-				}
 				q.push(n)
 			}
+		}
+	}
+
+	// Water not reached from a shore: at its level
+	for v := range m.Points {
+		if w.IsWater(int32(v)) && math.IsNaN(z[v]) {
+			z[v] = water[v]
 		}
 	}
 
@@ -450,13 +200,8 @@ func (w *World) finalizeElevation() {
 		w.Lowest = math.Min(w.Lowest, z)
 		w.Highest = math.Max(w.Highest, z)
 	}
-
-	if max := w.Conf.MaxHeight; max != 0 {
-		for v := range w.Z {
-			w.Z[v] = w.Z[v] / w.Highest * max
-		}
-		w.Lowest = w.Lowest / w.Highest * max
-		w.Highest = max
+	if math.IsInf(w.Lowest, 1) {
+		w.Lowest, w.Highest = 0, 0
 	}
 }
 

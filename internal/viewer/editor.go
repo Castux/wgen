@@ -140,10 +140,10 @@ func (a *app) shoreLock(conf *config.Config, brush *config.Terrain) func(config.
 		return nil
 	}
 	terrains := conf.TerrainsByColor()
-	brushWater := brush.Gradient < 0
+	brushWater := brush.IsWater()
 	return func(c config.Color) bool {
 		t := terrains[c]
-		return t != nil && (t.Gradient < 0) != brushWater
+		return t != nil && t.IsWater() != brushWater
 	}
 }
 
@@ -169,19 +169,13 @@ func (a *app) afterEdit(r image.Rectangle) {
 	a.sendCanvas()
 }
 
-// saveMap writes the edited map to the config's image file.
-func (a *app) saveMap() {
+// canvasOutline is the edited map, for saving.
+func (a *app) canvasOutline() *engine.Outline {
 	c := a.editor.canvas
 	if c == nil {
-		return
+		return nil
 	}
-	path, err := a.session.SaveOutline(&engine.Outline{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)})
-	if err != nil {
-		a.message = &message{text: err.Error(), error: true}
-		return
-	}
-	a.editor.dirty = false
-	a.message = &message{text: "Map saved to " + path}
+	return &engine.Outline{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)}
 }
 
 // newMap replaces the map by an empty one, all of the first sea terrain.
@@ -190,7 +184,7 @@ func (a *app) newMap(width, height int) {
 	if conf == nil {
 		return
 	}
-	i := slices.IndexFunc(conf.Terrains, (*config.Terrain).IsSeaTerrain)
+	i := slices.IndexFunc(conf.Terrains, func(t *config.Terrain) bool { return t.Kind == config.Sea })
 	if i < 0 {
 		a.message = &message{text: "no sea terrain in the config", error: true}
 		return
@@ -243,9 +237,9 @@ func (a *app) drawEditor() {
 		imgui.SameLine()
 		label := t.Name
 		switch {
-		case t.IsSeaTerrain():
+		case t.Kind == config.Sea:
 			label += " (sea)"
-		case t.Gradient < 0:
+		case t.Kind == config.Lake:
 			label += " (lake)"
 		case t.Calibrated():
 			label += fmt.Sprintf(" (%.0f m)", t.Height)
@@ -295,7 +289,7 @@ func (a *app) drawEditor() {
 	}
 	imgui.BeginDisabledV(!ed.dirty)
 	if imgui.ButtonV(label+"###savemap", full) {
-		a.saveMap()
+		a.save()
 	}
 	imgui.EndDisabled()
 

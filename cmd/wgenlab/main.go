@@ -369,7 +369,7 @@ func slope(xs, ys []float64) float64 {
 func heightTable(w *gen.World, name string) string {
 	var b strings.Builder
 	for _, t := range w.Conf.Terrains {
-		if t.Gradient < 0 {
+		if t.IsWater() {
 			continue
 		}
 		var zs []float64

@@ -30,6 +30,7 @@ import (
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
+	"github.com/Castux/wgen/internal/export"
 	"github.com/Castux/wgen/internal/gen"
 	"github.com/Castux/wgen/internal/render"
 )
@@ -92,7 +93,13 @@ type message struct {
 const settleFrames = 3
 
 // Run opens the viewer window, until it is closed.
-func Run(session *engine.Session) error {
+func Run(session *engine.Session, path string) error {
+	if path != "" {
+		if err := session.Load(path); err != nil {
+			return err
+		}
+	}
+
 	if err := glfw.Init(); err != nil {
 		return err
 	}
@@ -592,19 +599,18 @@ func (a *app) resetView() {
 
 // saveAll saves what has unsaved changes: the config, the map.
 func (a *app) saveAll() {
-	if a.session.Engine.State().Dirty {
-		a.save()
-	}
-	if a.editor.dirty {
-		a.saveMap()
-	}
+	a.save()
 }
 
+// save writes the project file and its map.
 func (a *app) save() {
-	a.message = &message{text: "Config saved"}
-	if _, err := a.session.Save(); err != nil {
+	path, err := a.session.Save(a.canvasOutline())
+	if err != nil {
 		a.message = &message{text: err.Error(), error: true}
+		return
 	}
+	a.editor.dirty = false
+	a.message = &message{text: "Saved " + path}
 }
 
 // export writes the exports in the background.
@@ -614,7 +620,8 @@ func (a *app) export() {
 		defer a.wakeUp()
 		defer a.exporting.Store(false)
 
-		files, err := a.session.Export()
+		base := strings.TrimSuffix(a.session.ConfigPath(), filepath.Ext(a.session.ConfigPath()))
+		files, err := a.session.Export(base, export.Options{Heightmap: true, Texture: true, OBJ: true})
 		switch {
 		case err != nil:
 			a.results <- message{text: err.Error(), error: true}

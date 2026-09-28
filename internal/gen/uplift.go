@@ -26,12 +26,10 @@ import (
 // Elevations are in meters, horizontal positions still in pixels:
 // MetersPerPixel converts.
 
-func (w *World) upliftModel() bool { return w.Conf.Uplift.Model == config.ModelUplift }
-
 // upliftSpacing is the mesh spacing of a level, in pixels. The last level
 // has the configured resolution.
 func (w *World) upliftSpacing(level int) float64 {
-	return w.Conf.Resolution * math.Pow(2, float64(w.Conf.Uplift.Levels-level))
+	return w.Conf.Resolution * math.Pow(2, float64(w.Conf.Levels-level))
 }
 
 // detailAt is the number of refinement levels wanted at a position.
@@ -45,10 +43,10 @@ func (w *World) detailAt(p geom.Vec2, terrains map[config.Color]*config.Terrain)
 		return 0
 	case t.Detail != config.DetailAuto:
 		return t.Detail
-	case t.Gradient < 0:
+	case t.IsWater():
 		return 0
 	}
-	return w.Conf.Uplift.Levels
+	return w.Conf.Levels
 }
 
 // maxDetailAround is the highest detail within radius of p (sampled), so
@@ -63,14 +61,14 @@ func (w *World) maxDetailAround(p geom.Vec2, radius float64, terrains map[config
 	return d
 }
 
-// generateUpliftMeshes builds the meshes of all levels. Points are on hex
+// generateMeshes builds the meshes of all levels. Points are on hex
 // lattices, each level's lattice containing the previous one: a point is
 // added at the first level where it is on the lattice, if the terrain wants
 // that much detail, and kept at the finer levels. It is jittered once, when
 // added, so that it is at the same position at every level.
-func (w *World) generateUpliftMeshes() error {
+func (w *World) generateMeshes() error {
 	conf := w.Conf
-	levels := conf.Uplift.Levels
+	levels := conf.Levels
 	terrains := conf.TerrainsByColor()
 	margin := w.margin()
 	seed := w.rng(streamMesh).Uint64()
@@ -84,7 +82,7 @@ func (w *World) generateUpliftMeshes() error {
 	for k := 0; k <= levels; k++ {
 		s := w.upliftSpacing(k)
 		dy := s * math.Sqrt(3) / 2
-		jitter := 0.35 * s * conf.Jitter
+		jitter := 0.35 * s
 
 		for j := 0; -margin+float64(j)*dy < float64(w.Height)+margin; j++ {
 			y := -margin + float64(j)*dy
@@ -158,7 +156,8 @@ type simState struct {
 // simulate runs the uplift model on all levels, and sets the elevation and
 // the rivers of the final mesh.
 func (w *World) simulate() error {
-	u := w.Conf.Uplift
+	u := w.Conf.Simulation
+	w.MetersPerPixel = w.Conf.MetersPerPixel(w.Width)
 	start := time.Now()
 	erodibilityNoise := w.erodibilityNoise()
 	snapshots := map[*mesh.Mesh]*World{}
@@ -263,18 +262,17 @@ func (w *World) snapshot(s *simState, cache map[*mesh.Mesh]*World) *World {
 	p.computeWaterDepth()
 	p.finalizeElevation()
 	p.rasterize()
-	p.blurHeightmap()
 	return &p
 }
 
 func (w *World) newSimState(m *mesh.Mesh, upliftAt, erodibilityNoise func(geom.Vec2) float64) *simState {
-	u := w.Conf.Uplift
+	u := w.Conf.Simulation
 	n := len(m.Points)
 	terrains := w.Conf.TerrainsByColor()
 	mpp := w.MetersPerPixel
 
 	s := &simState{
-		m: m, mpp: mpp, expM: u.StreamM,
+		m: m, mpp: mpp, expM: u.StreamExponent,
 		h:       nanSlice(n),
 		active:  make([]bool, n),
 		base:    make([]bool, n),
@@ -297,10 +295,10 @@ func (w *World) newSimState(m *mesh.Mesh, upliftAt, erodibilityNoise func(geom.V
 		t := terrains[w.pixel(p)]
 		switch {
 		case t == nil:
-		case t.Gradient < 0 && t.IsSeaTerrain():
+		case t.Kind == config.Sea:
 			s.base[v] = true
-			s.h[v] = t.FixedShore
-		case t.Gradient < 0:
+			s.h[v] = 0
+		case t.Kind == config.Lake:
 			// Lakes: flat, eroded down to their outlet
 			s.active[v] = true
 			s.k[v] = u.Erodibility * t.Erodibility * 100
@@ -325,15 +323,13 @@ func (s *simState) startFlat(r interface{ Float64() float64 }) {
 // erodibilityNoise returns the erodibility multiplier at a position: rocks
 // are not all as hard.
 func (w *World) erodibilityNoise() func(geom.Vec2) float64 {
-	u := w.Conf.Uplift
-	if u.NoiseAmount == 0 {
+	u := w.Conf.Simulation
+	if u.ErodibilityNoise == 0 {
 		return func(geom.Vec2) float64 { return 1 }
 	}
-	noise := slopeNoise(config.SlopeNoise{
-		Type: config.NoiseFBM, Scale: u.NoiseScale * 1000 / w.MetersPerPixel,
-		Amplitude: 1, Octaves: 4, Stretch: 1,
-	}, w.rng(streamNoise).Uint64()+1)
-	return func(p geom.Vec2) float64 { return 1 + u.NoiseAmount*noise(p) }
+	scale := u.NoiseScale * 1000 / w.MetersPerPixel
+	seed := w.rng(streamNoise).Uint64() + 1
+	return func(p geom.Vec2) float64 { return 1 + u.ErodibilityNoise*fbm(seed, p.X/scale, p.Y/scale, 4) }
 }
 
 // CellAreas returns the area of the Voronoi cell of each vertex, in square

@@ -1,8 +1,26 @@
-// Package config loads, validates, patches and saves wgen configuration files.
+// Package config loads, validates, patches and saves wgen projects: a map
+// image, whose pixel colors are terrains, and the parameters turning it into
+// a landscape.
 //
-// The JSON format is the one used by the original D implementation, with two
-// additions: "seed" (the random generator seed, so that runs are reproducible)
-// and "exportHeightmap" being honoured.
+// A project file looks like:
+//
+//	{
+//		"image": "map.png",          // relative to the project file
+//		"mapWidth": 1000,            // km
+//		"resolution": 2,             // finest mesh spacing, pixels
+//		"levels": 3,                 // mesh refinements
+//		"seed": 0,
+//		"terrains": {
+//			"sea": { "color": "#42427d" },
+//			"lake": { "color": "#6d94c2" },
+//			"plains": { "color": "#87a851", "height": 400, "detail": 1 },
+//			"mountains": { "color": "#65481f", "height": 4500 }
+//		},
+//		"simulation": { "erodibility": 2e-6 }
+//	}
+//
+// Terrains "sea" and "lake" are the water, and always exist; the others are
+// land, with a target summit height. The simulation parameters are optional.
 package config
 
 import (
@@ -11,6 +29,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,200 +37,176 @@ import (
 
 type Color [3]uint8
 
-func (c Color) String() string { return fmt.Sprintf("(%d,%d,%d)", c[0], c[1], c[2]) }
+func (c Color) String() string { return fmt.Sprintf("#%02x%02x%02x", c[0], c[1], c[2]) }
 
-type Terrain struct {
-	Name     string
-	Color    Color
-	Gradient float64
-
-	// Elevation of the shore line for sea terrains. NaN for everything else:
-	// water terrains without a fixed shore are lakes.
-	FixedShore float64
-
-	Smoothing bool
-	Erosion   bool
-
-	// Uplift model: target summit height in meters (0: none, Uplift is used
-	// as is), rate of rock uplift in mm per year, erodibility multiplier, and
-	// number of mesh refinement levels (DetailAuto: all levels on land, none
-	// on water).
-	Height      float64
-	Uplift      float64
-	Erodibility float64
-	Detail      int
+// ParseColor reads a "#rrggbb" color.
+func ParseColor(s string) (Color, error) {
+	var c Color
+	if len(s) != 7 || s[0] != '#' {
+		return c, fmt.Errorf("bad color %q (expected #rrggbb)", s)
+	}
+	for i := range 3 {
+		v, err := strconv.ParseUint(s[1+2*i:3+2*i], 16, 8)
+		if err != nil {
+			return c, fmt.Errorf("bad color %q (expected #rrggbb)", s)
+		}
+		c[i] = uint8(v)
+	}
+	return c, nil
 }
 
-// Calibrated tells whether the uplift of a terrain is found from its target
-// height.
-func (t *Terrain) Calibrated() bool { return t.Height > 0 && t.Gradient >= 0 }
+func (c Color) MarshalJSON() ([]byte, error) { return json.Marshal(c.String()) }
+
+func (c *Color) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return err
+	}
+	parsed, err := ParseColor(s)
+	*c = parsed
+	return err
+}
+
+// Kind of terrain
+type Kind int
+
+const (
+	Land Kind = iota
+	Sea       // the base level, at sea level
+	Lake      // water, flat, draining through its outlet
+)
+
+// Names of the water terrains, which every project has
+const (
+	SeaName  = "sea"
+	LakeName = "lake"
+)
+
+type Terrain struct {
+	Name  string
+	Color Color
+	Kind  Kind
+
+	// Target summit height, meters (land): the simulation finds the uplift
+	// that makes the high points of each region reach it. 0: no uplift.
+	Height float64
+
+	// Erodibility multiplier (default 1).
+	Erodibility float64
+
+	// Number of mesh refinement levels (DetailAuto: all levels on land, one
+	// on water).
+	Detail int
+}
 
 // DetailAuto is the default terrain detail.
 const DetailAuto = -1
 
-func (t *Terrain) IsSeaTerrain() bool { return !math.IsNaN(t.FixedShore) }
+func (t *Terrain) IsWater() bool { return t.Kind != Land }
+
+// Calibrated tells whether the uplift of a terrain is found from its target
+// height.
+func (t *Terrain) Calibrated() bool { return t.Kind == Land && t.Height > 0 }
 
 type Config struct {
-	// Path of the config file itself, not serialized.
+	// Path of the project file, not serialized. Empty for a project not saved
+	// yet.
 	ConfigPath string `json:"-"`
 
-	Path            string  `json:"path"`
-	Resolution      float64 `json:"resolution"`
-	Grid            string  `json:"grid"`
-	Jitter          float64 `json:"jitter"`
-	Relax           bool    `json:"relax"`
-	Seed            uint64  `json:"seed"`
-	SmoothingRadius float64 `json:"smoothingRadius"`
-	ErosionMinFlow  int     `json:"erosionMinFlow"`
-	ErosionFactor   float64 `json:"erosionFactor"`
-	MaxHeight       float64 `json:"maxHeight"`
-	BlurRadius      int     `json:"blurRadius"`
+	Image      string  `json:"image"`      // map image, relative to the project file
+	MapWidth   float64 `json:"mapWidth"`   // km
+	Resolution float64 `json:"resolution"` // mesh spacing of the finest level, pixels
+	Levels     int     `json:"levels"`     // refinements of the coarse mesh
+	Seed       uint64  `json:"seed"`
 
-	// In file order
+	// Water first (sea, lake), then land, in file order
 	Terrains []*Terrain `json:"-"`
 
-	ExportOBJ       bool `json:"exportOBJ"`
-	ExportSVG       bool `json:"exportSVG"`
-	ExportHeightmap bool `json:"exportHeightmap"`
-	PNG16           bool `json:"png16"`
-
-	Erosion ErosionModel `json:"-"`
-	Noise   SlopeNoise   `json:"-"`
-	Uplift  UpliftModel  `json:"-"`
+	Simulation Simulation `json:"simulation"`
 }
 
-// UpliftModel is the elevation model. "slope" (the default) builds
-// elevation up from the shores, with the slopes given by the terrains.
-// "uplift" simulates the landscape: terrains give the rate at which the land
-// rises, rivers erode it (stream power law, solved with the implicit scheme
-// of Braun and Willett 2013), and hillslopes collapse beyond a critical
-// slope. Elevations are then in meters.
-//
-// The simulation runs on a mesh refined Levels times: coarse first, until
-// the landscape settles, then on meshes twice as fine, each starting from
-// the previous result. Terrains choose how many levels refine them.
-type UpliftModel struct {
-	Model         string  `json:"elevationModel"`
-	MapWidth      float64 `json:"mapWidth"`              // km
-	Levels        int     `json:"levels"`                // refinements of the coarse mesh; resolution is that of the finest
-	UpliftBlur    float64 `json:"upliftBlur"`            // km, smoothing of the uplift map
-	Erodibility   float64 `json:"erodibility"`           // K, per year (for m = 0.5)
-	StreamM       float64 `json:"streamExponent"`        // m, exponent of the drainage area
-	CriticalSlope float64 `json:"criticalSlope"`         // degrees
-	TimeStep      float64 `json:"timeStep"`              // thousands of years
-	Steps         int     `json:"steps"`                 // on the coarse mesh
-	RefineSteps   int     `json:"refineSteps"`           // on each finer mesh
-	NoiseScale    float64 `json:"erodibilityNoiseScale"` // km
-	NoiseAmount   float64 `json:"erodibilityNoise"`      // 0..1
+// Simulation are the parameters of the landscape simulation: the land rises
+// (at the rate found from the target heights), rivers erode it (stream power
+// law), and hillslopes collapse beyond a critical slope.
+type Simulation struct {
+	UpliftBlur       float64 `json:"upliftBlur"`       // km: uplift ramps up over this distance from lower terrains
+	Erodibility      float64 `json:"erodibility"`      // K, per year (for m = 0.5)
+	StreamExponent   float64 `json:"streamExponent"`   // m, exponent of the drainage area
+	CriticalSlope    float64 `json:"criticalSlope"`    // degrees
+	TimeStep         float64 `json:"timeStep"`         // thousands of years
+	Steps            int     `json:"steps"`            // on the coarse mesh
+	RefineSteps      int     `json:"refineSteps"`      // on each finer mesh
+	ErodibilityNoise float64 `json:"erodibilityNoise"` // 0..1: variation of the rock hardness
+	NoiseScale       float64 `json:"noiseScale"`       // km, of that variation
+	FloorSlope       float64 `json:"floorSlope"`       // of the sea and lake floors, meters per meter
 }
 
-// Elevation models
-const (
-	ModelSlope  = "slope"
-	ModelUplift = "uplift"
-)
-
-var defaultUplift = UpliftModel{
-	Model: ModelSlope, MapWidth: 1000, Levels: 3, UpliftBlur: 30,
-	Erodibility: 2e-6, StreamM: 0.5, CriticalSlope: 30,
+// DefaultSimulation are the default simulation parameters.
+var DefaultSimulation = Simulation{
+	UpliftBlur: 30, Erodibility: 2e-6, StreamExponent: 0.5, CriticalSlope: 30,
 	TimeStep: 50, Steps: 300, RefineSteps: 60,
-	NoiseScale: 30, NoiseAmount: 0.3,
+	ErodibilityNoise: 0.3, NoiseScale: 30, FloorSlope: 0.01,
 }
 
-// ErosionModel is how slopes are reduced along rivers.
-//
-// "step" (the default) reduces them by ErosionFactor where the flow is above
-// ErosionMinFlow, once. "power" is a stream power law: the slope is
-// multiplied by (A / ChannelArea) ^ -Theta where the drainage area A is
-// above ChannelArea, and at least by Floor. The drainage changes with the
-// elevation, so the elevation and the rivers are then computed again,
-// Iterations times.
-type ErosionModel struct {
-	Model       string  `json:"erosionModel"`
-	Theta       float64 `json:"erosionTheta"`
-	ChannelArea float64 `json:"channelArea"` // square pixels
-	Floor       float64 `json:"erosionFloor"`
-	Iterations  int     `json:"erosionIterations"`
+// Default terrains of new projects
+var (
+	DefaultSea  = Terrain{Name: SeaName, Color: Color{66, 66, 125}, Kind: Sea, Erodibility: 1, Detail: DetailAuto}
+	DefaultLake = Terrain{Name: LakeName, Color: Color{109, 148, 194}, Kind: Lake, Erodibility: 1, Detail: DetailAuto}
+	DefaultLand = []Terrain{
+		{Name: "plains", Color: Color{135, 168, 81}, Height: 400, Erodibility: 1, Detail: 1},
+		{Name: "hills", Color: Color{209, 184, 134}, Height: 1500, Erodibility: 1, Detail: 2},
+		{Name: "mountains", Color: Color{101, 72, 31}, Height: 4500, Erodibility: 1, Detail: DetailAuto},
+	}
+)
+
+// Default returns the config of a new project, for a map image.
+func Default(image string) *Config {
+	c := &Config{Image: image, MapWidth: 1000, Resolution: 2, Levels: 3, Simulation: DefaultSimulation}
+	for _, t := range append([]Terrain{DefaultSea, DefaultLake}, DefaultLand...) {
+		c.Terrains = append(c.Terrains, &t)
+	}
+	return c
 }
 
-// SlopeNoise multiplies land slopes by 1 + Amplitude * n, n between -1 and 1
-// from a noise of the given type: "fbm" (smooth), "ridged" (low along thin
-// lines) or "worley" (low along the boundaries of cells), or "none".
-type SlopeNoise struct {
-	Type      string  `json:"noiseType"`
-	Scale     float64 `json:"noiseScale"` // pixels, of the largest octave
-	Amplitude float64 `json:"noiseAmplitude"`
-	Octaves   int     `json:"noiseOctaves"`
-	Stretch   float64 `json:"noiseStretch"` // elongation along Angle
-	Angle     float64 `json:"noiseAngle"`   // degrees, counterclockwise from x
+// ImagePath is the path of the map image: relative to the project file.
+func (c *Config) ImagePath() string {
+	if c.ConfigPath == "" || filepath.IsAbs(c.Image) {
+		return c.Image
+	}
+	return filepath.Join(filepath.Dir(c.ConfigPath), c.Image)
 }
 
-// Erosion models
-const (
-	ErosionStep  = "step"
-	ErosionPower = "power"
-)
+var topKeys = []string{"image", "mapWidth", "resolution", "levels", "seed", "terrains", "simulation"}
 
-// Noise types
-const (
-	NoiseNone   = "none"
-	NoiseFBM    = "fbm"
-	NoiseRidged = "ridged"
-	NoiseWorley = "worley"
-)
+var terrainKeys = []string{"color", "height", "erodibility", "detail"}
 
-var defaultErosion = ErosionModel{Model: ErosionStep, Theta: 0.5, ChannelArea: 20000, Floor: 0.05, Iterations: 10}
-
-var defaultNoise = SlopeNoise{Type: NoiseNone, Scale: 256, Amplitude: 0.5, Octaves: 3, Stretch: 1}
-
-// Grid types
-const (
-	GridHex    = "hex"
-	GridSquare = "square"
-)
-
-var required = []string{"path", "resolution", "grid", "jitter", "relax",
-	"smoothingRadius", "erosionMinFlow", "erosionFactor", "terrains"}
-
-var optional = []string{"seed", "maxHeight", "blurRadius",
-	"exportOBJ", "exportSVG", "exportHeightmap", "png16",
-	"erosionModel", "erosionTheta", "channelArea", "erosionFloor", "erosionIterations",
-	"noiseType", "noiseScale", "noiseAmplitude", "noiseOctaves", "noiseStretch", "noiseAngle",
-	"elevationModel", "mapWidth", "levels", "upliftBlur", "erodibility", "streamExponent", "criticalSlope",
-	"timeStep", "steps", "refineSteps", "erodibilityNoiseScale", "erodibilityNoise"}
-
-var terrainKeys = []string{"r", "g", "b", "gradient", "fixedShore", "smoothing", "erosion", "height", "uplift", "erodibility", "detail"}
-
-// Load reads and validates a config file. Warnings are non fatal problems,
+// Load reads and validates a project file. Warnings are non fatal problems,
 // such as unknown keys.
 func Load(path string) (conf *Config, warnings []string, err error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, nil, err
 	}
-
 	conf, warnings, err = Parse(data)
-	if err != nil {
-		return nil, warnings, fmt.Errorf("%s: %w", path, err)
+	if conf != nil {
+		conf.ConfigPath = path
 	}
-
-	conf.ConfigPath = path
-	return conf, warnings, nil
+	return conf, warnings, err
 }
 
-// Parse decodes and validates a config.
+// Parse reads and validates a project from its JSON.
 func Parse(data []byte) (*Config, []string, error) {
-	conf := &Config{ExportHeightmap: true, Erosion: defaultErosion, Noise: defaultNoise, Uplift: defaultUplift}
+	conf := &Config{MapWidth: 1000, Resolution: 2, Levels: 3, Simulation: DefaultSimulation}
 	warnings, err := conf.apply(data, true)
 	if err != nil {
 		return nil, warnings, err
 	}
-
+	conf.addWater()
 	return conf, warnings, conf.Validate()
 }
 
 // Patch returns a copy of the config with the given partial JSON applied on
-// top. Terrains are patched by name and cannot be added or removed.
+// top. Terrains are patched by name, and cannot be added or removed.
 func (c *Config) Patch(data []byte) (*Config, error) {
 	n := c.Clone()
 	if _, err := n.apply(data, false); err != nil {
@@ -227,7 +222,7 @@ func (c *Config) apply(data []byte, full bool) (warnings []string, err error) {
 	}
 
 	if full {
-		for _, key := range required {
+		for _, key := range []string{"image", "terrains"} {
 			if _, ok := raw[key]; !ok {
 				return nil, fmt.Errorf("missing required key %q", key)
 			}
@@ -235,21 +230,17 @@ func (c *Config) apply(data []byte, full bool) (warnings []string, err error) {
 	}
 
 	for key, value := range raw {
-		if !slices.Contains(required, key) && !slices.Contains(optional, key) {
+		switch {
+		case !slices.Contains(topKeys, key):
 			warnings = append(warnings, fmt.Sprintf("unknown key %q ignored", key))
 			continue
+		case key == "terrains":
+			err = c.applyTerrains(value, full)
+		case key == "simulation":
+			err = decodeStrict(value, &c.Simulation)
+		default:
+			err = setField(c, key, value)
 		}
-
-		if key == "terrains" {
-			if full {
-				err = c.parseTerrains(value)
-			} else {
-				err = c.patchTerrains(value)
-			}
-		} else {
-			err = c.setField(key, value)
-		}
-
 		if err != nil {
 			return warnings, fmt.Errorf("%s: %w", key, err)
 		}
@@ -262,54 +253,27 @@ func (c *Config) apply(data []byte, full bool) (warnings []string, err error) {
 // setField decodes a single top level value into the matching struct field,
 // by unmarshalling a one key object into the struct (which leaves the other
 // fields untouched).
-func (c *Config) setField(key string, value json.RawMessage) error {
+func setField(c *Config, key string, value json.RawMessage) error {
 	var buf bytes.Buffer
 	buf.WriteString("{")
 	buf.WriteString(strconv.Quote(key))
 	buf.WriteString(":")
 	buf.Write(value)
 	buf.WriteString("}")
-
-	// Keys of the parameter groups
-	var target any = c
-	switch {
-	case slices.Contains(erosionKeys, key):
-		target = &c.Erosion
-	case slices.Contains(noiseKeys, key):
-		target = &c.Noise
-	case slices.Contains(upliftKeys, key):
-		target = &c.Uplift
-	}
-
-	dec := json.NewDecoder(&buf)
-	dec.DisallowUnknownFields()
-	return dec.Decode(target)
+	return decodeStrict(buf.Bytes(), c)
 }
 
-var (
-	erosionKeys = []string{"erosionModel", "erosionTheta", "channelArea", "erosionFloor", "erosionIterations"}
-	noiseKeys   = []string{"noiseType", "noiseScale", "noiseAmplitude", "noiseOctaves", "noiseStretch", "noiseAngle"}
-	upliftKeys  = []string{"elevationModel", "mapWidth", "levels", "upliftBlur", "erodibility", "streamExponent",
-		"criticalSlope", "timeStep", "steps", "refineSteps", "erodibilityNoiseScale", "erodibilityNoise"}
-)
-
 type rawTerrain struct {
-	R          *uint8   `json:"r"`
-	G          *uint8   `json:"g"`
-	B          *uint8   `json:"b"`
-	Gradient   *float64 `json:"gradient"`
-	FixedShore *float64 `json:"fixedShore"`
-	Smoothing  *bool    `json:"smoothing"`
-	Erosion    *bool    `json:"erosion"`
-
+	Color       *Color   `json:"color"`
 	Height      *float64 `json:"height"`
-	Uplift      *float64 `json:"uplift"`
 	Erodibility *float64 `json:"erodibility"`
 	Detail      *int     `json:"detail"`
 }
 
-func (c *Config) parseTerrains(data json.RawMessage) error {
-	c.Terrains = nil
+func (c *Config) applyTerrains(data json.RawMessage, full bool) error {
+	if full {
+		c.Terrains = nil
+	}
 
 	return forEachOrdered(data, func(name string, value json.RawMessage) error {
 		var rt rawTerrain
@@ -317,78 +281,71 @@ func (c *Config) parseTerrains(data json.RawMessage) error {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 
-		if rt.R == nil || rt.G == nil || rt.B == nil || rt.Gradient == nil {
-			return fmt.Errorf("%s: r, g, b and gradient are required", name)
-		}
-
-		t := &Terrain{
-			Name:        name,
-			FixedShore:  math.NaN(),
-			Smoothing:   true,
-			Erosion:     true,
-			Erodibility: 1,
-			Detail:      DetailAuto,
-		}
-		t.update(&rt)
-		c.Terrains = append(c.Terrains, t)
-		return nil
-	})
-}
-
-func (c *Config) patchTerrains(data json.RawMessage) error {
-	return forEachOrdered(data, func(name string, value json.RawMessage) error {
 		t := c.Terrain(name)
-		if t == nil {
+		switch {
+		case t == nil && !full:
 			return fmt.Errorf("unknown terrain %q", name)
+		case t == nil:
+			if rt.Color == nil {
+				return fmt.Errorf("%s: color is required", name)
+			}
+			t = &Terrain{Name: name, Kind: kindOf(name), Erodibility: 1, Detail: DetailAuto}
+			c.Terrains = append(c.Terrains, t)
 		}
 
-		var rt rawTerrain
-		if err := decodeStrict(value, &rt); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
+		if rt.Color != nil {
+			t.Color = *rt.Color
 		}
-
-		if rt.FixedShore != nil && !t.IsSeaTerrain() {
-			return fmt.Errorf("%s: cannot add a fixed shore to a non sea terrain", name)
+		if rt.Height != nil {
+			t.Height = *rt.Height
 		}
-
-		t.update(&rt)
+		if rt.Erodibility != nil {
+			t.Erodibility = *rt.Erodibility
+		}
+		if rt.Detail != nil {
+			t.Detail = *rt.Detail
+		}
 		return nil
 	})
 }
 
-func (t *Terrain) update(rt *rawTerrain) {
-	if rt.R != nil {
-		t.Color[0] = *rt.R
+func kindOf(name string) Kind {
+	switch name {
+	case SeaName:
+		return Sea
+	case LakeName:
+		return Lake
 	}
-	if rt.G != nil {
-		t.Color[1] = *rt.G
+	return Land
+}
+
+// addWater adds the sea and lake terrains if missing, with their default
+// colors (or free ones), and puts them first.
+func (c *Config) addWater() {
+	for _, def := range []Terrain{DefaultLake, DefaultSea} {
+		if c.Terrain(def.Name) != nil {
+			continue
+		}
+		t := def
+		t.Color = c.FreeColor(t.Color)
+		c.Terrains = append([]*Terrain{&t}, c.Terrains...)
 	}
-	if rt.B != nil {
-		t.Color[2] = *rt.B
-	}
-	if rt.Gradient != nil {
-		t.Gradient = *rt.Gradient
-	}
-	if rt.FixedShore != nil {
-		t.FixedShore = *rt.FixedShore
-	}
-	if rt.Smoothing != nil {
-		t.Smoothing = *rt.Smoothing
-	}
-	if rt.Erosion != nil {
-		t.Erosion = *rt.Erosion
-	}
-	if rt.Height != nil {
-		t.Height = *rt.Height
-	}
-	if rt.Uplift != nil {
-		t.Uplift = *rt.Uplift
-	}
-	if rt.Erodibility != nil {
-		t.Erodibility = *rt.Erodibility
-	}
-	if rt.Detail != nil {
-		t.Detail = *rt.Detail
+	slices.SortStableFunc(c.Terrains, func(a, b *Terrain) int {
+		order := func(t *Terrain) int { return map[Kind]int{Sea: 0, Lake: 1, Land: 2}[t.Kind] }
+		return order(a) - order(b)
+	})
+}
+
+// FreeColor returns a color no terrain has: the given one, or one close to
+// it.
+func (c *Config) FreeColor(want Color) Color {
+	used := c.TerrainsByColor()
+	for i := 0; ; i++ {
+		candidate := want
+		candidate[i%3] = want[i%3] + uint8(i*37)
+		if _, taken := used[candidate]; !taken || i > 1000 {
+			return candidate
+		}
 	}
 }
 
@@ -425,113 +382,65 @@ func forEachOrdered(data []byte, f func(key string, value json.RawMessage) error
 			return err
 		}
 	}
-
 	return nil
 }
 
 func (c *Config) Validate() error {
 	var errs []string
+	add := func(format string, args ...any) { errs = append(errs, fmt.Sprintf(format, args...)) }
 
+	if c.MapWidth <= 0 {
+		add("mapWidth must be positive")
+	}
 	if c.Resolution <= 0 {
-		errs = append(errs, "resolution must be positive")
+		add("resolution must be positive")
 	}
-	if c.Grid != GridHex && c.Grid != GridSquare {
-		errs = append(errs, fmt.Sprintf("unknown grid type %q (expected hex or square)", c.Grid))
-	}
-	if c.Jitter < 0 {
-		errs = append(errs, "jitter must be positive")
-	}
-	if c.SmoothingRadius < 0 {
-		errs = append(errs, "smoothingRadius must be positive")
-	}
-	if c.BlurRadius < 0 {
-		errs = append(errs, "blurRadius must be positive")
-	}
-	if c.ErosionFactor < 0 {
-		errs = append(errs, "erosionFactor must be positive")
+	if c.Levels < 0 || c.Levels > 6 {
+		add("levels must be between 0 and 6")
 	}
 
-	e := c.Erosion
-	if e.Model != ErosionStep && e.Model != ErosionPower {
-		errs = append(errs, fmt.Sprintf("unknown erosionModel %q (expected step or power)", e.Model))
+	s := c.Simulation
+	if s.UpliftBlur < 0 || s.NoiseScale <= 0 {
+		add("upliftBlur and noiseScale must be positive")
 	}
-	if e.Theta < 0 {
-		errs = append(errs, "erosionTheta must be positive")
+	if s.Erodibility <= 0 || s.StreamExponent <= 0 {
+		add("erodibility and streamExponent must be positive")
 	}
-	if e.ChannelArea <= 0 {
-		errs = append(errs, "channelArea must be positive")
+	if s.CriticalSlope <= 0 || s.CriticalSlope >= 90 {
+		add("criticalSlope must be between 0 and 90 degrees")
 	}
-	if e.Floor < 0 || e.Floor > 1 {
-		errs = append(errs, "erosionFloor must be between 0 and 1")
+	if s.TimeStep <= 0 || s.Steps < 1 || s.RefineSteps < 0 {
+		add("timeStep and steps must be positive")
 	}
-	if e.Iterations < 1 {
-		errs = append(errs, "erosionIterations must be at least 1")
+	if s.ErodibilityNoise < 0 || s.ErodibilityNoise > 1 {
+		add("erodibilityNoise must be between 0 and 1")
+	}
+	if s.FloorSlope < 0 {
+		add("floorSlope must be positive")
 	}
 
-	u := c.Uplift
-	if u.Model != ModelSlope && u.Model != ModelUplift {
-		errs = append(errs, fmt.Sprintf("unknown elevationModel %q (expected slope or uplift)", u.Model))
+	if c.Terrain(SeaName) == nil || c.Terrain(LakeName) == nil {
+		add("the sea and lake terrains are required")
 	}
-	if u.MapWidth <= 0 {
-		errs = append(errs, "mapWidth must be positive")
-	}
-	if u.Levels < 0 || u.Levels > 6 {
-		errs = append(errs, "levels must be between 0 and 6")
-	}
-	if u.UpliftBlur < 0 || u.NoiseScale <= 0 {
-		errs = append(errs, "upliftBlur and erodibilityNoiseScale must be positive")
-	}
-	if u.Erodibility <= 0 || u.StreamM <= 0 {
-		errs = append(errs, "erodibility and streamExponent must be positive")
-	}
-	if u.CriticalSlope <= 0 || u.CriticalSlope >= 90 {
-		errs = append(errs, "criticalSlope must be between 0 and 90 degrees")
-	}
-	if u.TimeStep <= 0 || u.Steps < 1 || u.RefineSteps < 0 {
-		errs = append(errs, "timeStep and steps must be positive")
-	}
-	if u.NoiseAmount < 0 || u.NoiseAmount > 1 {
-		errs = append(errs, "erodibilityNoise must be between 0 and 1")
-	}
+	colors := map[Color]string{}
 	for _, t := range c.Terrains {
-		if t.Erodibility < 0 || t.Height < 0 {
-			errs = append(errs, fmt.Sprintf("terrain %s: height and erodibility must be positive", t.Name))
+		if strings.TrimSpace(t.Name) == "" {
+			add("a terrain has no name")
+		}
+		if other, ok := colors[t.Color]; ok {
+			add("terrains %s and %s have the same color", other, t.Name)
+		}
+		colors[t.Color] = t.Name
+		if t.Height < 0 || t.Erodibility < 0 {
+			add("terrain %s: height and erodibility must be positive", t.Name)
 		}
 		if t.Detail < DetailAuto {
-			errs = append(errs, fmt.Sprintf("terrain %s: detail must be positive (or -1, automatic)", t.Name))
+			add("terrain %s: detail must be positive (or -1, automatic)", t.Name)
 		}
-	}
-
-	n := c.Noise
-	if !slices.Contains([]string{NoiseNone, NoiseFBM, NoiseRidged, NoiseWorley}, n.Type) {
-		errs = append(errs, fmt.Sprintf("unknown noiseType %q (expected none, fbm, ridged or worley)", n.Type))
-	}
-	if n.Scale <= 0 {
-		errs = append(errs, "noiseScale must be positive")
-	}
-	if n.Amplitude < 0 || n.Amplitude > 1 {
-		errs = append(errs, "noiseAmplitude must be between 0 and 1")
-	}
-	if n.Octaves < 1 {
-		errs = append(errs, "noiseOctaves must be at least 1")
-	}
-	if n.Stretch < 1 {
-		errs = append(errs, "noiseStretch must be at least 1")
-	}
-	if len(c.Terrains) == 0 {
-		errs = append(errs, "no terrains defined")
-	}
-
-	seen := map[Color]string{}
-	for _, t := range c.Terrains {
-		if other, ok := seen[t.Color]; ok {
-			errs = append(errs, fmt.Sprintf("terrains %s and %s have the same color", other, t.Name))
-		}
-		seen[t.Color] = t.Name
 	}
 
 	if len(errs) > 0 {
-		return fmt.Errorf("invalid config: %s", strings.Join(errs, ", "))
+		return fmt.Errorf("invalid project: %s", strings.Join(errs, ", "))
 	}
 	return nil
 }
@@ -555,6 +464,17 @@ func (c *Config) Terrain(name string) *Terrain {
 	return nil
 }
 
+// Land returns the land terrains, in order.
+func (c *Config) Land() []*Terrain {
+	var land []*Terrain
+	for _, t := range c.Terrains {
+		if t.Kind == Land {
+			land = append(land, t)
+		}
+	}
+	return land
+}
+
 // TerrainsByColor builds the lookup table used to map image pixels to terrains.
 func (c *Config) TerrainsByColor() map[Color]*Terrain {
 	m := make(map[Color]*Terrain, len(c.Terrains))
@@ -566,131 +486,47 @@ func (c *Config) TerrainsByColor() map[Color]*Terrain {
 
 // TerrainsEqual compares terrains regardless of their order.
 func TerrainsEqual(a, b *Config) bool {
-	if len(a.Terrains) != len(b.Terrains) {
-		return false
-	}
-
-	bm := b.TerrainsByColor()
-	for _, ta := range a.Terrains {
-		tb, ok := bm[ta.Color]
-		if !ok || !ta.equal(tb) {
-			return false
-		}
-	}
-	return true
+	return terrainsMatch(a, b, func(x, y *Terrain) bool { return *x == *y })
 }
 
-// TerrainMeshesEqual tells whether terrains give the same mesh with the
-// uplift model: same colors, water or land, and details.
+// TerrainMeshesEqual tells whether terrains give the same mesh: same
+// colors, kinds and details.
 func TerrainMeshesEqual(a, b *Config) bool {
+	return terrainsMatch(a, b, func(x, y *Terrain) bool { return x.Kind == y.Kind && x.Detail == y.Detail })
+}
+
+func terrainsMatch(a, b *Config, same func(x, y *Terrain) bool) bool {
 	if len(a.Terrains) != len(b.Terrains) {
 		return false
 	}
-
 	bm := b.TerrainsByColor()
 	for _, ta := range a.Terrains {
 		tb, ok := bm[ta.Color]
-		if !ok || ta.Detail != tb.Detail || (ta.Gradient < 0) != (tb.Gradient < 0) {
+		if !ok || !same(ta, tb) {
 			return false
 		}
 	}
 	return true
-}
-
-func (t *Terrain) equal(o *Terrain) bool {
-	sameShore := t.FixedShore == o.FixedShore ||
-		(math.IsNaN(t.FixedShore) && math.IsNaN(o.FixedShore))
-
-	return t.Name == o.Name &&
-		t.Color == o.Color &&
-		t.Gradient == o.Gradient &&
-		sameShore &&
-		t.Smoothing == o.Smoothing &&
-		t.Erosion == o.Erosion &&
-		t.Height == o.Height &&
-		t.Uplift == o.Uplift &&
-		t.Erodibility == o.Erodibility &&
-		t.Detail == o.Detail
 }
 
 // Marshal serializes the config in a stable, human friendly layout (one
-// terrain per line, in their original order).
+// terrain per line, in their order).
 func (c *Config) Marshal() []byte {
 	var b bytes.Buffer
 	num := func(f float64) string { return strconv.FormatFloat(f, 'g', -1, 64) }
 
 	b.WriteString("{\n")
-	fmt.Fprintf(&b, "\t\"path\": %s,\n", strconv.Quote(c.Path))
+	fmt.Fprintf(&b, "\t\"image\": %s,\n", strconv.Quote(filepath.ToSlash(c.Image)))
+	fmt.Fprintf(&b, "\t\"mapWidth\": %s,\n", num(c.MapWidth))
 	fmt.Fprintf(&b, "\t\"resolution\": %s,\n", num(c.Resolution))
-	fmt.Fprintf(&b, "\t\"grid\": %s,\n", strconv.Quote(c.Grid))
-	fmt.Fprintf(&b, "\t\"jitter\": %s,\n", num(c.Jitter))
-	fmt.Fprintf(&b, "\t\"relax\": %t,\n", c.Relax)
+	fmt.Fprintf(&b, "\t\"levels\": %d,\n", c.Levels)
 	fmt.Fprintf(&b, "\t\"seed\": %d,\n", c.Seed)
-	fmt.Fprintf(&b, "\t\"smoothingRadius\": %s,\n", num(c.SmoothingRadius))
-	fmt.Fprintf(&b, "\t\"erosionMinFlow\": %d,\n", c.ErosionMinFlow)
-	fmt.Fprintf(&b, "\t\"erosionFactor\": %s,\n", num(c.ErosionFactor))
-	fmt.Fprintf(&b, "\t\"maxHeight\": %s,\n", num(c.MaxHeight))
-	fmt.Fprintf(&b, "\t\"blurRadius\": %d,\n", c.BlurRadius)
-
-	// Experimental parameters, only when not the defaults
-	var extra []string
-	if e := c.Erosion; e != defaultErosion {
-		extra = append(extra,
-			fmt.Sprintf("\"erosionModel\": %s", strconv.Quote(e.Model)),
-			fmt.Sprintf("\"erosionTheta\": %s", num(e.Theta)),
-			fmt.Sprintf("\"channelArea\": %s", num(e.ChannelArea)),
-			fmt.Sprintf("\"erosionFloor\": %s", num(e.Floor)),
-			fmt.Sprintf("\"erosionIterations\": %d", e.Iterations))
-	}
-	if n := c.Noise; n != defaultNoise {
-		extra = append(extra,
-			fmt.Sprintf("\"noiseType\": %s", strconv.Quote(n.Type)),
-			fmt.Sprintf("\"noiseScale\": %s", num(n.Scale)),
-			fmt.Sprintf("\"noiseAmplitude\": %s", num(n.Amplitude)),
-			fmt.Sprintf("\"noiseOctaves\": %d", n.Octaves),
-			fmt.Sprintf("\"noiseStretch\": %s", num(n.Stretch)),
-			fmt.Sprintf("\"noiseAngle\": %s", num(n.Angle)))
-	}
-	if u := c.Uplift; u != defaultUplift {
-		extra = append(extra,
-			fmt.Sprintf("\"elevationModel\": %s", strconv.Quote(u.Model)),
-			fmt.Sprintf("\"mapWidth\": %s", num(u.MapWidth)),
-			fmt.Sprintf("\"levels\": %d", u.Levels),
-			fmt.Sprintf("\"upliftBlur\": %s", num(u.UpliftBlur)),
-			fmt.Sprintf("\"erodibility\": %s", num(u.Erodibility)),
-			fmt.Sprintf("\"streamExponent\": %s", num(u.StreamM)),
-			fmt.Sprintf("\"criticalSlope\": %s", num(u.CriticalSlope)),
-			fmt.Sprintf("\"timeStep\": %s", num(u.TimeStep)),
-			fmt.Sprintf("\"steps\": %d", u.Steps),
-			fmt.Sprintf("\"refineSteps\": %d", u.RefineSteps),
-			fmt.Sprintf("\"erodibilityNoiseScale\": %s", num(u.NoiseScale)),
-			fmt.Sprintf("\"erodibilityNoise\": %s", num(u.NoiseAmount)))
-	}
-	if len(extra) > 0 {
-		b.WriteString("\n")
-		for _, line := range extra {
-			fmt.Fprintf(&b, "\t%s,\n", line)
-		}
-	}
 
 	b.WriteString("\n\t\"terrains\": {\n")
 	for i, t := range c.Terrains {
-		fmt.Fprintf(&b, "\t\t%s: { \"r\": %d, \"g\": %d, \"b\": %d, \"gradient\": %s",
-			strconv.Quote(t.Name), t.Color[0], t.Color[1], t.Color[2], num(t.Gradient))
-		if t.IsSeaTerrain() {
-			fmt.Fprintf(&b, ", \"fixedShore\": %s", num(t.FixedShore))
-		}
-		if !t.Smoothing {
-			b.WriteString(", \"smoothing\": false")
-		}
-		if !t.Erosion {
-			b.WriteString(", \"erosion\": false")
-		}
-		if t.Height != 0 {
+		fmt.Fprintf(&b, "\t\t%s: { \"color\": %q", strconv.Quote(t.Name), t.Color.String())
+		if t.Kind == Land {
 			fmt.Fprintf(&b, ", \"height\": %s", num(t.Height))
-		}
-		if t.Uplift != 0 {
-			fmt.Fprintf(&b, ", \"uplift\": %s", num(t.Uplift))
 		}
 		if t.Erodibility != 1 {
 			fmt.Fprintf(&b, ", \"erodibility\": %s", num(t.Erodibility))
@@ -706,16 +542,36 @@ func (c *Config) Marshal() []byte {
 	}
 	b.WriteString("\t},\n\n")
 
-	fmt.Fprintf(&b, "\t\"exportOBJ\": %t,\n", c.ExportOBJ)
-	fmt.Fprintf(&b, "\t\"exportSVG\": %t,\n", c.ExportSVG)
-	fmt.Fprintf(&b, "\t\"exportHeightmap\": %t,\n", c.ExportHeightmap)
-	fmt.Fprintf(&b, "\t\"png16\": %t\n", c.PNG16)
-	b.WriteString("}\n")
+	s := c.Simulation
+	b.WriteString("\t\"simulation\": {\n")
+	fields := []string{
+		fmt.Sprintf("\"upliftBlur\": %s", num(s.UpliftBlur)),
+		fmt.Sprintf("\"erodibility\": %s", num(s.Erodibility)),
+		fmt.Sprintf("\"streamExponent\": %s", num(s.StreamExponent)),
+		fmt.Sprintf("\"criticalSlope\": %s", num(s.CriticalSlope)),
+		fmt.Sprintf("\"timeStep\": %s", num(s.TimeStep)),
+		fmt.Sprintf("\"steps\": %d", s.Steps),
+		fmt.Sprintf("\"refineSteps\": %d", s.RefineSteps),
+		fmt.Sprintf("\"erodibilityNoise\": %s", num(s.ErodibilityNoise)),
+		fmt.Sprintf("\"noiseScale\": %s", num(s.NoiseScale)),
+		fmt.Sprintf("\"floorSlope\": %s", num(s.FloorSlope)),
+	}
+	b.WriteString("\t\t" + strings.Join(fields, ",\n\t\t") + "\n")
+	b.WriteString("\t}\n}\n")
 
 	return b.Bytes()
 }
 
-// Save writes the config back to its file.
+// Save writes the config to its file.
 func (c *Config) Save() error {
+	if c.ConfigPath == "" {
+		return fmt.Errorf("the project has no file yet")
+	}
 	return os.WriteFile(c.ConfigPath, c.Marshal(), 0o644)
+}
+
+// MetersPerPixel is the horizontal scale of a map of the given width in
+// pixels.
+func (c *Config) MetersPerPixel(width int) float64 {
+	return c.MapWidth * 1000 / math.Max(1, float64(width))
 }

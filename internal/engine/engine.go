@@ -35,7 +35,12 @@ type Engine struct {
 	pendingImage   bool
 	pendingOutline *Outline
 	pendingRerun   bool
+	pendingFresh   bool // don't start from the current world: another project
 	wake           chan struct{}
+
+	// Image file known to hold the current map (saved there): moving the
+	// project to it is not a new image
+	savedImage string
 
 	watchSteps int    // show the simulation every that many steps, 0: don't
 	progress   string // of the simulation being watched
@@ -129,6 +134,61 @@ func (e *Engine) SetOutline(o *Outline) {
 	e.signal()
 }
 
+// Replace requests generating another project from scratch: a config, and
+// its map in memory (nil: its image file). The config is unsaved until
+// MarkSaved.
+func (e *Engine) Replace(conf *config.Config, o *Outline) {
+	e.mu.Lock()
+	e.conf = conf
+	e.pendingConf = conf
+	e.pendingOutline = o
+	e.pendingImage, e.pendingRerun = false, false
+	e.pendingFresh = true
+	e.dirty = true
+	e.err = nil
+	e.mu.Unlock()
+	e.signal()
+}
+
+// SetSaved records that the project was saved: to conf's file, with the
+// current map in conf's image file. Nothing is regenerated for the new
+// paths.
+func (e *Engine) SetSaved(conf *config.Config) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.savedImage = conf.ImagePath()
+	e.conf = rebaseConfig(e.conf, conf)
+	if e.pendingConf != nil {
+		e.pendingConf = rebaseConfig(e.pendingConf, conf)
+	}
+	e.world = rebase(e.world, conf)
+	if !e.preview {
+		e.display = rebase(e.display, conf)
+	}
+	e.dirty = false
+	e.publishLocked("")
+}
+
+// rebaseConfig returns a config with the paths of another.
+func rebaseConfig(c, paths *config.Config) *config.Config {
+	if c == nil {
+		return nil
+	}
+	n := c.Clone()
+	n.ConfigPath, n.Image = paths.ConfigPath, paths.Image
+	return n
+}
+
+// rebase returns a world whose config has the paths of another.
+func rebase(w *gen.World, paths *config.Config) *gen.World {
+	if w == nil || w.Conf == nil {
+		return w
+	}
+	n := *w
+	n.Conf = rebaseConfig(w.Conf, paths)
+	return &n
+}
+
 // SetWatch chooses to show the simulation as it runs, every that many time
 // steps (0: not).
 func (e *Engine) SetWatch(steps int) {
@@ -179,7 +239,7 @@ func (e *Engine) loop() {
 
 // pendingLocked tells whether a request is waiting.
 func (e *Engine) pendingLocked() bool {
-	return e.pendingConf != nil || e.pendingImage || e.pendingOutline != nil || e.pendingRerun
+	return e.pendingConf != nil || e.pendingImage || e.pendingOutline != nil || e.pendingRerun || e.pendingFresh
 }
 
 // Watched frames are shown for at least this long, so that fast phases can
@@ -189,13 +249,20 @@ const minFrameTime = time.Second / 15
 // step runs one pending request, returns false if there was none.
 func (e *Engine) step() bool {
 	e.mu.Lock()
-	conf, image, outline, rerun := e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun
-	e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun = nil, false, nil, false
+	conf, image, outline, rerun, fresh := e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun, e.pendingFresh
+	e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun, e.pendingFresh = nil, false, nil, false, false
 	world := e.world
 	latest := e.conf
 	watchSteps := e.watchSteps
+	if fresh {
+		world = nil
+	}
+	// Moved to where the map was saved: the same map
+	if world != nil && latest != nil && world.Conf.ImagePath() != latest.ImagePath() && latest.ImagePath() == e.savedImage {
+		world = rebase(world, latest)
+	}
 
-	if conf == nil && !image && outline == nil && !rerun {
+	if conf == nil && !image && outline == nil && !rerun && !fresh {
 		e.mu.Unlock()
 		return false
 	}
@@ -285,6 +352,7 @@ func (e *Engine) step() bool {
 		}
 		e.pendingImage = e.pendingImage || image
 		e.pendingRerun = e.pendingRerun || (rerun && !e.pendingLocked())
+		e.pendingFresh = e.pendingFresh || fresh
 		return true
 	}
 

@@ -82,13 +82,13 @@ func island(t *testing.T) *gen.World {
 	f.Close()
 
 	conf, _, err := config.Parse([]byte(`{
-		"path": "island.png",
-		"resolution": 4, "grid": "hex", "jitter": 0.5, "relax": false,
-		"smoothingRadius": 0, "erosionMinFlow": 5, "erosionFactor": 0.5,
+		"image": "island.png",
+		"mapWidth": 50, "resolution": 2, "levels": 1,
 		"terrains": {
-			"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-			"land": { "r": 135, "g": 168, "b": 81, "gradient": 0.5 }
-		}
+			"sea": { "color": "#42427d" },
+			"land": { "color": "#87a851", "height": 500 }
+		},
+		"simulation": { "steps": 60, "refineSteps": 10 }
 	}`))
 	if err != nil {
 		t.Fatal(err)
@@ -207,13 +207,12 @@ func TestShortcuts(t *testing.T) {
 
 func TestShoreLock(t *testing.T) {
 	conf, _, err := config.Parse([]byte(`{
-		"path": "map.png", "resolution": 4, "grid": "hex", "jitter": 0.5, "relax": false,
-		"smoothingRadius": 0, "erosionMinFlow": 5, "erosionFactor": 0.5,
+		"image": "map.png",
 		"terrains": {
-			"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-			"lake": { "r": 109, "g": 148, "b": 194, "gradient": -0.01 },
-			"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2 },
-			"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2 }
+			"sea": { "color": "#42427d" },
+			"lake": { "color": "#6d94c2" },
+			"plains": { "color": "#87a851", "height": 400 },
+			"mountains": { "color": "#65481f", "height": 3000 }
 		}
 	}`))
 	if err != nil {

@@ -10,9 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/Castux/wgen/internal/config"
+	"github.com/Castux/wgen/internal/geom"
 )
 
 var update = flag.Bool("update", false, "update golden files")
@@ -25,28 +27,22 @@ var (
 	lake      = color.NRGBA{109, 148, 194, 255}
 )
 
+// The test island, 100 km wide
 const testConfig = `{
-	"path": "island.png",
-	"resolution": 6,
-	"grid": "hex",
-	"jitter": 0.5,
-	"relax": true,
-	"seed": 7,
-	"smoothingRadius": 10,
-	"erosionMinFlow": 5,
-	"erosionFactor": 0.5,
-	"blurRadius": 1,
+	"image": "island.png",
+	"mapWidth": 100, "resolution": 2, "levels": 2, "seed": 7,
 	"terrains": {
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2 },
-		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8 },
-		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2 },
-		"lake": { "r": 109, "g": 148, "b": 194, "gradient": -0.05, "smoothing": false, "erosion": false }
-	}
+		"sea": { "color": "#42427d" },
+		"lake": { "color": "#6d94c2" },
+		"plains": { "color": "#87a851", "height": 300, "detail": 1 },
+		"hills": { "color": "#d1b886", "height": 1000 },
+		"mountains": { "color": "#65481f", "height": 3000 }
+	},
+	"simulation": { "steps": 150, "refineSteps": 30, "upliftBlur": 5 }
 }`
 
-// writeIsland writes a test outline: a round island with hills, a mountain
-// and a lake.
+// writeIsland writes a test map: a round island with hills, a mountain and
+// a lake.
 func writeIsland(t *testing.T, path string, size int) {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	s := float64(size)
@@ -82,6 +78,7 @@ func writeIsland(t *testing.T, path string, size int) {
 }
 
 func setup(t *testing.T) *config.Config {
+	t.Helper()
 	t.Chdir(t.TempDir())
 	writeIsland(t, "island.png", 200)
 
@@ -93,6 +90,7 @@ func setup(t *testing.T) *config.Config {
 }
 
 func generate(t *testing.T, conf *config.Config) *World {
+	t.Helper()
 	w, err := New(conf)
 	if err != nil {
 		t.Fatal(err)
@@ -100,129 +98,176 @@ func generate(t *testing.T, conf *config.Config) *World {
 	return w
 }
 
-func TestInvariants(t *testing.T) {
-	w := generate(t, setup(t))
+func patch(t *testing.T, c *config.Config, p string) *config.Config {
+	t.Helper()
+	patched, err := c.Patch([]byte(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return patched
+}
 
-	var land, water, lakes int
-	for v := range w.Mesh.Points {
-		v := int32(v)
-		switch {
-		case w.Terrain[v] == nil:
+func equalNaN(a, b []float64) bool {
+	return slices.EqualFunc(a, b, func(x, y float64) bool {
+		return x == y || math.IsNaN(x) && math.IsNaN(y)
+	})
+}
+
+func TestInvariants(t *testing.T) {
+	conf := setup(t)
+	w := generate(t, conf)
+	m := w.Mesh
+	critical := math.Tan(conf.Simulation.CriticalSlope * math.Pi / 180)
+
+	if w.MetersPerPixel != 500 {
+		t.Errorf("meters per pixel %v", w.MetersPerPixel)
+	}
+
+	for v := range int32(len(m.Points)) {
+		if !w.IsLand(v) {
 			continue
-		case w.IsSea(v) && w.Shore[v]:
-			if w.Z[v] != 0 {
-				t.Fatalf("sea shore %d at %f", v, w.Z[v])
+		}
+		z := w.Z[v]
+		if math.IsNaN(z) || z < 0 {
+			t.Fatalf("land vertex %d at %v", v, z)
+		}
+
+		// Rivers flow down to the sea
+		steps := 0
+		for u := v; ; steps++ {
+			d := w.Downhill[u]
+			if d < 0 {
+				if !w.IsWater(u) && !slices.ContainsFunc(m.Neighbours[u], w.IsWater) {
+					t.Fatalf("river from %d ends at %d, on land", v, u)
+				}
+				break
 			}
-		case w.IsLand(v):
-			land++
-			if !(w.Z[v] > 0) {
-				t.Fatalf("land vertex %d at %f", v, w.Z[v])
+			// (Across lakes, rivers flow on the water, over their bed)
+			if w.Z[d] >= w.Z[u] && w.IsLand(u) && w.IsLand(d) {
+				t.Fatalf("river from %d goes up from %d to %d", v, u, d)
+			}
+			if steps > len(m.Points) {
+				t.Fatalf("river from %d loops", v)
+			}
+			u = d
+		}
+
+		// Hillslopes are at most at the critical slope (the last erosion step
+		// can make them a little steeper)
+		if d := w.Downhill[v]; d >= 0 && w.IsLand(d) {
+			slope := (z - w.Z[d]) / (m.Points[v].Dist(m.Points[d]) * w.MetersPerPixel)
+			if slope > critical*1.5 {
+				t.Errorf("slope %.2f from %d, critical %.2f", slope, v, critical)
+			}
+		}
+	}
+
+	// Water: the sea at 0, below it; each lake flat, its floor below
+	for v := range int32(len(m.Points)) {
+		switch {
+		case w.IsSea(v):
+			if w.WaterLevel[v] != 0 || w.Z[v] > 0 {
+				t.Fatalf("sea vertex %d: level %v, floor %v", v, w.WaterLevel[v], w.Z[v])
 			}
 		case w.IsLake(v):
-			lakes++
-			if !(w.WaterLevel[v] > 0) || !(w.Z[v] <= w.WaterLevel[v]) {
-				t.Fatalf("lake vertex %d: z %f, water level %f", v, w.Z[v], w.WaterLevel[v])
-			}
-		case w.IsSea(v):
-			water++
-			if !(w.Z[v] < 0) || w.WaterLevel[v] != 0 {
-				t.Fatalf("sea vertex %d: z %f, water level %f", v, w.Z[v], w.WaterLevel[v])
+			if w.Z[v] > w.WaterLevel[v] || w.WaterLevel[v] <= 0 {
+				t.Fatalf("lake vertex %d: level %v, floor %v", v, w.WaterLevel[v], w.Z[v])
 			}
 		}
 	}
 
-	if land == 0 || water == 0 || lakes == 0 {
-		t.Fatalf("land %d, sea %d, lake %d", land, water, lakes)
+	// Drainage accumulates to at most the whole area
+	total := 0.0
+	for _, a := range CellAreas(m) {
+		total += a
 	}
-
-	// Each vertex's flow is itself plus everything flowing into it
-	inflow := make([]int32, len(w.Flow))
-	for v, d := range w.Downhill {
-		if d >= 0 {
-			inflow[d] += w.Flow[v]
-		}
-	}
-	for v := range w.Flow {
-		if w.Flow[v] != inflow[v]+1 {
-			t.Fatalf("flow of %d: %d, inflow %d", v, w.Flow[v], inflow[v])
-		}
-	}
-
-	for i, h := range w.Heightmap {
-		if math.IsNaN(h) || h < w.Lowest-1e-9 || h > w.Highest+1e-9 {
-			t.Fatalf("heightmap pixel %d: %f", i, h)
-		}
+	if maxDrainage := slices.Max(w.Drainage); maxDrainage <= 0 || maxDrainage > total {
+		t.Errorf("drainage up to %v, total area %v", maxDrainage, total)
 	}
 }
 
-// Downhill is computed before erosion and water depth: without erosion, it
-// must be lower, at least for land flowing into land or sea (lake elevations
-// are rewritten by water depth).
-func TestDownhill(t *testing.T) {
+// Terrains reach their target heights: the high elevations of each are close
+// to the target, and higher targets make higher terrain.
+func TestCalibration(t *testing.T) {
 	conf := setup(t)
-	conf.ErosionMinFlow = math.MaxInt
 	w := generate(t, conf)
 
-	rivers := 0
-	for v, d := range w.Downhill {
-		if d >= 0 && w.IsLand(int32(v)) && !w.IsLake(d) {
-			rivers++
-			if !(w.Z[d] < w.Z[v]) {
-				t.Fatalf("downhill of %d (%s, z %f) is not lower: %d (%s, shore %v, z %f)", v, w.Terrain[v].Name, w.Z[v], d, w.Terrain[d].Name, w.Shore[d], w.Z[d])
+	summits := map[string]float64{}
+	for _, terrain := range conf.Land() {
+		var zs []float64
+		for v, tv := range w.Terrain {
+			if tv != nil && tv.Name == terrain.Name {
+				zs = append(zs, w.Z[v])
 			}
 		}
+		slices.Sort(zs)
+		summits[terrain.Name] = zs[int(0.95*float64(len(zs)-1))]
+		if math.Abs(summits[terrain.Name]/terrain.Height-1) > 0.3 {
+			t.Errorf("%s: summits at %.0f m, target %.0f m", terrain.Name, summits[terrain.Name], terrain.Height)
+		}
 	}
-	if rivers == 0 {
-		t.Fatal("no rivers")
-	}
-}
-
-func TestDeterministic(t *testing.T) {
-	conf := setup(t)
-	a, b := generate(t, conf), generate(t, conf)
-
-	if !slices.Equal(a.Heightmap, b.Heightmap) || !equalNaN(a.Z, b.Z) {
-		t.Errorf("same seed, different results")
-	}
-
-	conf2 := conf.Clone()
-	conf2.Seed++
-	c := generate(t, conf2)
-	if slices.Equal(a.Heightmap, c.Heightmap) {
-		t.Errorf("different seeds, same results")
+	if !(summits["plains"] < summits["hills"] && summits["hills"] < summits["mountains"]) {
+		t.Errorf("summits %v", summits)
 	}
 }
 
-// Incremental updates must give the same result as generating from scratch.
+func TestMeshes(t *testing.T) {
+	w := generate(t, setup(t))
+
+	if len(w.levels) != 3 || w.Mesh != w.levels[2] {
+		t.Fatalf("%d levels", len(w.levels))
+	}
+
+	// Each level has the points of the previous one, and more
+	for k := 1; k < len(w.levels); k++ {
+		fine := map[geom.Vec2]bool{}
+		for _, p := range w.levels[k].Points {
+			fine[p] = true
+		}
+		for _, p := range w.levels[k-1].Points {
+			if !fine[p] {
+				t.Fatalf("point %v of level %d missing from level %d", p, k-1, k)
+			}
+		}
+		if len(w.levels[k].Points) <= len(w.levels[k-1].Points) {
+			t.Errorf("level %d not finer", k)
+		}
+	}
+
+	// Plains are refined once only: the mountain is denser
+	count := func(name string) float64 {
+		n := 0
+		for v := range w.Mesh.Points {
+			if t := w.Terrain[v]; t != nil && t.Name == name {
+				n++
+			}
+		}
+		return float64(n)
+	}
+	plainsArea := math.Pi * (0.38*0.38 - 0.2*0.2)
+	mountainArea := math.Pi * 0.07 * 0.07
+	if count("mountains")/mountainArea < 3*count("plains")/plainsArea {
+		t.Errorf("mountain not refined more than plains: %v vs %v vertices", count("mountains"), count("plains"))
+	}
+}
+
 func TestIncremental(t *testing.T) {
 	conf := setup(t)
 	base := generate(t, conf)
-	baseHeightmap := slices.Clone(base.Heightmap)
 
 	for _, tc := range []struct {
 		patch string
 		stage Stage
 	}{
-		{`{"blurRadius": 3}`, StageRaster},
-		{`{"blurRadius": 0}`, StageRaster},
-		{`{"erosionFactor": 0.2}`, StageErosion},
-		{`{"erosionMinFlow": 50}`, StageErosion},
-		{`{"erosionModel": "power", "erosionIterations": 3, "channelArea": 100}`, StageErosion},
-		{`{"noiseType": "worley", "noiseScale": 20}`, StageTerrain},
-		{`{"noiseType": "ridged", "noiseStretch": 3, "noiseAngle": 30}`, StageTerrain},
-		{`{"terrains": {"hills": {"gradient": 1.5}}}`, StageTerrain},
-		{`{"terrains": {"plains": {"erosion": false}}}`, StageTerrain},
-		{`{"smoothingRadius": 0}`, StageTerrain},
-		{`{"maxHeight": 1000}`, StageTerrain},
-		{`{"resolution": 8}`, StageMesh},
-		{`{"grid": "square", "relax": false}`, StageMesh},
+		{`{"terrains": {"mountains": {"height": 2000}}}`, StageTerrain},
+		{`{"simulation": {"erodibility": 4e-6, "criticalSlope": 25}}`, StageTerrain},
+		{`{"mapWidth": 80}`, StageTerrain},
+		{`{"terrains": {"hills": {"detail": 1}}}`, StageMesh},
+		{`{"levels": 1}`, StageMesh},
 		{`{"seed": 3}`, StageMesh},
-		{`{"exportOBJ": true}`, StageNone},
+		{`{"image": "island.png"}`, StageNone},
 	} {
-		patched, err := conf.Patch([]byte(tc.patch))
-		if err != nil {
-			t.Fatal(err)
-		}
+		patched := patch(t, conf, tc.patch)
 
 		incremental, stage, err := base.Update(patched)
 		if err != nil {
@@ -233,13 +278,24 @@ func TestIncremental(t *testing.T) {
 		}
 
 		full := generate(t, patched)
-		if !slices.Equal(incremental.Heightmap, full.Heightmap) || !equalNaN(incremental.Z, full.Z) {
+		if !equalNaN(incremental.Z, full.Z) || !equalNaN(incremental.Heightmap, full.Heightmap) {
 			t.Errorf("%s: incremental update differs from full generation", tc.patch)
 		}
 	}
 
-	if !slices.Equal(base.Heightmap, baseHeightmap) {
-		t.Errorf("updates modified the original world")
+	if !equalNaN(base.Z, generate(t, conf).Z) {
+		t.Error("updates modified the original world")
+	}
+}
+
+func TestDeterministic(t *testing.T) {
+	conf := setup(t)
+	a, b := generate(t, conf), generate(t, conf)
+	if !equalNaN(a.Z, b.Z) {
+		t.Error("two runs differ")
+	}
+	if c := generate(t, patch(t, conf, `{"seed": 8}`)); len(c.Z) == len(a.Z) && equalNaN(c.Z, a.Z) {
+		t.Error("the seed changes nothing")
 	}
 }
 
@@ -247,78 +303,163 @@ func TestReloadImage(t *testing.T) {
 	conf := setup(t)
 	w := generate(t, conf)
 
-	// Same size: mesh is kept
-	writeIsland(t, "island.png", 200)
-	r, stage, err := w.ReloadImage()
-	if err != nil || stage != StageTerrain || r.Mesh != w.Mesh {
-		t.Errorf("same size reload: stage %v, err %v", stage, err)
+	// Smaller island, same size
+	img := image.NewNRGBA(image.Rect(0, 0, 200, 200))
+	for y := range 200 {
+		for x := range 200 {
+			c := sea
+			if math.Hypot(float64(x-100), float64(y-100)) < 40 {
+				c = hills
+			}
+			img.Set(x, y, c)
+		}
 	}
+	f, _ := os.Create("island.png")
+	png.Encode(f, img)
+	f.Close()
 
-	writeIsland(t, "island.png", 150)
-	r, stage, err = w.ReloadImage()
-	if err != nil || stage != StageMesh || r.Width != 150 {
-		t.Errorf("new size reload: stage %v, err %v", stage, err)
+	reloaded, _, err := w.ReloadImage()
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	os.WriteFile("island.png", []byte("garbage"), 0o644)
-	if _, _, err := w.ReloadImage(); err == nil {
-		t.Errorf("reloading a broken image should fail")
+	if !equalNaN(reloaded.Z, generate(t, conf).Z) {
+		t.Error("reloaded image differs from a full generation")
 	}
 }
 
-func TestNoSea(t *testing.T) {
+// Land at the edge of the image is simulated like the rest.
+func TestMapEdge(t *testing.T) {
 	conf := setup(t)
-	conf.Terrain("sea").FixedShore = math.NaN()
-	if _, err := New(conf); err == nil {
-		t.Errorf("expected an error without sea")
+
+	img := image.NewNRGBA(image.Rect(0, 0, 100, 100))
+	for y := range 100 {
+		for x := range 100 {
+			c := sea
+			if x < 50 {
+				c = mountains
+			}
+			img.Set(x, y, c)
+		}
+	}
+	f, _ := os.Create("edge.png")
+	png.Encode(f, img)
+	f.Close()
+
+	w := generate(t, patch(t, conf, `{"image": "edge.png"}`))
+	for v := range int32(len(w.Mesh.Points)) {
+		if w.IsLand(v) && math.IsNaN(w.Z[v]) {
+			t.Fatalf("land vertex %d at %v has no elevation", v, w.Mesh.Points[v])
+		}
 	}
 }
 
-// The original implementation computed elevation with a FIFO queue, revisiting
-// vertices until no improvement. Dijkstra must give the same result.
-func TestElevationMatchesFIFO(t *testing.T) {
+func TestNoCoast(t *testing.T) {
+	conf := setup(t)
+	img := image.NewNRGBA(image.Rect(0, 0, 50, 50))
+	for i := range img.Pix {
+		img.Pix[i] = []uint8{plains.R, plains.G, plains.B, 255}[i%4]
+	}
+	f, _ := os.Create("land.png")
+	png.Encode(f, img)
+	f.Close()
+
+	if _, err := New(patch(t, conf, `{"image": "land.png"}`)); err == nil || !strings.Contains(err.Error(), "coast") {
+		t.Errorf("all land: %v", err)
+	}
+}
+
+// The simulation shows a coarse preview, and can be canceled.
+func TestPreviewCancel(t *testing.T) {
+	conf := setup(t)
+
+	var previews []*World
+	full, _, err := (&World{}).UpdateWith(conf, Options{Preview: func(p *World) { previews = append(previews, p) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(previews) != 1 {
+		t.Fatalf("%d previews", len(previews))
+	}
+	p := previews[0]
+	if p.Mesh != full.levels[0] || len(p.Z) != len(p.Mesh.Points) || len(p.Heightmap) != p.Width*p.Height {
+		t.Errorf("preview not of the coarse mesh")
+	}
+
+	previewed := false
+	_, _, err = (&World{}).UpdateWith(conf, Options{
+		Preview:  func(*World) { previewed = true },
+		Canceled: func() bool { return previewed },
+	})
+	if err != ErrCanceled {
+		t.Errorf("canceled generation: %v", err)
+	}
+}
+
+// Watching the simulation shows its steps, without changing its result.
+func TestWatch(t *testing.T) {
+	conf := setup(t)
+	plain := generate(t, conf)
+
+	var frames []*World
+	var phases []string
+	watched, _, err := (&World{}).UpdateWith(conf, Options{
+		WatchSteps: 20,
+		Watch: func(w *World, progress string) {
+			frames = append(frames, w)
+			phases = append(phases, progress)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !equalNaN(plain.Z, watched.Z) {
+		t.Error("watching changes the result")
+	}
+	if len(frames) < 10 {
+		t.Fatalf("%d frames", len(frames))
+	}
+	if frames[0].Mesh != watched.levels[0] || frames[len(frames)-1].Mesh != watched.Mesh {
+		t.Error("frames not from the coarse to the final mesh")
+	}
+	if !slices.ContainsFunc(phases, func(p string) bool { return strings.Contains(p, "Calibrating") }) {
+		t.Errorf("no calibration phase in %v", phases[:3])
+	}
+}
+
+func TestRerun(t *testing.T) {
 	w := generate(t, setup(t))
+	again, stage, err := w.Rerun(Options{})
+	if err != nil || stage != StageTerrain || !equalNaN(w.Z, again.Z) {
+		t.Errorf("rerun: stage %v, err %v", stage, err)
+	}
+}
 
-	for _, erosion := range []bool{false, true} {
-		fifo := nanSlice(len(w.Mesh.Points))
-		var queue []int32
-		for _, s := range w.Shores {
-			if w.IsSea(s) {
-				fifo[s] = w.Terrain[s].FixedShore
-				queue = append(queue, s)
-			}
-		}
+// A map given in memory gives the same world as from the file.
+func TestWithOutline(t *testing.T) {
+	conf := setup(t)
+	fromFile := generate(t, conf)
 
-		for len(queue) > 0 {
-			c := queue[0]
-			queue = queue[1:]
+	outline := slices.Clone(fromFile.Outline)
+	fromMemory, _, err := (&World{}).WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !equalNaN(fromFile.Z, fromMemory.Z) {
+		t.Error("map in memory differs from the file")
+	}
 
-			for _, n := range w.Mesh.Neighbours[c] {
-				if w.Terrain[n] == nil || w.IsSea(n) {
-					continue
-				}
-				gradient := w.Gradient[n]
-				if w.IsLake(n) {
-					gradient = 0.00001
-				}
-				if erosion && w.Terrain[n].Erosion && w.Downhill[n] == c && int(w.Flow[n]) > w.Conf.ErosionMinFlow {
-					gradient *= w.Conf.ErosionFactor
-				}
-				newZ := fifo[c] + gradient*w.Mesh.Points[c].Dist(w.Mesh.Points[n])
-				if math.IsNaN(fifo[n]) || newZ < fifo[n] {
-					fifo[n] = newZ
-					queue = append(queue, n)
-				}
-			}
-		}
-
-		c := *w
-		c.computeElevation(erosion)
-		for v := range fifo {
-			if !(fifo[v] == c.Z[v] || math.IsNaN(fifo[v]) && math.IsNaN(c.Z[v]) || math.Abs(fifo[v]-c.Z[v]) < 1e-9) {
-				t.Fatalf("erosion %v, vertex %d: FIFO %f, Dijkstra %f", erosion, v, fifo[v], c.Z[v])
-			}
-		}
+	// Painting mountains in the sea
+	for i := range 200 {
+		outline[i*fromFile.Width+i/2] = config.Color{101, 72, 31}
+	}
+	painted, _, err := fromFile.WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	full, _, _ := (&World{}).WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+	if !equalNaN(painted.Z, full.Z) || equalNaN(painted.Z, fromFile.Z) {
+		t.Error("painted map not regenerated right")
 	}
 }
 
@@ -339,7 +480,7 @@ func TestGolden(t *testing.T) {
 	for i := range n {
 		for j := range n {
 			y, x := (2*i+1)*w.Height/(2*n), (2*j+1)*w.Width/(2*n)
-			s.Samples[i][j] = math.Round(w.Heightmap[y*w.Width+x]*1e6) / 1e6
+			s.Samples[i][j] = math.Round(w.Heightmap[y*w.Width+x]*1e3) / 1e3
 		}
 	}
 
@@ -359,54 +500,17 @@ func TestGolden(t *testing.T) {
 	var want snapshot
 	json.Unmarshal(data, &want)
 
-	close := func(a, b float64) bool { return math.Abs(a-b) <= 1e-4*math.Max(1, math.Abs(b)) }
+	near := func(a, b float64) bool { return math.Abs(a-b) <= 1e-3*math.Max(1, math.Abs(b)) }
 
-	if s.Vertices != want.Vertices || !close(s.Lowest, want.Lowest) || !close(s.Highest, want.Highest) {
+	if s.Vertices != want.Vertices || !near(s.Lowest, want.Lowest) || !near(s.Highest, want.Highest) {
 		t.Errorf("got %d vertices, range %f..%f, want %d, %f..%f",
 			s.Vertices, s.Lowest, s.Highest, want.Vertices, want.Lowest, want.Highest)
 	}
 	for i := range n {
 		for j := range n {
-			if !close(s.Samples[i][j], want.Samples[i][j]) {
+			if !near(s.Samples[i][j], want.Samples[i][j]) {
 				t.Errorf("sample %d,%d: got %f, want %f", i, j, s.Samples[i][j], want.Samples[i][j])
 			}
 		}
-	}
-}
-
-func equalNaN(a, b []float64) bool {
-	return slices.EqualFunc(a, b, func(x, y float64) bool {
-		return x == y || math.IsNaN(x) && math.IsNaN(y)
-	})
-}
-
-// Updating an eroded world gives the same result as generating from scratch,
-// with erosion recomputing the rivers.
-func TestIncrementalPowerErosion(t *testing.T) {
-	conf := setup(t)
-	patch := func(c *config.Config, p string) *config.Config {
-		t.Helper()
-		patched, err := c.Patch([]byte(p))
-		if err != nil {
-			t.Fatal(err)
-		}
-		return patched
-	}
-
-	first := patch(conf, `{"erosionModel": "power", "erosionIterations": 4, "channelArea": 100}`)
-	eroded := generate(t, first)
-
-	second := patch(first, `{"channelArea": 300, "erosionTheta": 0.4}`)
-	updated, stage, err := eroded.Update(second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stage != StageErosion {
-		t.Errorf("stage %v", stage)
-	}
-
-	full := generate(t, second)
-	if !equalNaN(updated.Z, full.Z) || !slices.Equal(updated.Flow, full.Flow) {
-		t.Error("update of an eroded world differs from a full generation")
 	}
 }

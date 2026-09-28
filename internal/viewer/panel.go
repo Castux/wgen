@@ -147,7 +147,7 @@ func (a *app) drawActions(state engine.State) {
 // simulation.
 func (a *app) drawSimulation(state engine.State) {
 	conf := a.session.Engine.Config()
-	if conf == nil || conf.Uplift.Model != config.ModelUplift {
+	if conf == nil {
 		return
 	}
 	if !imgui.CollapsingHeaderTreeNodeFlagsV("Simulation", imgui.TreeNodeFlagsDefaultOpen) {
@@ -206,8 +206,6 @@ func (a *app) drawParams(conf *config.Config) {
 		case bool:
 			changed = imgui.Checkbox(p.Label, &v)
 			value = v
-		case string:
-			value, changed = combo(p.Label, v, p.Options)
 		case float64:
 			value, changed = a.number("param."+key, p.Label, v, p.Min, p.Max, p.Step, p.Type == "int")
 		}

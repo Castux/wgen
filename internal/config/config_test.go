@@ -1,26 +1,23 @@
 package config
 
 import (
-	"math"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 const sample = `{
-	"path": "map.png",
-	"resolution": 8,
-	"grid": "hex",
-	"jitter": 1.0,
-	"relax": false,
-	"smoothingRadius": 20,
-	"erosionMinFlow": 10,
-	"erosionFactor": 0.5,
+	"image": "map.png",
+	"mapWidth": 500,
+	"resolution": 4,
+	"levels": 2,
 	"somethingElse": 3,
 	"terrains": {
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2, "erosion": true},
-		"lake": { "r": 109, "g": 148, "b": 194, "gradient": 0.0001, "smoothing": false, "erosion": false}
-	}
+		"sea": { "color": "#42427d" },
+		"plains": { "color": "#87a851", "height": 400, "detail": 1 },
+		"mountains": { "color": "#65481f", "height": 4000, "erodibility": 0.5 }
+	},
+	"simulation": { "erodibility": 3e-6 }
 }`
 
 func TestParse(t *testing.T) {
@@ -28,173 +25,142 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if len(warnings) != 1 || !strings.Contains(warnings[0], "somethingElse") {
 		t.Errorf("warnings: %v", warnings)
 	}
 
-	if c.Resolution != 8 || c.Grid != GridHex || c.ErosionMinFlow != 10 || !c.ExportHeightmap {
-		t.Errorf("bad values: %+v", c)
+	if c.MapWidth != 500 || c.Resolution != 4 || c.Levels != 2 {
+		t.Errorf("parsed %+v", c)
+	}
+	if c.Simulation.Erodibility != 3e-6 || c.Simulation.Steps != DefaultSimulation.Steps {
+		t.Errorf("simulation %+v", c.Simulation)
 	}
 
-	var names []string
+	// The lake is added, water first
+	names := []string{}
 	for _, t := range c.Terrains {
 		names = append(names, t.Name)
 	}
-	if strings.Join(names, ",") != "sea,plains,lake" {
-		t.Errorf("terrain order not preserved: %v", names)
+	if strings.Join(names, ",") != "sea,lake,plains,mountains" {
+		t.Errorf("terrains %v", names)
 	}
-
-	sea, lake := c.Terrain("sea"), c.Terrain("lake")
-	if !sea.IsSeaTerrain() || sea.FixedShore != 0 || !sea.Smoothing || !sea.Erosion {
-		t.Errorf("bad sea: %+v", sea)
+	if c.Terrain("sea").Kind != Sea || c.Terrain("lake").Kind != Lake || c.Terrain("plains").Kind != Land {
+		t.Error("kinds")
 	}
-	if lake.IsSeaTerrain() || lake.Smoothing || lake.Erosion || lake.Color != (Color{109, 148, 194}) {
-		t.Errorf("bad lake: %+v", lake)
+	m := c.Terrain("mountains")
+	if m.Color != (Color{101, 72, 31}) || m.Height != 4000 || m.Erodibility != 0.5 || m.Detail != DetailAuto || !m.Calibrated() {
+		t.Errorf("mountains %+v", m)
+	}
+	if c.Terrain("sea").Calibrated() {
+		t.Error("sea calibrated")
 	}
 }
 
 func TestErrors(t *testing.T) {
-	for _, tc := range []struct{ json, want string }{
-		{`{}`, "missing required key"},
-		{strings.Replace(sample, `"hex"`, `"tri"`, 1), "unknown grid type"},
-		{strings.Replace(sample, `"r": 135, "g": 168, "b": 81`, `"r": 66, "g": 66, "b": 125`, 1), "same color"},
-		{strings.Replace(sample, `"gradient": 0.2,`, ``, 1), "gradient are required"},
-		{strings.Replace(sample, `"erosion": true`, `"erosoin": true`, 1), "unknown field"},
-		{strings.Replace(sample, `"resolution": 8`, `"resolution": "8"`, 1), "resolution"},
+	for _, bad := range []string{
+		`{"terrains": {}}`,
+		`{"image": "a.png", "terrains": {"sea": {"color": "red"}}}`,
+		`{"image": "a.png", "terrains": {"sea": {"color": "#000000"}, "hills": {"color": "#000000"}}}`,
+		`{"image": "a.png", "terrains": {"sea": {"color": "#000000"}, "hills": {"color": "#000001", "height": -1}}}`,
+		`{"image": "a.png", "terrains": {"sea": {"color": "#000000", "gradient": 1}}}`,
+		`{"image": "a.png", "resolution": 0, "terrains": {"sea": {"color": "#000000"}}}`,
+		`{"image": "a.png", "simulation": {"steps": 0}, "terrains": {"sea": {"color": "#000000"}}}`,
 	} {
-		_, _, err := Parse([]byte(tc.json))
-		if err == nil || !strings.Contains(err.Error(), tc.want) {
-			t.Errorf("expected error containing %q, got %v", tc.want, err)
+		if _, _, err := Parse([]byte(bad)); err == nil {
+			t.Errorf("accepted: %s", bad)
 		}
 	}
 }
 
 func TestRoundTrip(t *testing.T) {
-	c, _, _ := Parse([]byte(sample))
-	c2, warnings, err := Parse(c.Marshal())
-	if err != nil || len(warnings) > 0 {
-		t.Fatal(err, warnings)
+	c, _, err := Parse([]byte(sample))
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	c2.ConfigPath = c.ConfigPath
-	if string(c.Marshal()) != string(c2.Marshal()) || !TerrainsEqual(c, c2) {
-		t.Errorf("round trip mismatch:\n%s\n%s", c.Marshal(), c2.Marshal())
+	c2, _, err := Parse(c.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(c.Marshal()) != string(c2.Marshal()) || !TerrainsEqual(c, c2) || c.Simulation != c2.Simulation {
+		t.Errorf("round trip:\n%s\n%s", c.Marshal(), c2.Marshal())
 	}
 }
 
 func TestPatch(t *testing.T) {
 	c, _, _ := Parse([]byte(sample))
 
-	p, err := c.Patch([]byte(`{"resolution": 16, "terrains": {"plains": {"gradient": 0.5}}}`))
+	p, err := c.Patch([]byte(`{"mapWidth": 800, "simulation": {"criticalSlope": 25}, "terrains": {"plains": {"height": 300}}}`))
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	if p.Resolution != 16 || p.Terrain("plains").Gradient != 0.5 || p.Terrain("sea").Gradient != -0.1 {
-		t.Errorf("patch not applied: %+v", p)
+	if p.MapWidth != 800 || p.Simulation.CriticalSlope != 25 || p.Simulation.Erodibility != 3e-6 || p.Terrain("plains").Height != 300 {
+		t.Errorf("patched %+v %+v", p, p.Simulation)
 	}
-	if c.Resolution != 8 || c.Terrain("plains").Gradient != 0.2 {
-		t.Errorf("original modified")
-	}
-	if TerrainsEqual(c, p) {
-		t.Errorf("terrains should differ")
+	if c.Terrain("plains").Height != 400 || c.MapWidth != 500 {
+		t.Error("original changed")
 	}
 
-	if _, err := c.Patch([]byte(`{"terrains": {"swamp": {"gradient": 1}}}`)); err == nil {
-		t.Errorf("patching an unknown terrain should fail")
-	}
-	if _, err := c.Patch([]byte(`{"terrains": {"lake": {"fixedShore": 1}}}`)); err == nil {
-		t.Errorf("adding a fixed shore should fail")
-	}
-	if _, err := c.Patch([]byte(`{"resolution": -1}`)); err == nil {
-		t.Errorf("invalid patch should fail")
-	}
-	if !math.IsNaN(c.Terrain("plains").FixedShore) {
-		t.Errorf("plains should have no fixed shore")
+	for _, bad := range []string{`{"terrains": {"swamp": {"height": 1}}}`, `{"levels": 9}`, `{"simulation": {"nope": 1}}`} {
+		if _, err := c.Patch([]byte(bad)); err == nil {
+			t.Errorf("accepted %s", bad)
+		}
 	}
 }
 
 func TestSchemaValues(t *testing.T) {
-	c, _, err := Parse([]byte(sample))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Every parameter has a value of its type
+	c, _, _ := Parse([]byte(sample))
 	for _, p := range c.Schema() {
 		v, err := c.Value(p.Path)
 		if err != nil {
 			t.Errorf("%v: %v", p.Path, err)
 			continue
 		}
-		var ok bool
-		switch p.Type {
-		case "bool":
-			_, ok = v.(bool)
-		case "enum":
-			_, ok = v.(string)
-		default:
-			_, ok = v.(float64)
-		}
-		if !ok {
-			t.Errorf("%v: %T value for a %s", p.Path, v, p.Type)
+		if _, ok := v.(float64); !ok {
+			t.Errorf("%v: %T value", p.Path, v)
 		}
 	}
-
-	for _, test := range []struct {
-		path []string
-		want any
-	}{
-		{[]string{"resolution"}, 8.0},
-		{[]string{"grid"}, "hex"},
-		{[]string{"terrains", "sea", "smoothing"}, true},
-		{[]string{"terrains", "lake", "erosion"}, false},
-		{[]string{"terrains", "plains", "gradient"}, 0.2},
-	} {
-		if v, _ := c.Value(test.path); v != test.want {
-			t.Errorf("%v: %v, expected %v", test.path, v, test.want)
-		}
+	if v, _ := c.Value([]string{"simulation", "erodibility"}); v != 3e-6 {
+		t.Errorf("erodibility %v", v)
 	}
-
-	if _, err := c.Value([]string{"terrains", "swamp", "gradient"}); err == nil {
-		t.Error("value of an unknown terrain")
+	if _, err := c.Value([]string{"simulation", "nope"}); err == nil {
+		t.Error("unknown parameter has a value")
 	}
 }
 
-func TestExperimentalParameters(t *testing.T) {
-	c, _, err := Parse([]byte(sample))
-	if err != nil {
+func TestDefaultAndPaths(t *testing.T) {
+	c := Default("new.png")
+	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if c.Erosion != defaultErosion || c.Noise != defaultNoise {
-		t.Errorf("defaults: %+v %+v", c.Erosion, c.Noise)
-	}
-	if strings.Contains(string(c.Marshal()), "erosionModel") {
-		t.Error("default experimental parameters are serialized")
+	if len(c.Land()) != 3 || c.Terrain("sea") == nil || c.Terrain("lake") == nil {
+		t.Errorf("default terrains %v", c.Terrains)
 	}
 
-	p, err := c.Patch([]byte(`{"erosionModel": "power", "erosionIterations": 5, "noiseType": "worley", "noiseAngle": 30}`))
-	if err != nil {
-		t.Fatal(err)
+	// The image is relative to the project file
+	c.ConfigPath = filepath.Join("some", "dir", "map.json")
+	if got := c.ImagePath(); got != filepath.Join("some", "dir", "new.png") {
+		t.Errorf("image path %q", got)
 	}
-	if p.Erosion.Model != "power" || p.Erosion.Iterations != 5 || p.Erosion.Theta != 0.5 ||
-		p.Noise.Type != "worley" || p.Noise.Angle != 30 {
-		t.Errorf("patched: %+v %+v", p.Erosion, p.Noise)
-	}
-
-	// Round trip
-	r, _, err := Parse(p.Marshal())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.Erosion != p.Erosion || r.Noise != p.Noise {
-		t.Errorf("round trip: %+v %+v", r.Erosion, r.Noise)
+	c.ConfigPath = ""
+	if c.ImagePath() != "new.png" {
+		t.Error("image path without a project file")
 	}
 
-	for _, patch := range []string{`{"erosionModel": "rain"}`, `{"noiseAmplitude": 2}`, `{"erosionIterations": 0}`, `{"noiseType": "perlin"}`} {
-		if _, err := c.Patch([]byte(patch)); err == nil {
-			t.Errorf("%s accepted", patch)
+	// Free colors are free
+	free := c.FreeColor(c.Terrain("plains").Color)
+	if _, taken := c.TerrainsByColor()[free]; taken {
+		t.Errorf("free color %v is taken", free)
+	}
+}
+
+func TestColors(t *testing.T) {
+	c, err := ParseColor("#0a1B2c")
+	if err != nil || c != (Color{10, 27, 44}) || c.String() != "#0a1b2c" {
+		t.Errorf("%v %v %s", c, err, c)
+	}
+	for _, bad := range []string{"0a1b2c", "#0a1b2", "#0a1b2g"} {
+		if _, err := ParseColor(bad); err == nil {
+			t.Errorf("accepted %s", bad)
 		}
 	}
 }

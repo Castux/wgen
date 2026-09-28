@@ -3,7 +3,6 @@ package gen
 import (
 	"math"
 
-	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/geom"
 )
 
@@ -69,49 +68,17 @@ func cellNoise(seed uint64, x, y float64) float64 {
 	return d2 - d1
 }
 
-// slopeNoise returns the slope noise function of a config: position in
-// pixels to -1..1, low along the features of the noise type. nil if the
-// noise is disabled.
-func slopeNoise(n config.SlopeNoise, seed uint64) func(p geom.Vec2) float64 {
-	if n.Type == config.NoiseNone || n.Amplitude == 0 {
-		return nil
+// fbm is fractal gradient noise: octaves of halving amplitude and doubling
+// frequency, about -1..1.
+func fbm(seed uint64, x, y float64, octaves int) float64 {
+	sum, weight, amplitude := 0.0, 0.0, 1.0
+	for i := range octaves {
+		sum += amplitude * gradientNoise(hash2(seed, int64(i), 7), x, y)
+		weight += amplitude
+		amplitude /= 2
+		x, y = x*2, y*2
 	}
-
-	// Octave in normalized noise coordinates, 0..1
-	var octave func(seed uint64, x, y float64) float64
-	switch n.Type {
-	case config.NoiseFBM:
-		octave = func(seed uint64, x, y float64) float64 {
-			return geom.Clamp(gradientNoise(seed, x, y)/1.4+0.5, 0, 1)
-		}
-	case config.NoiseRidged:
-		octave = func(seed uint64, x, y float64) float64 {
-			return geom.Clamp(math.Abs(gradientNoise(seed, x, y))*2.5, 0, 1)
-		}
-	case config.NoiseWorley:
-		octave = func(seed uint64, x, y float64) float64 {
-			return geom.Clamp(cellNoise(seed, x, y)*2, 0, 1)
-		}
-	}
-
-	angle := n.Angle * math.Pi / 180
-	along := geom.Vec2{X: math.Cos(angle), Y: math.Sin(angle)}
-	across := geom.Vec2{X: -along.Y, Y: along.X}
-
-	return func(p geom.Vec2) float64 {
-		// Features stretched along the angle
-		x := (p.X*along.X + p.Y*along.Y) / (n.Scale * n.Stretch)
-		y := (p.X*across.X + p.Y*across.Y) / n.Scale
-
-		sum, weight, amplitude := 0.0, 0.0, 1.0
-		for i := range n.Octaves {
-			sum += amplitude * octave(hash2(seed, int64(i), 7), x, y)
-			weight += amplitude
-			amplitude /= 2
-			x, y = x*2, y*2
-		}
-		return 2*sum/weight - 1
-	}
+	return geom.Clamp(sum/weight*1.4, -1, 1)
 }
 
 // Noise is 2D gradient noise, about -0.7..0.7, for other packages (such as

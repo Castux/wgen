@@ -10,59 +10,57 @@ import (
 	"github.com/Castux/wgen/internal/gen"
 )
 
-// Heightmaps writes the elevation and water level rasters as grayscale PNGs.
-// Values are written as is (not normalized), clamped to the pixel range: use
-// maxHeight in the config to control the scale.
-func Heightmaps(w *gen.World, heightmapPath, waterLevelPath string) error {
-	if err := grayPNG(w, w.Heightmap, heightmapPath); err != nil {
-		return err
-	}
-	return grayPNG(w, w.WaterMap, waterLevelPath)
-}
-
-func grayPNG(w *gen.World, data []float64, path string) error {
-	maxValue := 255.0
-	var img interface {
-		image.Image
-		setValue(x, y int, v uint16)
+// Heightmap writes the elevation as a 16 bits grayscale PNG: in meters above
+// sea level (water and anything below 0 is 0), or normalized, from the
+// lowest point (0) to the highest (65535).
+func Heightmap(w *gen.World, path string, normalized bool) error {
+	img := image.NewGray16(image.Rect(0, 0, w.Width, w.Height))
+	low, span := 0.0, 1.0
+	if normalized {
+		low, span = w.Lowest, math.Max(w.Highest-w.Lowest, 1e-9)/65535
 	}
 
-	if w.Conf.PNG16 {
-		maxValue = 65535
-		img = gray16{image.NewGray16(image.Rect(0, 0, w.Width, w.Height))}
-	} else {
-		img = gray8{image.NewGray(image.Rect(0, 0, w.Width, w.Height))}
-	}
-
-	outOfBounds := 0
-	low, high := math.Inf(1), math.Inf(-1)
-
+	clamped := 0
 	for y := range w.Height {
 		for x := range w.Width {
-			v := data[y*w.Width+x]
+			v := w.Heightmap[y*w.Width+x]
 			if math.IsNaN(v) {
-				outOfBounds++
-				v = 0
+				v = low
 			}
-
-			v = math.Floor(v)
-			if v < 0 || v > maxValue {
-				outOfBounds++
-				low, high = math.Min(low, v), math.Max(high, v)
+			v = math.Round((v - low) / span)
+			if v > 65535 {
+				clamped++
 			}
+			v = math.Max(0, math.Min(65535, v))
 
 			// Flip vertically: images go down
-			img.setValue(x, w.Height-1-y, uint16(max(0, min(maxValue, v))))
+			i := img.PixOffset(x, w.Height-1-y)
+			img.Pix[i], img.Pix[i+1] = uint8(uint16(v)>>8), uint8(v)
 		}
 	}
-
-	if outOfBounds > 0 {
-		slog.Warn("some heightmap values are out of the pixel range and were clamped",
-			"path", path, "pixels", outOfBounds, "low", low, "high", high, "max", maxValue)
+	if clamped > 0 {
+		slog.Warn("heightmap values above 65535 m were clamped", "pixels", clamped)
 	}
 
-	slog.Info("exporting heightmap", "path", path, "bits", map[bool]int{false: 8, true: 16}[w.Conf.PNG16])
+	return writePNG(path, img)
+}
 
+// WaterMask writes a PNG, white where there is water (sea or lake), black on
+// land.
+func WaterMask(w *gen.World, path string) error {
+	img := image.NewGray(image.Rect(0, 0, w.Width, w.Height))
+	for y := range w.Height {
+		for x := range w.Width {
+			i := y*w.Width + x
+			if level := w.WaterMap[i]; !math.IsNaN(level) && level > w.Heightmap[i] {
+				img.Pix[img.PixOffset(x, w.Height-1-y)] = 255
+			}
+		}
+	}
+	return writePNG(path, img)
+}
+
+func writePNG(path string, img image.Image) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -72,16 +70,4 @@ func grayPNG(w *gen.World, data []float64, path string) error {
 		return err
 	}
 	return f.Close()
-}
-
-type gray8 struct{ *image.Gray }
-
-func (g gray8) setValue(x, y int, v uint16) { g.Pix[g.PixOffset(x, y)] = uint8(v) }
-
-type gray16 struct{ *image.Gray16 }
-
-func (g gray16) setValue(x, y int, v uint16) {
-	i := g.PixOffset(x, y)
-	g.Pix[i] = uint8(v >> 8)
-	g.Pix[i+1] = uint8(v)
 }

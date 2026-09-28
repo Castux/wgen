@@ -57,13 +57,8 @@ type upliftField struct {
 	ramp    []float64         // uplift factor of each cell, rampFloor..1
 }
 
-// rank orders terrains for the ramps: by target height, or by uplift.
-func rank(t *config.Terrain) float64 {
-	if t.Calibrated() {
-		return t.Height
-	}
-	return t.Uplift * 1500
-}
+// rank orders terrains for the ramps: by target height.
+func rank(t *config.Terrain) float64 { return t.Height }
 
 func (w *World) newUpliftField() *upliftField {
 	terrains := w.Conf.TerrainsByColor()
@@ -76,7 +71,7 @@ func (w *World) newUpliftField() *upliftField {
 	for y := range f.gh {
 		for x := range f.gw {
 			p := geom.Vec2{X: (float64(x) + 0.5) * cell, Y: (float64(y) + 0.5) * cell}
-			if t := terrains[w.pixel(p)]; t != nil && t.Gradient >= 0 {
+			if t := terrains[w.pixel(p)]; t != nil && !t.IsWater() {
 				terrainAt[y*f.gw+x] = t
 			}
 		}
@@ -111,7 +106,7 @@ func (w *World) newUpliftField() *upliftField {
 
 	// Distance to lower terrain or water, per rank (chamfer distance)
 	f.ramp = make([]float64, n)
-	radius := w.Conf.Uplift.UpliftBlur * 1000 / w.MetersPerPixel / cell // cells
+	radius := w.Conf.Simulation.UpliftBlur * 1000 / w.MetersPerPixel / cell // cells
 	ranks := map[float64]bool{}
 	for _, t := range f.terrain {
 		ranks[rank(t)] = true
@@ -192,13 +187,12 @@ func (f *upliftField) region(p geom.Vec2) int32 {
 	return f.label[y*f.gw+x]
 }
 
-// initialRates are the uplift rates of the regions before calibration: the
-// terrains' uplift, or a first guess from their target height (summits at
-// about 1500 m per mm/yr).
+// initialRates are the uplift rates of the regions before calibration: a
+// first guess from their target height (summits at about 1500 m per mm/yr),
+// 0 for terrains without height.
 func (f *upliftField) initialRates() []float64 {
 	rates := make([]float64, len(f.terrain))
 	for i, t := range f.terrain {
-		rates[i] = t.Uplift
 		if t.Calibrated() {
 			rates[i] = geom.Clamp(t.Height/1500, minUplift, maxUplift)
 		}
@@ -298,10 +292,10 @@ func (w *World) calibrate(f *upliftField, rates, targets []float64, from *simSta
 		label := fmt.Sprintf("%s, coarse level (%d vertices): iteration %d", phase, len(s.m.Points), it+1)
 		if prev == nil {
 			s.startFlat(w.rng(streamNoise))
-			run(s, w.Conf.Uplift.Steps, label)
+			run(s, w.Conf.Simulation.Steps, label)
 		} else {
 			s.h = slices.Clone(prev.h)
-			run(s, max(1, w.Conf.Uplift.Steps/3), label)
+			run(s, max(1, w.Conf.Simulation.Steps/3), label)
 		}
 
 		worst := 0.0

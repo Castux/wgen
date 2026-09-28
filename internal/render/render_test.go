@@ -16,13 +16,13 @@ import (
 )
 
 const testConfig = `{
-	"path": "island.png",
-	"resolution": 4, "grid": "hex", "jitter": 0.5, "relax": false,
-	"smoothingRadius": 0, "erosionMinFlow": 5, "erosionFactor": 0.5,
+	"image": "island.png",
+	"mapWidth": 50, "resolution": 2, "levels": 1,
 	"terrains": {
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-		"land": { "r": 135, "g": 168, "b": 81, "gradient": 0.5 }
-	}
+		"sea": { "color": "#42427d" },
+		"land": { "color": "#87a851", "height": 500 }
+	},
+	"simulation": { "steps": 60, "refineSteps": 10 }
 }`
 
 func island(t *testing.T) *gen.World {

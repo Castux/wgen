@@ -1,5 +1,5 @@
 {
-	"config": "classes.json",
+	"config": "chasers.json",
 	"region": "mountains",
 	"channelArea": 200,
 	"contours": 250,
