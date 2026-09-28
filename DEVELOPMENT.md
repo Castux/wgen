@@ -134,7 +134,9 @@ every `WatchSteps` time steps.
 
 ### Simulation
 
-`internal/gen/uplift.go` and `calibrate.go`.
+`internal/gen`: `meshes.go` (the meshes of every level), `simulation.go`
+(a level's simulation, and the `simulator` running all levels), `calibrate.go`
+(the uplift field and its calibration), `stages.go` (the other stages).
 
 - Meshes: hex lattices, each level at half the spacing of the previous one,
   and containing its points (unjittered, lattice point (i, j) of a level is
@@ -151,10 +153,10 @@ every `WatchSteps` time steps.
   levels raise summits (their ridges barely erode), so after refining, the
   coarse level is calibrated again for target / (refined summit / coarse
   summit), and refined again.
-- Per level, `simState` holds the elevation (meters), uplift, erodibility and
+- Per level, `simulation` holds the elevation (meters), uplift, erodibility and
   Voronoi cell areas (`CellAreas`) of each vertex. Sea vertices are the fixed
   base level; lakes don't rise and erode fast.
-- Each time step (`simState.run`): steepest descent receivers, an ordering
+- Each time step (`simulation.run`): steepest descent receivers, an ordering
   from the base level up, drainage areas accumulated in reverse, then the
   implicit stream power update of Braun and Willett (2013), for n = 1: in
   order, h = (h + U dt + F h_receiver) / (1 + F), F = K dt A^m / distance.
