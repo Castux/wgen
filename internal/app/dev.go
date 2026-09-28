@@ -1,4 +1,4 @@
-package viewer
+package app
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 	"github.com/Castux/wgen/internal/engine"
 )
 
-// Development aids, to check the viewer without looking at it, set by
+// Development aids, to check the app without looking at it, set by
 // environment variables:
 //
 //   - WGEN_SCREENSHOT=path: save a screenshot once the world and its images

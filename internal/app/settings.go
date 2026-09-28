@@ -1,4 +1,4 @@
-package viewer
+package app
 
 import (
 	"encoding/json"
@@ -11,7 +11,7 @@ import (
 	"github.com/Castux/wgen/internal/render"
 )
 
-// Settings are the viewer settings: not part of the project, saved in the
+// Settings are the app settings: not part of the project, saved in the
 // user's config directory.
 type Settings struct {
 	View        string  `json:"view"`
@@ -99,7 +99,7 @@ var defaultSettings = Settings{
 	Export: export.Options{Heightmap: true, Texture: true, TextureScale: 1},
 }
 
-// settingsDir is where the viewer settings and the panel layout are saved,
+// settingsDir is where the app settings and the panel layout are saved,
 // empty if there is no such directory.
 func settingsDir() string {
 	dir, err := os.UserConfigDir()
@@ -115,7 +115,7 @@ func loadSettings(path string) Settings {
 	settings := defaultSettings
 	if data, err := os.ReadFile(path); err == nil {
 		if err := json.Unmarshal(data, &settings); err != nil {
-			slog.Warn("ignoring broken viewer settings", "path", path, "err", err)
+			slog.Warn("ignoring broken app settings", "path", path, "err", err)
 			return defaultSettings
 		}
 	}
@@ -153,7 +153,7 @@ func saveSettings(path string, settings Settings) {
 		err = os.WriteFile(path, data, 0o644)
 	}
 	if err != nil {
-		slog.Warn("cannot save viewer settings", "path", path, "err", err)
+		slog.Warn("cannot save app settings", "path", path, "err", err)
 	}
 }
 
@@ -193,7 +193,7 @@ func (a *app) initSettings(dir string) {
 		a.settings = defaultSettings
 		return
 	}
-	a.settingsPath = filepath.Join(dir, "viewer.json")
+	a.settingsPath = filepath.Join(dir, "viewer.json") // named when the app was a viewer
 	a.settings = loadSettings(a.settingsPath)
 }
 

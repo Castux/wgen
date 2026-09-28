@@ -1,11 +1,11 @@
-// Package viewer is the app: a window showing the generated landscape in 3D
+// Package app is the wgen app: a window showing the generated landscape in 3D
 // or as a 2D map, where the map is painted, with a panel to edit the terrains
 // and the parameters, and menus for projects (new, open, save, export).
 //
 // It runs on the main thread (GLFW and OpenGL require it), and is redrawn on
 // input, and when the engine or the background rendering have something new.
 // Otherwise it sleeps.
-package viewer
+package app
 
 import (
 	"fmt"
@@ -85,7 +85,7 @@ var Version = "dev"
 // frames to settle.
 const settleFrames = 3
 
-// Run opens the viewer window, until it is closed.
+// Run opens the app window, until it is closed.
 func Run(session *engine.Session, path string) error {
 	// Paths are relative to where the app was started (on macOS, GLFW would
 	// move to the bundle's resources)

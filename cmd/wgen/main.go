@@ -19,11 +19,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Castux/wgen/internal/app"
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
 	"github.com/Castux/wgen/internal/export"
 	"github.com/Castux/wgen/internal/gen"
-	"github.com/Castux/wgen/internal/viewer"
 )
 
 // version is set by the release builds (see scripts/package.sh).
@@ -61,7 +61,7 @@ func main() {
 		fmt.Println("wgen", version)
 		return
 	}
-	viewer.Version = version
+	app.Version = version
 	setupLogging(*verbose, *exports == "")
 	slog.Debug("wgen", "version", version)
 
@@ -102,7 +102,7 @@ func openApp(path string) error {
 		return err
 	}
 	defer session.Close()
-	return viewer.Run(session, path)
+	return app.Run(session, path)
 }
 
 func exportProject(path, list string, normalized bool, output string) error {

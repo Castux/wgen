@@ -34,7 +34,7 @@ Windows notes:
   2`), try building from PowerShell or `cmd`: this happened with a gcc whose
   `cc1.exe` couldn't run from Git Bash but was fine from Windows shells.
 
-Everything but `internal/viewer`, `assets` and `cmd/wgen` is pure Go, and
+Everything but `internal/app`, `assets` and `cmd/wgen` is pure Go, and
 can be built and tested without a C compiler.
 
 ## Releases
@@ -89,7 +89,7 @@ scale); elsewhere it follows the monitor's content scale.
 | `internal/export` | heightmap and water mask PNGs, texture, OBJ, SVG |
 | `internal/render` | CPU drawn images: base colors, hillshade, rivers, contours, grid; color scales |
 | `internal/engine` | background generation, file watching, the session tying them to a project |
-| `internal/viewer` | the app window |
+| `internal/app` | the app: window, views, panel, menus, dialogs, painting |
 | `scripts` | release packaging |
 | `test` | sample maps and project |
 | `etc` | source artwork and larger sample maps |
@@ -108,7 +108,7 @@ in a stable, readable layout; unknown keys are reported as warnings and
 dropped. `Patch` applies a partial config in the file format, which is how
 the panel edits parameters.
 
-A new project has no file (`ConfigPath` empty) until saved as.
+A new project has no file (`Path` empty) until saved as.
 
 ## Generation
 
@@ -121,7 +121,7 @@ meshes, which depend on the terrains' details), terrain (assign terrains,
 simulate, water depth), raster. `World.Update` reruns the pipeline from the
 first stage a config change affects (`gen.ChangedStage`), and returns a new
 world sharing the unchanged data with the old one. `World.ReloadImage` does
-the same for a new map image, `World.WithOutline` for a map in memory (the
+the same for a new map image, `World.WithMap` for a map in memory (the
 editor's), and `World.Rerun` reruns the simulation, to watch it.
 
 The random generator is seeded by the config's `seed`, with a separate stream
@@ -170,7 +170,7 @@ every `WatchSteps` time steps.
 - Water (`stages.go`): the sea is at level 0, each lake at the level of its
   lowest shore; their floors slope down from the shore by `floorSlope`.
 - Elevations are in meters, positions in pixels: `World.MetersPerPixel`
-  converts. The hillshading of `render`, the OBJ export and the viewer (a
+  converts. The hillshading of `render`, the OBJ export and the app (a
   `zScale` uniform, with the vertical exaggeration) use it. River widths
   come from `World.Drainage`, the drainage area in square pixels, since the
   mesh isn't uniform.
@@ -191,9 +191,9 @@ after the coarse level while refining. It keeps the last complete world as
 the base of incremental updates, apart from the displayed one.
 
 Requests are a config (`SetConfig`), reloading the image file
-(`ReloadImage`), a map in memory (`SetOutline`, the editor's), which
+(`ReloadImage`), a map in memory (`SetMap`, the editor's), which
 replaces the file's until it is reloaded, a rerun (`Rerun`), or a whole new
-project (`Replace`: a config and a map, generated from scratch). `SetSaved`
+project (`Replace`: a config and a map, generated from scratch). `SavedAs`
 records that the project was saved, possibly under a new path: the current
 world is rebased on the new paths instead of being regenerated.
 
@@ -208,16 +208,16 @@ differs from its file), stage.
 `New` starts an unsaved project from a config and a map. It watches the
 project file and its image (`Watcher`: directories are watched, so that
 editors replacing files on save are handled, and events are debounced), and
-applies edits (`Patch`, `SetConfig`, `SetOutline`), `Save`, `SaveAs` (the
+applies edits (`Patch`, `SetConfig`, `SetMap`), `Save`, `SaveAs` (the
 project and its map, `<name>.png` next to it) and `Export`. The watcher
 ignores the session's own writes.
 
-## Viewer
+## App
 
-`viewer.Run` owns the main thread: GLFW and OpenGL must be used from it,
+`app.Run` owns the main thread: GLFW and OpenGL must be used from it,
 which is why the package locks the main goroutine to its thread in `init`.
 
-The main loop (`viewer.go`) is event driven: it draws a few frames after any
+The main loop (`app.go`) is event driven: it draws a few frames after any
 input, then sleeps in `glfw.WaitEventsTimeout`. Background work (the engine,
 image rendering, exports) wakes it with `glfw.PostEmptyEvent`. Each frame:
 
@@ -236,13 +236,18 @@ image rendering, exports) wakes it with `glfw.PostEmptyEvent`. Each frame:
 
 Files:
 
+- `app.go`: the window, the main loop, each frame, the window title.
+- `input.go`: keyboard and mouse: the window callbacks, shortcuts (lookup
+  tables of keys), camera drags and zoom.
+- `status.go`: the status in the bottom left corner.
 - `project.go`: projects: startup (the given file, else the last project,
   else a new map), new, open (a project, or an image to import), save,
   save as, export, quit, all asking about unsaved changes first.
 - `menu.go`: the menu bar.
-- `dialogs.go`: modal dialogs: the file browser (ImGui, with places and
-  drives; no native dialog, to avoid more C dependencies), new map, export,
-  import, unsaved changes, controls.
+- `dialogs.go`: modal dialogs: new map, export, unsaved changes, controls.
+- `filedialog.go`: the file browser (ImGui, with places and drives; no
+  native dialog, to avoid more C dependencies).
+- `importdialog.go`: the import dialog.
 - `importer.go`: importing an image: its palette, the guessed picks (the
   border color is the sea), and classifying every pixel to the closest
   picked color. No GL: unit tested.
@@ -275,10 +280,12 @@ Files:
 - `editor.go`: painting input, brush outline, sending the map to the session
   after each stroke. The painted map is a second texture of the map view,
   updated by regions.
-- `settings.go`: app settings, saved as JSON in the user config directory
+- `settings.go`: app settings (with named constants for the saved values),
+  saved as JSON in the user config directory
   (`os.UserConfigDir()/wgen/viewer.json`, with ImGui's `imgui.ini` for the
   panel layout next to it).
 - `gl.go`: shader and texture helpers.
+- `dev.go`: the development hooks below.
 
 ### Checking the app without looking at it
 
@@ -336,7 +343,7 @@ go test ./internal/gen -run Golden -update   # after an intended change of resul
   the project and the image, previews, through a session on a temporary
   directory.
 - `internal/render`: color scales, images.
-- `internal/viewer`: cameras, settings, canvas and stamps, importing, image
+- `internal/app`: cameras, settings, canvas and stamps, importing, image
   slots, number rounding, shortcuts. The package links ImGui, so it needs the C toolchain even
   for tests, but no window or GPU.
 

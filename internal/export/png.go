@@ -59,7 +59,7 @@ func WaterMask(w *gen.World, path string) error {
 	return writePNG(path, img)
 }
 
-// Texture writes the map as seen in the viewer's 2D view: terrain colors,
+// Texture writes the map as seen in the app's map view: terrain colors,
 // hillshading and rivers, at a scale of the map image.
 func Texture(w *gen.World, path string, scale float64) error {
 	if scale <= 0 {

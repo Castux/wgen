@@ -55,7 +55,7 @@ var (
 	gridAlpha    = 0.5
 )
 
-// Light direction, same as the 3D viewer
+// Light direction, same as the 3D view
 var light = func() [3]float64 {
 	l := [3]float64{-1, 1, 1}
 	n := math.Sqrt(3)

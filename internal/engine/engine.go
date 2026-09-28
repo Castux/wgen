@@ -51,7 +51,7 @@ type Map struct {
 	Pixels        []config.Color
 }
 
-// State is what the viewer is told about the engine.
+// State is what the app is told about the engine.
 type State struct {
 	Version  int    // incremented whenever the displayed world changes
 	Busy     bool   // generating

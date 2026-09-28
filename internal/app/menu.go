@@ -1,4 +1,4 @@
-package viewer
+package app
 
 import (
 	"github.com/AllenDang/cimgui-go/imgui"
