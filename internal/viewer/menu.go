@@ -124,6 +124,8 @@ func (a *app) drawMenu(state engine.State) {
 		if imgui.MenuItemBool("Controls") {
 			a.dialogs.help = true
 		}
+		imgui.Separator()
+		imgui.MenuItemBoolV("wgen "+Version, "", false, false)
 		imgui.EndMenu()
 	}
 

@@ -26,7 +26,9 @@ import (
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/glfw/v3.4/glfw"
 	"github.com/go-gl/mathgl/mgl64"
+	"golang.org/x/image/draw"
 
+	"github.com/Castux/wgen/assets"
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
 	"github.com/Castux/wgen/internal/gen"
@@ -95,12 +97,23 @@ type message struct {
 	error bool
 }
 
+// Version is the app's version, shown in the Help menu.
+var Version = "dev"
+
 // Frames drawn after an event, before sleeping: ImGui can take a couple of
 // frames to settle.
 const settleFrames = 3
 
 // Run opens the viewer window, until it is closed.
 func Run(session *engine.Session, path string) error {
+	// Paths are relative to where the app was started (on macOS, GLFW would
+	// move to the bundle's resources)
+	if path != "" {
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+	}
+	glfw.InitHint(glfw.CocoaChdirResources, glfw.False)
 	if err := glfw.Init(); err != nil {
 		return err
 	}
@@ -118,6 +131,7 @@ func Run(session *engine.Session, path string) error {
 		return err
 	}
 	defer window.Destroy()
+	window.SetIcon(icons()) // Windows and Linux; macOS uses the bundle's
 
 	window.MakeContextCurrent()
 	glfw.SwapInterval(1)
@@ -245,9 +259,25 @@ func (a *app) setupImGui(settingsDir string) {
 
 	sx, _ := a.window.GetContentScale()
 	a.uiScale = max(sx, 1)
+	if runtime.GOOS == "darwin" {
+		// Window sizes are in points on macOS, scaled by the system
+		a.uiScale = 1
+	}
 	style := imgui.CurrentStyle()
 	style.ScaleAllSizes(a.uiScale)
 	style.SetFontScaleDpi(a.uiScale)
+}
+
+// icons is the app icon at the usual window icon sizes.
+func icons() []image.Image {
+	src := assets.Icon()
+	var images []image.Image
+	for _, size := range []int{16, 32, 48, 64, 128} {
+		img := image.NewNRGBA(image.Rect(0, 0, size, size))
+		draw.CatmullRom.Scale(img, img.Bounds(), src, src.Bounds(), draw.Src, nil)
+		images = append(images, img)
+	}
+	return images
 }
 
 // activity requests drawing a few frames.

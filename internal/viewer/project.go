@@ -37,6 +37,18 @@ func (a *app) startup(path string) {
 	default:
 		a.newProject(2048, 2048, 1000, true, false)
 	}
+
+	// Development: a dialog opened, for screenshots (see WGEN_SCREENSHOT)
+	switch os.Getenv("WGEN_DIALOG") {
+	case "new":
+		a.openNewMap()
+	case "open":
+		a.openFile("Open a project or an image", "", "", false, openExts, a.open)
+	case "export":
+		a.openExport()
+	case "help":
+		a.dialogs.help = true
+	}
 }
 
 func isFile(path string) bool {

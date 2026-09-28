@@ -16,6 +16,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/Castux/wgen/internal/config"
@@ -25,8 +26,12 @@ import (
 	"github.com/Castux/wgen/internal/viewer"
 )
 
+// version is set by the release builds (see scripts/package.sh).
+var version = "dev"
+
 func main() {
 	verbose := flag.Bool("v", false, "verbose logging (stage timings)")
+	printVersion := flag.Bool("version", false, "print the version")
 	exports := flag.String("export", "", "export without opening the app: comma separated list of heightmap, water, texture, obj, svg")
 	normalized := flag.Bool("normalized", false, "with -export heightmap: from the lowest to the highest point, instead of meters")
 	output := flag.String("o", "", "with -export: output path without extension (default: next to the project)")
@@ -36,9 +41,10 @@ func main() {
 		flag.PrintDefaults()
 	}
 
-	// Allow flags after the path too
+	// Allow flags after the path too. Old macOS versions give apps opened from
+	// the Finder a process serial number, -psn_...
 	var path string
-	args := os.Args[1:]
+	args := slices.DeleteFunc(os.Args[1:], func(arg string) bool { return strings.HasPrefix(arg, "-psn_") })
 	for len(args) > 0 {
 		flag.CommandLine.Parse(args)
 		args = flag.Args()
@@ -51,7 +57,13 @@ func main() {
 		}
 	}
 
+	if *printVersion {
+		fmt.Println("wgen", version)
+		return
+	}
+	viewer.Version = version
 	setupLogging(*verbose, *exports == "")
+	slog.Debug("wgen", "version", version)
 
 	var err error
 	if *exports != "" {

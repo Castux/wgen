@@ -338,6 +338,9 @@ func (a *app) openExport() {
 	d := &a.dialogs.export
 	d.opening = true
 	if p := a.session.ConfigPath(); p != "" {
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
 		d.base = strings.TrimSuffix(p, filepath.Ext(p))
 	} else if d.base == "" {
 		home, _ := os.UserHomeDir()

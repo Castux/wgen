@@ -8,3 +8,6 @@
 *.tga
 .DS_Store
 /lab/out*/
+!/assets/*.png
+/dist/
+*.syso
