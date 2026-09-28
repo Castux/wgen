@@ -39,6 +39,8 @@ type Options struct {
 
 	Contours float64 // elevation interval, 0 for none
 	Grid     float64 // grid size in world units, 0 for none
+
+	HeightScale string // colors of BaseHeight on land: ScaleGray (default) or ScaleRainbow
 }
 
 // MaxSize is the largest image side Render will produce.
@@ -76,7 +78,7 @@ func Render(w *gen.World, o Options) *image.RGBA {
 	case BaseTerrain:
 		drawTerrainColors(w, img, scale)
 	case BaseHeight:
-		drawHeightColors(w, img, scale)
+		drawHeightColors(w, img, scale, o.HeightScale)
 	default:
 		draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
 	}
@@ -155,10 +157,11 @@ var (
 	shallowWater = [3]float64{110, 160, 215}
 )
 
-// drawHeightColors draws elevation: gray on land, blue in water (sea and
-// lakes), darker when deeper, so that shores show.
-func drawHeightColors(w *gen.World, img *image.RGBA, scale float64) {
-	span := w.Highest - w.Lowest
+// drawHeightColors draws elevation: from sea level to the highest point on
+// land (gray or rainbow), blue in water (sea and lakes), darker when deeper,
+// so that shores show.
+func drawHeightColors(w *gen.World, img *image.RGBA, scale float64, heightScale string) {
+	highest := math.Max(w.Highest, 1)
 	forEachPixel(img, scale, func(i int, p geom.Vec2) {
 		z := Sample(w, w.Heightmap, p)
 
@@ -173,9 +176,8 @@ func drawHeightColors(w *gen.World, img *image.RGBA, scale float64) {
 			return
 		}
 
-		h := (z - w.Lowest) / span
-		g := uint8(math.Round(geom.Clamp(h, 0, 1) * 255))
-		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = g, g, g, 255
+		c := toBytes(HeightColor(heightScale, z/highest))
+		img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = c[0], c[1], c[2], 255
 	})
 }
 

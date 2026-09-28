@@ -44,7 +44,7 @@ func TestSettings(t *testing.T) {
 		t.Errorf("broken file: %+v", loaded)
 	}
 
-	if cycle(views, "map") != "orbit" || cycle(views, "orbit") != "top" {
+	if cycle(views, "map") != "orbit" || cycle(views, "orbit") != "map" {
 		t.Error("cycle")
 	}
 }
@@ -169,8 +169,17 @@ func TestShortcuts(t *testing.T) {
 		events []event
 		want   []shortcut
 	}{
-		{"tab", []event{{key: glfw.KeyTab, action: press}}, []shortcut{shortcutView}},
+		{"v", []event{{key: glfw.KeyV, name: "v", action: press}}, []shortcut{shortcutView}},
+		{"tab is ImGui's", []event{{key: glfw.KeyTab, action: press}}, nil},
 		{"ctrl+tab is ImGui's", []event{{key: glfw.KeyTab, action: press, mods: glfw.ModControl}}, nil},
+		{"menu commands", []event{
+			{key: glfw.KeyN, name: "n", action: press, mods: glfw.ModControl},
+			{key: glfw.KeyO, name: "o", action: press, mods: glfw.ModControl},
+			{key: glfw.KeyS, name: "s", action: press, mods: glfw.ModControl | glfw.ModShift},
+			{key: glfw.KeyE, name: "e", action: press, mods: glfw.ModControl},
+			{key: glfw.KeyQ, name: "q", action: press, mods: glfw.ModSuper},
+			{key: glfw.KeyR, name: "r", action: press},
+		}, []shortcut{shortcutNew, shortcutOpen, shortcutSaveAs, shortcutExport, shortcutQuit, shortcutReset}},
 		{"shift tap", []event{shiftDown, shiftUp}, []shortcut{shortcutColor}},
 		{"right shift tap", []event{{key: glfw.KeyRightShift, action: press}, {key: glfw.KeyRightShift, action: release}}, []shortcut{shortcutColor}},
 		{"shift+drag", []event{shiftDown, {click: true}, shiftUp}, nil},
@@ -233,5 +242,46 @@ func TestShoreLock(t *testing.T) {
 	water := a.shoreLock(conf, sea)
 	if !water(plains.Color) || water(lake.Color) || water(sea.Color) {
 		t.Error("water brush: should protect land only (sea and lake can swap)")
+	}
+}
+
+func TestImportClassification(t *testing.T) {
+	conf := config.Default("map.png")
+	white, black := config.Color{255, 255, 255}, config.Color{0, 0, 0}
+	gray := config.Color{120, 120, 120} // antialiasing, closer to black
+
+	// A white sea with a black island, gray on its edge
+	const w, h = 20, 10
+	pixels := make([]config.Color, w*h)
+	for i := range pixels {
+		x, y := i%w, i/w
+		switch {
+		case x >= 8 && x < 12 && y >= 3 && y < 7:
+			pixels[i] = black
+		case x >= 7 && x < 13 && y >= 2 && y < 8:
+			pixels[i] = gray
+		default:
+			pixels[i] = white
+		}
+	}
+
+	picks := defaultPicks(w, h, pixels, conf)
+	if len(picks) != 2 || picks[0] != (pick{white, "sea"}) || picks[1].terrain != "plains" {
+		t.Fatalf("picks %v", picks)
+	}
+	// The most common other color is the gray edge: pick the black instead
+	picks[1].color = black
+
+	out := classify(pixels, picks, conf)
+	sea, plains := conf.Terrain("sea").Color, conf.Terrain("plains").Color
+	if out[0] != sea || out[5*w+10] != plains || out[2*w+7] != plains {
+		t.Errorf("classified: corner %v, island %v, edge %v", out[0], out[5*w+10], out[2*w+7])
+	}
+
+	// Colors of the terrains are recognized
+	pixels = classify(pixels, picks, conf)
+	picks = defaultPicks(w, h, pixels, conf)
+	if !slices.Contains(picks, pick{sea, "sea"}) || !slices.Contains(picks, pick{plains, "plains"}) {
+		t.Errorf("exact picks %v", picks)
 	}
 }

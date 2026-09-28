@@ -2,16 +2,16 @@ package viewer
 
 import (
 	"encoding/json"
-	"math"
 	"strings"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
+	"github.com/Castux/wgen/internal/render"
 )
 
-// param is a generation parameter, with its current value.
+// param is a project parameter, with its current value.
 type param struct {
 	config.Param
 	value any
@@ -36,49 +36,31 @@ func (a *app) panelParams(conf *config.Config) []param {
 	return a.params
 }
 
+// drawPanel is the side panel: terrains and brushes, parameters, display.
 func (a *app) drawPanel(state engine.State) {
-	// Top right, on first use
 	display := imgui.CurrentIO().DisplaySize()
-	width := 400 * a.uiScale
-	imgui.SetNextWindowPosV(imgui.NewVec2(display.X-width-8, 8), imgui.CondFirstUseEver, imgui.NewVec2(0, 0))
-	imgui.SetNextWindowSizeV(imgui.NewVec2(width, display.Y-16), imgui.CondFirstUseEver)
+	top := a.menuHeight
+	width := 380 * a.uiScale
+	imgui.SetNextWindowPosV(imgui.NewVec2(display.X-width-8, top+8), imgui.CondFirstUseEver, imgui.NewVec2(0, 0))
+	imgui.SetNextWindowSizeV(imgui.NewVec2(width, display.Y-top-16), imgui.CondFirstUseEver)
 
-	if imgui.BeginV("wgen", nil, imgui.WindowFlagsNone) {
+	if imgui.BeginV("Panel", nil, imgui.WindowFlagsNone) {
 		keepInside(display)
-		imgui.PushItemWidth(-150 * a.uiScale)
-		a.drawViewSettings()
-		a.drawActions(state)
-		a.drawSimulation(state)
-		a.drawEditor()
-		if conf := a.session.Engine.Config(); conf != nil {
-			a.drawParams(conf)
+		imgui.PushItemWidth(-170 * a.uiScale)
+		conf := a.session.Engine.Config()
+		if conf != nil {
+			a.drawTerrains(conf)
+			a.drawBrush()
+			a.drawParams(conf, state)
 		}
+		a.drawDisplay()
 		imgui.PopItemWidth()
 	}
 	imgui.End()
 }
 
-// keepInside moves (and shrinks, if needed) the current window back inside
-// the display, when the display got smaller than when the window was placed:
-// its position is saved between sessions.
-func keepInside(display imgui.Vec2) {
-	if imgui.IsMouseDragging(imgui.MouseButtonLeft) {
-		return
-	}
-	pos, size := imgui.WindowPos(), imgui.WindowSize()
-	if size.X > display.X || size.Y > display.Y {
-		size = imgui.NewVec2(min(size.X, display.X), min(size.Y, display.Y))
-		imgui.SetWindowSizeVec2(size)
-	}
-	x := max(min(pos.X, display.X-size.X), 0)
-	y := max(min(pos.Y, display.Y-size.Y), 0)
-	if x != pos.X || y != pos.Y {
-		imgui.SetWindowPosVec2(imgui.NewVec2(x, y))
-	}
-}
-
-func (a *app) drawViewSettings() {
-	if !imgui.CollapsingHeaderTreeNodeFlagsV("View", imgui.TreeNodeFlagsDefaultOpen) {
+func (a *app) drawDisplay() {
+	if !imgui.CollapsingHeaderTreeNodeFlagsV("Display", imgui.TreeNodeFlagsNone) {
 		return
 	}
 
@@ -87,27 +69,30 @@ func (a *app) drawViewSettings() {
 	edit := func(c bool) { changed = changed || c }
 
 	var c bool
-	s.View, c = combo("View (tab)", s.View, views)
+	s.View, c = combo("View (v)", s.View, views)
 	edit(c)
-	s.Color, c = combo("Color (shift)", s.Color, colors)
+	s.Color, c = combo("Colors (shift)", s.Color, colors)
 	edit(c)
+	s.HeightScale, c = combo("Height scale", s.HeightScale, heightScale)
+	edit(c)
+	edit(imgui.Checkbox("Height legend", &s.Legend))
 	s.Shading, c = combo("Shading (q)", s.Shading, shadings)
 	edit(c)
 	edit(imgui.Checkbox("Wireframe (w)", &s.Wireframe))
-	s.VerticalScale, c = a.number("view.verticalScale", "Vertical exaggeration", s.VerticalScale, 0.5, 20, 0.5, false)
+	s.VerticalScale, c = a.number("view.verticalScale", "Vertical exaggeration", s.VerticalScale, 0.1, 100, 0.5, false, false,
+		"Of the 3D view: at 1, mountains have their true proportions")
 	edit(c)
-	if s.VerticalScale <= 0 {
-		s.VerticalScale = a.settings.VerticalScale
-	}
 
-	// Rendered on the CPU: only updated when done editing
-	s.RiverWidth, c = a.number("view.riverWidth", "River max width", s.RiverWidth, 0, 20, 0.1, false)
+	imgui.SeparatorText("Overlay")
+	s.RiverWidth, c = a.number("view.riverWidth", "River width (px)", s.RiverWidth, 0, 100, 0.1, false, false,
+		"Width of the largest river, in map pixels (0: no rivers)")
 	edit(c)
-	s.RiverPower, c = a.number("view.riverPower", "River width growth", s.RiverPower, 0, 1, 0.01, false)
+	s.RiverPower, c = a.number("view.riverPower", "River width growth", s.RiverPower, 0, 1, 0.01, false, false,
+		"How much wider big rivers are than small ones")
 	edit(c)
-	s.Contours, c = a.number("view.contours", "Contour interval", s.Contours, 0, 100, 1, false)
+	s.Contours, c = a.number("view.contours", "Contour interval (m)", s.Contours, 0, 10000, 1, false, false, "0: no contour lines")
 	edit(c)
-	s.Grid, c = a.number("view.grid", "Grid size", s.Grid, 0, 500, 10, false)
+	s.Grid, c = a.number("view.grid", "Grid size (px)", s.Grid, 0, 10000, 10, false, false, "0: no grid")
 	edit(c)
 
 	if changed {
@@ -115,113 +100,64 @@ func (a *app) drawViewSettings() {
 	}
 }
 
-func (a *app) drawActions(state engine.State) {
-	if !imgui.CollapsingHeaderTreeNodeFlagsV("Actions", imgui.TreeNodeFlagsDefaultOpen) {
-		return
-	}
-
-	full := imgui.NewVec2(-math.SmallestNonzeroFloat32, 0)
-
-	label := "Save config"
-	if state.Dirty {
-		label = "Save config (unsaved changes)"
-	}
-	imgui.BeginDisabledV(!state.Dirty)
-	if imgui.ButtonV(label+"###save", full) {
-		a.save()
-	}
-	imgui.EndDisabled()
-
-	imgui.BeginDisabledV(a.exporting.Load())
-	if imgui.ButtonV("Export files", full) {
-		a.export()
-	}
-	imgui.EndDisabled()
-
-	if imgui.ButtonV("Reset view", full) {
-		a.resetView()
-	}
-}
-
-// drawSimulation is the section about watching the uplift model's
-// simulation.
-func (a *app) drawSimulation(state engine.State) {
-	conf := a.session.Engine.Config()
-	if conf == nil {
-		return
-	}
-	if !imgui.CollapsingHeaderTreeNodeFlagsV("Simulation", imgui.TreeNodeFlagsDefaultOpen) {
-		return
-	}
-
-	s := a.settings
-	changed := imgui.Checkbox("Watch the simulation", &s.Watch)
-	imgui.SetItemTooltip("Show the landscape as it is simulated, instead of the result only")
-	var c bool
-	s.WatchSteps, c = a.number("simulation.watchSteps", "Time steps per frame", s.WatchSteps, 1, 50, 1, true)
-	if changed || c {
-		a.setSettings(s)
-	}
-
-	imgui.BeginDisabledV(state.Busy)
-	if imgui.ButtonV("Replay the simulation", imgui.NewVec2(-math.SmallestNonzeroFloat32, 0)) {
-		if !a.settings.Watch {
-			s := a.settings
-			s.Watch = true
-			a.setSettings(s)
-		}
-		a.session.Engine.Rerun()
-	}
-	imgui.EndDisabled()
-}
-
-func (a *app) drawParams(conf *config.Config) {
-	if !imgui.CollapsingHeaderTreeNodeFlagsV("Generation", imgui.TreeNodeFlagsDefaultOpen) {
-		return
-	}
-
+// drawParams are the parameters of the project, from the config schema, and
+// watching the simulation.
+func (a *app) drawParams(conf *config.Config, state engine.State) {
 	group, open := "", false
 	for _, p := range a.panelParams(conf) {
 		if p.Group != group {
-			if open {
-				imgui.TreePop()
-			}
 			group = p.Group
-			flags := imgui.TreeNodeFlagsDefaultOpen
-			if strings.HasPrefix(group, "Terrain: ") || group == "Export" {
-				flags = imgui.TreeNodeFlagsNone
+			open = imgui.CollapsingHeaderTreeNodeFlagsV(group, imgui.TreeNodeFlagsNone)
+			if open && group == "Simulation" {
+				a.drawWatch(state)
 			}
-			open = imgui.TreeNodeExStrV(group, flags)
 		}
 		if !open {
 			continue
 		}
 
 		key := strings.Join(p.Path, ".")
-		imgui.PushIDStr(key)
-
-		var value any
-		changed := false
-		switch v := p.value.(type) {
-		case bool:
-			changed = imgui.Checkbox(p.Label, &v)
-			value = v
-		case float64:
-			value, changed = a.number("param."+key, p.Label, v, p.Min, p.Max, p.Step, p.Type == "int")
+		v, ok := p.value.(float64)
+		if !ok {
+			continue
 		}
-		if changed && value != p.value {
+		value, changed := a.number("param."+key, p.Label, v, p.Min, p.Max, p.Step, p.Type == "int", false, p.Tooltip)
+		if changed && value != v {
 			a.patch(p.Path, value)
 		}
-
-		imgui.PopID()
-	}
-	if open {
-		imgui.TreePop()
 	}
 }
 
-// patch applies a parameter change, such as ["terrains", "sea", "gradient"]
-// = -0.2, as the partial config {"terrains": {"sea": {"gradient": -0.2}}}.
+// drawWatch is about watching the simulation.
+func (a *app) drawWatch(state engine.State) {
+	s := a.settings
+	changed := imgui.Checkbox("Watch the simulation", &s.Watch)
+	imgui.SetItemTooltip("Show the landscape as it is simulated, instead of the result only")
+	var c bool
+	s.WatchSteps, c = a.number("simulation.watchSteps", "Time steps per frame", s.WatchSteps, 1, 1000, 1, true, false, "")
+	if changed || c {
+		a.setSettings(s)
+	}
+
+	imgui.BeginDisabledV(state.Busy)
+	if imgui.ButtonV("Replay the simulation", fullWidth()) {
+		a.replay()
+	}
+	imgui.EndDisabled()
+	imgui.Separator()
+}
+
+func (a *app) replay() {
+	if !a.settings.Watch {
+		s := a.settings
+		s.Watch = true
+		a.setSettings(s)
+	}
+	a.session.Engine.Rerun()
+}
+
+// patch applies a parameter change, such as ["simulation", "erodibility"] =
+// 1e-6, as the partial config {"simulation": {"erodibility": 1e-6}}.
 func (a *app) patch(path []string, value any) {
 	for i := len(path) - 1; i >= 0; i-- {
 		value = map[string]any{path[i]: value}
@@ -238,102 +174,50 @@ func (a *app) patch(path []string, value any) {
 	a.paramsConf = nil // show the config values again, even if unchanged
 }
 
-// number edits a value with a slider, for quick changes between lo and hi
-// (rounded to step), and a field next to it, for precise values (as typed,
-// and possibly out of the slider range). Both only commit when done: when
-// the slider is released, or Enter pressed or the field left. The new value
-// is returned, with true, then. key identifies the widget.
-func (a *app) number(key, label string, value, lo, hi, step float64, integer bool) (float64, bool) {
-	imgui.PushIDStr(key)
-	defer imgui.PopID()
-
-	spacing := imgui.CurrentStyle().ItemInnerSpacing().X
-	fieldWidth := 80 * a.uiScale
-	sliderWidth := max(imgui.CalcItemWidth()-fieldWidth-spacing, 1)
-
-	committed, done := value, false
-
-	// The value being edited is kept between frames, as ImGui only writes
-	// it back when it changes
-	edited := func(id string, v float64) float64 {
-		if a.editKey == key+id {
-			return a.editValue
-		}
-		return v
-	}
-	track := func(id string, v float64) {
-		if imgui.IsItemActive() {
-			a.editKey, a.editValue = key+id, v
-		} else if a.editKey == key+id {
-			a.editKey = ""
-		}
+// drawLegend shows what colors are what elevations, with height colors.
+func (a *app) drawLegend() {
+	w := a.world
+	if !a.settings.Legend || a.settings.Color != "height" || w == nil {
+		return
 	}
 
-	s := float32(edited("/slider", value))
-	imgui.SetNextItemWidth(sliderWidth)
-	imgui.SliderFloatV("##slider", &s, float32(lo), float32(hi), "", imgui.SliderFlagsNoInput)
-	track("/slider", float64(s))
-	if imgui.IsItemDeactivatedAfterEdit() {
-		committed, done = roundToStep(float64(s), step), true
-	}
+	// Top left, under the menu
+	imgui.SetNextWindowPosV(imgui.NewVec2(8, a.menuHeight+8), imgui.CondAlways, imgui.NewVec2(0, 0))
+	imgui.SetNextWindowBgAlpha(0.7)
+	flags := imgui.WindowFlagsNoDecoration | imgui.WindowFlagsAlwaysAutoResize | imgui.WindowFlagsNoSavedSettings |
+		imgui.WindowFlagsNoFocusOnAppearing | imgui.WindowFlagsNoNav | imgui.WindowFlagsNoInputs
 
-	imgui.SameLineV(0, spacing)
+	if imgui.BeginV("##legend", nil, flags) {
+		barWidth, barHeight := 18*a.uiScale, 180*a.uiScale
+		draw := imgui.WindowDrawList()
 
-	format := "%.10g"
-	if integer {
-		format = "%.0f"
-	}
-	// Follows the slider while dragged
-	shown := value
-	if a.editKey == key+"/slider" {
-		shown = roundToStep(float64(s), step)
-	}
-	f := edited("/field", shown)
-	imgui.SetNextItemWidth(fieldWidth)
-	imgui.InputDoubleV("##field", &f, 0, 0, format, imgui.InputTextFlagsAutoSelectAll)
-	track("/field", f)
-	if imgui.IsItemDeactivatedAfterEdit() {
-		committed, done = f, true
-		if integer {
-			committed = math.Round(f)
-		}
-	}
-
-	imgui.SameLineV(0, spacing)
-	imgui.TextUnformatted(label)
-
-	return committed, done
-}
-
-// decimals is the number of decimals worth showing for values rounded to
-// step.
-func decimals(step float64) int {
-	if step <= 0 {
-		return 3
-	}
-	return max(0, int(math.Ceil(-math.Log10(step)-1e-9)))
-}
-
-func roundToStep(v, step float64) float64 {
-	if step <= 0 {
-		return v
-	}
-	v = math.Round(v/step) * step
-
-	// Without the floating point noise of the multiplication
-	p := math.Pow(10, float64(decimals(step)))
-	return math.Round(v*p) / p
-}
-
-func combo(label, value string, options []string) (string, bool) {
-	changed := false
-	if imgui.BeginCombo(label, value) {
-		for _, o := range options {
-			if imgui.SelectableBoolV(o, o == value, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && o != value {
-				value, changed = o, true
+		bar := func(title string, low, high float64, color func(t float64) [3]float64) {
+			imgui.TextUnformatted(title)
+			origin := imgui.CursorScreenPos()
+			const steps = 48
+			for i := range steps {
+				t0, t1 := float64(i)/steps, float64(i+1)/steps
+				c := color((t0 + t1) / 2)
+				col := imgui.ColorConvertFloat4ToU32(imgui.NewVec4(float32(c[0]), float32(c[1]), float32(c[2]), 1))
+				// Highest at the top
+				y0 := origin.Y + barHeight*float32(1-t1)
+				y1 := origin.Y + barHeight*float32(1-t0)
+				draw.AddRectFilled(imgui.NewVec2(origin.X, y0), imgui.NewVec2(origin.X+barWidth, y1), col)
 			}
+			for i := range 5 {
+				t := float64(i) / 4
+				y := origin.Y + barHeight*float32(1-t) - imgui.TextLineHeight()/2
+				draw.AddTextVec2(imgui.NewVec2(origin.X+barWidth+6*a.uiScale, y), 0xffeeeeee, formatMeters(low+(high-low)*t))
+			}
+			imgui.Dummy(imgui.NewVec2(barWidth+70*a.uiScale, barHeight))
 		}
-		imgui.EndCombo()
+
+		scale := a.settings.HeightScale
+		bar("Land", 0, w.Highest, func(t float64) [3]float64 { return render.HeightColor(scale, t) })
+		if w.Lowest < 0 {
+			imgui.Spacing()
+			bar("Water", w.Lowest, 0, render.WaterColor)
+		}
 	}
-	return value, changed
+	imgui.End()
 }

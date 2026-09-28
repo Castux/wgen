@@ -92,45 +92,6 @@ func (c *orbitCamera) dolly(factor float64) {
 	c.radius = mgl64.Clamp(c.radius*factor, orbitMinDistance, c.maxDistance)
 }
 
-// topCamera is an orthographic camera looking down.
-type topCamera struct {
-	center        mgl64.Vec2
-	zoom          float64
-	width, height float64 // map size
-}
-
-func (c *topCamera) reset(width, height float64) {
-	*c = topCamera{zoom: 1, width: width, height: height}
-}
-
-// halfSize is the half extent of the view, fitting the map at zoom 1.
-func (c *topCamera) halfSize(aspect float64) (float64, float64) {
-	half := math.Max(c.height, c.width/aspect) / 2 / c.zoom
-	return half * aspect, half
-}
-
-func (c *topCamera) view() mgl64.Mat4 {
-	extent := math.Max(c.width, c.height)
-	return mgl64.Translate3D(-c.center.X(), -c.center.Y(), -extent)
-}
-
-func (c *topCamera) projection(aspect float64) mgl64.Mat4 {
-	hx, hy := c.halfSize(aspect)
-	extent := math.Max(c.width, c.height)
-	return mgl64.Ortho(-hx, hx, -hy, hy, 0, 2*extent)
-}
-
-// pan follows the mouse, in a view of the given size.
-func (c *topCamera) pan(dx, dy, viewWidth, viewHeight float64) {
-	hx, hy := c.halfSize(viewWidth / viewHeight)
-	c.center = c.center.Sub(mgl64.Vec2{dx * 2 * hx / viewWidth, -dy * 2 * hy / viewHeight})
-}
-
-// dolly zooms in (factor < 1) or out.
-func (c *topCamera) dolly(factor float64) {
-	c.zoom /= factor
-}
-
 // mapCamera is the 2D view transform: the top left corner of the map is
 // displayed at offset, in window coordinates, and the map is zoom times its
 // size.

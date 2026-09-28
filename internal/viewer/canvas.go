@@ -7,6 +7,7 @@ import (
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/gen"
+	"github.com/Castux/wgen/internal/geom"
 )
 
 // canvas is the map being edited: a terrain color per pixel, bottom row
@@ -35,6 +36,7 @@ type stroke struct {
 	before       []config.Color // all pixels, at the start
 	rect         image.Rectangle
 	lastX, lastY float64 // last stamp
+	shape        string
 }
 
 const maxUndo = 50
@@ -49,10 +51,35 @@ func (c *canvas) at(x, row int) config.Color { return c.pixels[c.index(x, row)] 
 
 func (c *canvas) bounds() image.Rectangle { return image.Rect(0, 0, c.width, c.height) }
 
-// stamp paints a blob of the given color and radius (pixels) around a point,
-// with a natural looking edge: noisy, and a little elongated, differently
-// for every seed. It returns the rectangle of the pixels it may have changed.
-func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64) image.Rectangle {
+// stamp paints a shape of the given color and radius (pixels) around a
+// point, and returns the rectangle of the pixels it may have changed:
+//
+//   - natural: a blob with a noisy edge, a little elongated, differently for
+//     every seed
+//   - round: a disk
+//   - square: a square, of side twice the radius
+func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64, shape string) image.Rectangle {
+	paint := func(x, row int) {
+		i := c.index(x, row)
+		if c.protect == nil || !c.protect(c.pixels[i]) {
+			c.pixels[i] = color
+		}
+	}
+
+	if shape == brushRound || shape == brushSquare {
+		rect := image.Rect(int(math.Floor(cx-radius)), int(math.Floor(cy-radius)),
+			int(math.Ceil(cx+radius)), int(math.Ceil(cy+radius))).Intersect(c.bounds())
+		for row := rect.Min.Y; row < rect.Max.Y; row++ {
+			for x := rect.Min.X; x < rect.Max.X; x++ {
+				dx, dy := float64(x)+0.5-cx, float64(row)+0.5-cy
+				if shape == brushSquare || dx*dx+dy*dy <= radius*radius {
+					paint(x, row)
+				}
+			}
+		}
+		return rect
+	}
+
 	rnd := func(i uint64) float64 { return float64(hashSeed(seed, i)>>11) / (1 << 53) }
 	angle := rnd(1) * 2 * math.Pi
 	elongation := 1 + 0.5*rnd(2)
@@ -62,23 +89,44 @@ func (c *canvas) stamp(cx, cy, radius float64, color config.Color, seed uint64) 
 	reach := radius * 1.8
 	rect := image.Rect(int(cx-reach), int(cy-reach), int(cx+reach)+1, int(cy+reach)+1).Intersect(c.bounds())
 
+	if rect.Empty() {
+		return rect
+	}
+
+	// Edge distorted by noise at the scale of the stamp. The noise is smooth
+	// at that scale: sampled on a grid of about 32 steps per radius, and
+	// interpolated, for big stamps to stay fast.
+	noise := func(x, y float64) float64 {
+		n := 0.0
+		for o, amplitude, scale := 0, 1.0, 1.2/radius; o < 3; o, amplitude, scale = o+1, amplitude/2, scale*2 {
+			n += amplitude * gen.Noise(seed+uint64(o), x*scale+ox, y*scale+oy)
+		}
+		return n
+	}
+	step := max(1, int(radius/32))
+	gw, gh := rect.Dx()/step+2, rect.Dy()/step+2
+	grid := make([]float64, gw*gh)
+	for j := range gh {
+		for i := range gw {
+			grid[j*gw+i] = noise(float64(rect.Min.X+i*step), float64(rect.Min.Y+j*step))
+		}
+	}
+
 	for row := rect.Min.Y; row < rect.Max.Y; row++ {
+		j, fy := (row-rect.Min.Y)/step, float64((row-rect.Min.Y)%step)/float64(step)
 		for x := rect.Min.X; x < rect.Max.X; x++ {
 			dx, dy := float64(x)+0.5-cx, float64(row)+0.5-cy
 			u := (dx*cos + dy*sin) / elongation
 			v := -dx*sin + dy*cos
 			d := math.Hypot(u, v) / radius
 
-			// Edge distorted by noise at the scale of the stamp
-			n := 0.0
-			for o, amplitude, scale := 0, 1.0, 1.2/radius; o < 3; o, amplitude, scale = o+1, amplitude/2, scale*2 {
-				n += amplitude * gen.Noise(seed+uint64(o), float64(x)*scale+ox, float64(row)*scale+oy)
-			}
+			i, fx := (x-rect.Min.X)/step, float64((x-rect.Min.X)%step)/float64(step)
+			n := geom.Lerp(
+				geom.Lerp(grid[j*gw+i], grid[j*gw+i+1], fx),
+				geom.Lerp(grid[(j+1)*gw+i], grid[(j+1)*gw+i+1], fx),
+				fy)
 			if d < 0.85+0.6*n {
-				i := c.index(x, row)
-				if c.protect == nil || !c.protect(c.pixels[i]) {
-					c.pixels[i] = color
-				}
+				paint(x, row)
 			}
 		}
 	}
@@ -94,9 +142,9 @@ func hashSeed(seed, i uint64) uint64 {
 }
 
 // beginStroke starts a stroke with a stamp at a point.
-func (c *canvas) beginStroke(x, y, radius float64, color config.Color, seed uint64) image.Rectangle {
-	c.stroke = &stroke{before: slices.Clone(c.pixels), lastX: x, lastY: y}
-	r := c.stamp(x, y, radius, color, seed)
+func (c *canvas) beginStroke(x, y, radius float64, color config.Color, seed uint64, shape string) image.Rectangle {
+	c.stroke = &stroke{before: slices.Clone(c.pixels), lastX: x, lastY: y, shape: shape}
+	r := c.stamp(x, y, radius, color, seed, shape)
 	c.stroke.rect = r
 	return r
 }
@@ -110,6 +158,9 @@ func (c *canvas) continueStroke(x, y, radius float64, color config.Color, seed f
 	}
 
 	spacing := math.Max(1, radius*0.4)
+	if s.shape != brushNatural {
+		spacing = math.Max(1, radius*0.25)
+	}
 	var changed image.Rectangle
 	for {
 		dx, dy := x-s.lastX, y-s.lastY
@@ -119,7 +170,7 @@ func (c *canvas) continueStroke(x, y, radius float64, color config.Color, seed f
 		}
 		s.lastX += dx / d * spacing
 		s.lastY += dy / d * spacing
-		changed = changed.Union(c.stamp(s.lastX, s.lastY, radius, color, seed()))
+		changed = changed.Union(c.stamp(s.lastX, s.lastY, radius, color, seed(), s.shape))
 	}
 	s.rect = s.rect.Union(changed)
 	return changed
@@ -198,4 +249,43 @@ func (c *canvas) rgba(r image.Rectangle) []byte {
 		}
 	}
 	return out
+}
+
+// recolor replaces a color by another, in the map and its undo history: a
+// terrain changed color, or was removed.
+func (c *canvas) recolor(from, to config.Color) {
+	replace := func(pixels []config.Color) {
+		for i, p := range pixels {
+			if p == from {
+				pixels[i] = to
+			}
+		}
+	}
+	replace(c.pixels)
+	for _, history := range [][]edit{c.undo, c.redo} {
+		for _, e := range history {
+			replace(e.before)
+			replace(e.after)
+		}
+	}
+}
+
+// island paints a starting island in the middle of the map: land of the
+// given colors, from the lowest to the highest, in smaller and smaller
+// natural blobs.
+func (c *canvas) island(land []config.Color, seed uint64) {
+	cx, cy := float64(c.width)/2, float64(c.height)/2
+	size := math.Min(float64(c.width), float64(c.height))
+	rnd := func(i uint64) float64 { return float64(hashSeed(seed, i)>>11) / (1 << 53) }
+
+	for k, color := range land {
+		// Each level: a few blobs around the center, smaller
+		radius := size * 0.22 * math.Pow(0.55, float64(k))
+		for i := range uint64(6) {
+			a := rnd(uint64(k)*100+i) * 2 * math.Pi
+			d := radius * 0.8 * rnd(uint64(k)*100+i+50)
+			x, y := cx+d*math.Cos(a)*float64(c.width)/size, cy+d*math.Sin(a)
+			c.stamp(x, y, radius, color, seed+uint64(k)*10+i, brushNatural)
+		}
+	}
 }

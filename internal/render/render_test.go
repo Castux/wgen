@@ -145,3 +145,20 @@ func TestTiming(t *testing.T) {
 		t.Logf("%+v: %v render, %v encode, %d KB", o, rendered, time.Since(start)-rendered, buf.Len()/1024)
 	}
 }
+
+func TestColorScales(t *testing.T) {
+	// Turbo goes from (near black) blue through green to dark red
+	low, mid, high := Turbo(0.15), Turbo(0.5), Turbo(1)
+	if !(low[2] > low[0] && mid[1] > mid[0] && mid[1] > mid[2] && high[0] > high[2]) {
+		t.Errorf("turbo %v %v %v", low, mid, high)
+	}
+	if g := HeightColor(ScaleGray, 0.25); g != [3]float64{0.25, 0.25, 0.25} {
+		t.Errorf("gray %v", g)
+	}
+	if c := HeightColor(ScaleRainbow, 2); c != Turbo(1) || HeightColor(ScaleRainbow, 0) != Turbo(rainbowStart) {
+		t.Error("not clamped")
+	}
+	if w := WaterColor(0); w[2] <= w[0] {
+		t.Errorf("water %v not blue", w)
+	}
+}

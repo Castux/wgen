@@ -1,6 +1,6 @@
-// Package viewer is the interactive viewer: a window showing the generated
-// terrain in 3D (orbit and top views) or as a 2D map, with a panel to edit
-// the viewer settings and the generation parameters.
+// Package viewer is the app: a window showing the generated landscape in 3D
+// or as a 2D map, where the map is painted, with a panel to edit the terrains
+// and the parameters, and menus for projects (new, open, save, export).
 //
 // It runs on the main thread (GLFW and OpenGL require it), and is redrawn on
 // input, and when the engine or the background rendering have something new.
@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -30,7 +29,6 @@ import (
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
-	"github.com/Castux/wgen/internal/export"
 	"github.com/Castux/wgen/internal/gen"
 	"github.com/Castux/wgen/internal/render"
 )
@@ -51,8 +49,15 @@ type app struct {
 	terrain *terrainView
 	mapView *mapView
 	editor  editor
-	overlay imageSlot // rivers, contours and grid, as a texture of the 3D views
-	mapImg  imageSlot // the 2D map
+	dialogs dialogs
+
+	menuHeight    float32
+	title         string
+	suggestedPath string    // where to save a new project, by default
+	fitMap        bool      // fit the map view to the next world
+	quitting      bool      // confirmed
+	overlay       imageSlot // rivers, contours and grid, as a texture of the 3D views
+	mapImg        imageSlot // the 2D map
 
 	world   *gen.World // displayed
 	version int
@@ -64,8 +69,10 @@ type app struct {
 	// Panel state
 	params     []param
 	paramsConf *config.Config // params are of this config
-	editKey    string         // slider being dragged
+	editKey    string         // widget being edited
 	editValue  float64
+	editText   string
+	editColor  [3]float32
 
 	// Input
 	drag struct {
@@ -94,12 +101,6 @@ const settleFrames = 3
 
 // Run opens the viewer window, until it is closed.
 func Run(session *engine.Session, path string) error {
-	if path != "" {
-		if err := session.Load(path); err != nil {
-			return err
-		}
-	}
-
 	if err := glfw.Init(); err != nil {
 		return err
 	}
@@ -112,7 +113,7 @@ func Run(session *engine.Session, path string) error {
 	glfw.WindowHint(glfw.Samples, 4)
 	glfw.WindowHint(glfw.ScaleToMonitor, glfw.True)
 
-	window, err := glfw.CreateWindow(1280, 800, "wgen - "+session.ConfigPath(), nil, nil)
+	window, err := glfw.CreateWindow(1280, 800, "wgen", nil, nil)
 	if err != nil {
 		return err
 	}
@@ -171,6 +172,23 @@ func Run(session *engine.Session, path string) error {
 	window.SetSizeCallback(func(*glfw.Window, int, int) { a.activity() })
 	window.SetRefreshCallback(func(*glfw.Window) { a.activity() })
 
+	// Closing asks about unsaved changes
+	window.SetCloseCallback(func(w *glfw.Window) {
+		if !a.quitting && a.unsaved() {
+			w.SetShouldClose(false)
+			a.quit()
+		}
+		a.activity()
+	})
+	// Files dropped on the window are opened
+	window.SetDropCallback(func(_ *glfw.Window, names []string) {
+		if len(names) > 0 {
+			path := names[0]
+			a.unsavedThen("open another map", func() { a.open(path) })
+		}
+		a.activity()
+	})
+
 	imgui.CreateContext()
 	defer imgui.DestroyContext()
 	a.setupImGui(dir)
@@ -181,10 +199,7 @@ func Run(session *engine.Session, path string) error {
 	defer implgl.Shutdown()
 
 	a.applyWatch()
-	if a.settings.Watch {
-		// Watch the first generation too: started before the viewer
-		session.Engine.Rerun()
-	}
+	a.startup(path)
 
 	if a.terrain, err = newTerrainView(); err != nil {
 		return err
@@ -261,9 +276,13 @@ func (a *app) frame() {
 	state := a.session.Engine.State()
 	a.update()
 	a.handleInput()
+	a.drawMenu(state)
 	a.drawPanel(state)
 	a.drawStatus(state)
+	a.drawLegend()
+	a.drawDialogs()
 	imgui.Render()
+	a.updateTitle()
 
 	fw, fh := a.window.GetFramebufferSize()
 	gl.Viewport(0, 0, int32(fw), int32(fh))
@@ -279,7 +298,7 @@ func (a *app) frame() {
 
 	ready := a.world != nil && !state.Busy && !a.loading() && a.redraw == 0
 	if a.screenshotAt > 0 {
-		ready = a.world != nil && time.Since(a.start) > a.screenshotAt
+		ready = time.Since(a.start) > a.screenshotAt
 		a.activity() // keep drawing until then
 	}
 	if a.screenshot != "" && ready {
@@ -298,10 +317,15 @@ func (a *app) update() {
 		a.world, a.version = world, version
 		a.message = nil
 		a.syncCanvas(world)
-		if a.terrain.setMesh(world) {
+		if a.terrain.setMesh(world) || a.fitMap {
+			a.terrain.resetCameras()
 			a.devCamera()
 		}
 		a.mapView.setSize(float64(world.Width), float64(world.Height), width, height)
+		if a.fitMap {
+			a.mapView.camera.fit(width, height)
+			a.fitMap = false
+		}
 	}
 
 	if a.world != nil {
@@ -365,6 +389,19 @@ func (a *app) applyWatch() {
 
 func (a *app) loading() bool { return a.overlay.busy() || a.mapImg.busy() }
 
+// updateTitle shows the project in the window title, with a star if it has
+// unsaved changes.
+func (a *app) updateTitle() {
+	title := a.projectName() + " - wgen"
+	if a.unsaved() {
+		title = "*" + title
+	}
+	if title != a.title {
+		a.title = title
+		a.window.SetTitle(title)
+	}
+}
+
 func (a *app) setSettings(s Settings) {
 	watch := s.Watch != a.settings.Watch || s.WatchSteps != a.settings.WatchSteps
 	a.settings = s
@@ -380,7 +417,7 @@ func (a *app) setSettings(s Settings) {
 type shortcut int
 
 const (
-	shortcutView      shortcut = iota // Tab
+	shortcutView      shortcut = iota // v
 	shortcutColor                     // Shift
 	shortcutShading                   // q
 	shortcutWireframe                 // w
@@ -391,16 +428,22 @@ const (
 	shortcutUndo                      // ctrl+z
 	shortcutRedo                      // ctrl+y, ctrl+shift+z
 	shortcutSave                      // ctrl+s
+	shortcutSaveAs                    // ctrl+shift+s
+	shortcutNew                       // ctrl+n
+	shortcutOpen                      // ctrl+o
+	shortcutExport                    // ctrl+e
+	shortcutQuit                      // ctrl+q
+	shortcutReset                     // r
 )
 
 // onKey turns key events into shortcuts.
 //
 // Shift is only a shortcut when tapped alone, since it is also a modifier:
 // horizontal scrolling in the panel, panning in the orbit view. The other
-// shortcuts are keys pressed without modifiers (Ctrl+Tab switches ImGui
-// windows), not repeated when held, and letters are recognized by name
-// (glfw.GetKeyName, given for key presses), to follow the keyboard layout.
-// The editor's undo, redo and save are with Ctrl (or Cmd).
+// shortcuts are keys pressed without modifiers (Tab is ImGui's, to move
+// between fields, Ctrl+Tab between windows), not repeated when held, and
+// letters are recognized by name (glfw.GetKeyName, given for key presses),
+// to follow the keyboard layout. The menu commands are with Ctrl (or Cmd).
 func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.ModifierKey) {
 	shift := key == glfw.KeyLeftShift || key == glfw.KeyRightShift
 
@@ -417,13 +460,24 @@ func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.Mod
 	case action == glfw.Press:
 		a.shiftTap = false
 		if ctrl := mods&(glfw.ModControl|glfw.ModSuper) != 0; ctrl && mods&glfw.ModAlt == 0 {
+			shift := mods&glfw.ModShift != 0
 			switch {
-			case name == "z" && mods&glfw.ModShift != 0, name == "y":
+			case name == "z" && shift, name == "y":
 				a.keys = append(a.keys, shortcutRedo)
 			case name == "z":
 				a.keys = append(a.keys, shortcutUndo)
+			case name == "s" && shift:
+				a.keys = append(a.keys, shortcutSaveAs)
 			case name == "s":
 				a.keys = append(a.keys, shortcutSave)
+			case name == "n":
+				a.keys = append(a.keys, shortcutNew)
+			case name == "o":
+				a.keys = append(a.keys, shortcutOpen)
+			case name == "e":
+				a.keys = append(a.keys, shortcutExport)
+			case name == "q":
+				a.keys = append(a.keys, shortcutQuit)
 			}
 			return
 		}
@@ -431,8 +485,10 @@ func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.Mod
 			return
 		}
 		switch {
-		case key == glfw.KeyTab:
+		case name == "v":
 			a.keys = append(a.keys, shortcutView)
+		case name == "r":
+			a.keys = append(a.keys, shortcutReset)
 		case name == "q":
 			a.keys = append(a.keys, shortcutShading)
 		case name == "w":
@@ -487,7 +543,21 @@ func (a *app) handleInput() {
 			case shortcutRedo:
 				a.redo()
 			case shortcutSave:
-				a.saveAll()
+				a.saveProject(nil)
+			case shortcutSaveAs:
+				a.saveProjectAs(nil)
+			case shortcutNew:
+				a.newDialog()
+			case shortcutOpen:
+				a.openDialog()
+			case shortcutExport:
+				if a.world != nil {
+					a.openExport()
+				}
+			case shortcutQuit:
+				a.quit()
+			case shortcutReset:
+				a.resetView()
 			}
 		}
 		if s != a.settings {
@@ -541,7 +611,6 @@ func (a *app) handleInput() {
 //
 //   - orbit: left rotates (pans with shift, ctrl or cmd), right pans, middle
 //     zooms
-//   - top: left and right pan, middle zooms
 //   - map: every button pans
 func (a *app) dragView(dx, dy, width, height float64, modifier bool) {
 	// Drag zoom: 0.95 per 100 pixels, zooming out when dragging down
@@ -559,14 +628,6 @@ func (a *app) dragView(dx, dy, width, height float64, modifier bool) {
 			c.rotate(dx, dy, height)
 		}
 
-	case "top":
-		c := &a.terrain.top
-		if a.drag.button == imgui.MouseButtonMiddle {
-			c.dolly(zoom)
-		} else {
-			c.pan(dx, dy, width, height)
-		}
-
 	case "map":
 		c := &a.mapView.camera
 		c.offset[0] += dx
@@ -580,8 +641,6 @@ func (a *app) wheelView(wheel, width, height float64) {
 	switch a.settings.View {
 	case "orbit":
 		a.terrain.orbit.dolly(math.Pow(0.95, wheel))
-	case "top":
-		a.terrain.top.dolly(math.Pow(0.95, wheel))
 	case "map":
 		p := imgui.CurrentIO().MousePos()
 		a.mapView.camera.zoomAt(float64(p.X), float64(p.Y), math.Exp(0.2*wheel), width, height)
@@ -595,42 +654,6 @@ func (a *app) resetView() {
 	} else {
 		a.terrain.resetCameras()
 	}
-}
-
-// saveAll saves what has unsaved changes: the config, the map.
-func (a *app) saveAll() {
-	a.save()
-}
-
-// save writes the project file and its map.
-func (a *app) save() {
-	path, err := a.session.Save(a.canvasOutline())
-	if err != nil {
-		a.message = &message{text: err.Error(), error: true}
-		return
-	}
-	a.editor.dirty = false
-	a.message = &message{text: "Saved " + path}
-}
-
-// export writes the exports in the background.
-func (a *app) export() {
-	a.exporting.Store(true)
-	go func() {
-		defer a.wakeUp()
-		defer a.exporting.Store(false)
-
-		base := strings.TrimSuffix(a.session.ConfigPath(), filepath.Ext(a.session.ConfigPath()))
-		files, err := a.session.Export(base, export.Options{Heightmap: true, Texture: true, OBJ: true})
-		switch {
-		case err != nil:
-			a.results <- message{text: err.Error(), error: true}
-		case len(files) == 0:
-			a.results <- message{text: "Exported nothing (all exports disabled)"}
-		default:
-			a.results <- message{text: "Exported " + strings.Join(files, ", ")}
-		}
-	}()
 }
 
 var (
@@ -665,12 +688,7 @@ func (a *app) drawStatus(state engine.State) {
 	if state.Error != "" {
 		lines = append(lines, line{state.Error, errorColor})
 	}
-	if state.Dirty {
-		lines = append(lines, line{"Unsaved config changes", dirtyColor})
-	}
-	if a.editor.dirty {
-		lines = append(lines, line{"Unsaved map changes", dirtyColor})
-	}
+
 	if m := a.message; m != nil {
 		color := textColor
 		if m.error {
@@ -686,6 +704,7 @@ func (a *app) drawStatus(state engine.State) {
 	display := imgui.CurrentIO().DisplaySize()
 	imgui.SetNextWindowPosV(imgui.NewVec2(8, display.Y-8), imgui.CondAlways, imgui.NewVec2(0, 1))
 	imgui.SetNextWindowBgAlpha(0.6)
+	imgui.SetNextWindowSizeConstraints(imgui.NewVec2(0, 0), imgui.NewVec2(display.X*0.6, display.Y/2))
 	flags := imgui.WindowFlagsNoDecoration | imgui.WindowFlagsAlwaysAutoResize | imgui.WindowFlagsNoSavedSettings |
 		imgui.WindowFlagsNoFocusOnAppearing | imgui.WindowFlagsNoNav | imgui.WindowFlagsNoInputs
 

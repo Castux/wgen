@@ -31,7 +31,6 @@ type terrainView struct {
 	hasOverlay bool
 
 	orbit orbitCamera
-	top   topCamera
 }
 
 // Background color: three.js took these as linear values.
@@ -52,6 +51,8 @@ uniform vec2 size;
 uniform float lowest;
 uniform float span;
 uniform bool heightColors;
+uniform bool rainbow;
+uniform float highest;
 uniform float zScale; // elevation to map units
 
 out vec3 vPosition;
@@ -63,16 +64,32 @@ vec3 srgbToLinear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
 }
 
-// Height colors: gray on land, blue in water, darker when deeper (sea level
-// at 0)
+// Turbo, Google's improved rainbow colormap (polynomial approximation), sRGB
+vec3 turbo(float t) {
+	const vec4 r4 = vec4(0.13572138, 4.61539260, -42.66032258, 132.13108234);
+	const vec4 g4 = vec4(0.09140261, 2.19418839, 4.84296658, -14.18503333);
+	const vec4 b4 = vec4(0.10667330, 12.64194608, -60.58204836, 110.36276771);
+	const vec2 r2 = vec2(-152.94239396, 59.28637943);
+	const vec2 g2 = vec2(4.27729857, 2.82956604);
+	const vec2 b2 = vec2(-89.90310912, 27.34824973);
+	t = clamp(t, 0.0, 1.0);
+	vec4 v4 = vec4(1.0, t, t * t, t * t * t);
+	vec2 v2 = v4.zw * v4.z;
+	return clamp(vec3(dot(v4, r4) + dot(v2, r2), dot(v4, g4) + dot(v2, g2), dot(v4, b4) + dot(v2, b2)), 0.0, 1.0);
+}
+
+// Height colors: from sea level to the highest point on land (gray or
+// rainbow), blue in water, darker when deeper (sea level at 0). As in render.
 const vec3 deepWater = vec3(25.0, 45.0, 100.0) / 255.0;
 const vec3 shallowWater = vec3(110.0, 160.0, 215.0) / 255.0;
 
 vec3 heightColor(float z, bool water) {
-	if (!water)
-		return vec3((z - lowest) / span);
-	float t = clamp((z - lowest) / max(-lowest, 1.0), 0.0, 1.0);
-	return srgbToLinear(mix(deepWater, shallowWater, t));
+	if (water) {
+		float t = clamp((z - lowest) / max(-lowest, 1.0), 0.0, 1.0);
+		return srgbToLinear(mix(deepWater, shallowWater, t));
+	}
+	float t = clamp(z / max(highest, 1.0), 0.0, 1.0);
+	return rainbow ? srgbToLinear(turbo(0.1 + 0.9 * t)) : srgbToLinear(vec3(t));
 }
 
 void main() {
@@ -215,7 +232,6 @@ func (v *terrainView) resetCameras() {
 		return
 	}
 	v.orbit.reset(v.width, v.height)
-	v.top.reset(v.width, v.height)
 }
 
 // overlayScale is the overlay resolution, relative to the outline image:
@@ -235,12 +251,7 @@ func (v *terrainView) draw(s *Settings, aspect float64) {
 		return
 	}
 
-	var view, projection mgl64.Mat4
-	if s.View == "top" {
-		view, projection = v.top.view(), v.top.projection(aspect)
-	} else {
-		view, projection = v.orbit.view(), v.orbit.projection(aspect)
-	}
+	view, projection := v.orbit.view(), v.orbit.projection(aspect)
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LEQUAL)
@@ -263,6 +274,8 @@ func (v *terrainView) draw(s *Settings, aspect float64) {
 	}
 	p.setFloat("span", span)
 	p.setInt("heightColors", boolInt(s.Color == "height"))
+	p.setInt("rainbow", boolInt(s.HeightScale == render.ScaleRainbow))
+	p.setFloat("highest", v.highest)
 	p.setFloat("zScale", s.VerticalScale/v.metersPerPixel)
 	p.setInt("lit", boolInt(s.Shading == "lit"))
 	p.setVec3("lightDirection", view.Mat3().Mul3x1(lightDirection).Normalize())

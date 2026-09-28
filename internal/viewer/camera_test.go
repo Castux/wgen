@@ -59,30 +59,6 @@ func TestOrbitCamera(t *testing.T) {
 	}
 }
 
-func TestTopCamera(t *testing.T) {
-	var c topCamera
-	c.reset(2000, 1000)
-	const w, h = 1000.0, 1000.0
-
-	// The whole map fits
-	for _, p := range []mgl64.Vec3{{-1000, -500, 0}, {1000, 500, 0}} {
-		s := project(c.view(), c.projection(w/h), p, w, h)
-		if s.X() < -1e-6 || s.X() > w+1e-6 || s.Y() < -1e-6 || s.Y() > h+1e-6 {
-			t.Errorf("%v is displayed at %v", p, s)
-		}
-	}
-
-	// Panning follows the mouse
-	c.dolly(0.5)
-	p := mgl64.Vec3{100, 200, 0}
-	before := project(c.view(), c.projection(w/h), p, w, h)
-	c.pan(15, 25, w, h)
-	after := project(c.view(), c.projection(w/h), p, w, h)
-	if d := after.Sub(before); !near(d.X(), 15) || !near(d.Y(), 25) {
-		t.Errorf("point moved by %v on screen, expected (15, 25)", d)
-	}
-}
-
 func TestMapCamera(t *testing.T) {
 	c := mapCamera{width: 2000, height: 1000}
 	c.fit(1000, 1000)

@@ -1,9 +1,7 @@
 package viewer
 
 import (
-	"fmt"
 	"image"
-	"math"
 	"slices"
 
 	"github.com/AllenDang/cimgui-go/imgui"
@@ -13,9 +11,8 @@ import (
 	"github.com/Castux/wgen/internal/gen"
 )
 
-// editor is the map editor: stamps of terrains, painted in the 2D view. The
-// map is sent to the engine at the end of each stroke, and saved to the
-// config's image file on demand.
+// editor is the map editor: terrains painted in the 2D view. The map is
+// sent to the engine at the end of each stroke, and saved with the project.
 type editor struct {
 	canvas *canvas
 	brush  string // terrain name
@@ -25,8 +22,6 @@ type editor struct {
 
 	stale   bool            // the whole texture needs uploading
 	changed image.Rectangle // part of the texture to update
-
-	newSize int32 // of new maps
 }
 
 // syncCanvas takes the map of a new world, unless it is ours or the
@@ -41,11 +36,28 @@ func (a *app) syncCanvas(w *gen.World) {
 	ed.stale = true
 }
 
+// setCanvas replaces the edited map (new project).
+func (a *app) setCanvas(c *canvas, dirty bool) {
+	a.editor.canvas = c
+	a.editor.stale = true
+	a.editor.dirty = dirty
+	a.editor.sent = nil
+}
+
 // sendCanvas regenerates with the edited map.
 func (a *app) sendCanvas() {
 	c := a.editor.canvas
 	a.editor.sent = slices.Clone(c.pixels)
 	a.session.SetOutline(&engine.Outline{Width: c.width, Height: c.height, Pixels: a.editor.sent})
+}
+
+// canvasOutline is the edited map, for saving.
+func (a *app) canvasOutline() *engine.Outline {
+	c := a.editor.canvas
+	if c == nil {
+		return nil
+	}
+	return &engine.Outline{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)}
 }
 
 // updatePaintTexture uploads the edited map to the map view.
@@ -69,10 +81,14 @@ func (a *app) updatePaintTexture() {
 	ed.stale, ed.changed = false, image.Rectangle{}
 }
 
-// brushTerrain is the terrain of the brush, the first one if unset.
+// brushTerrain is the terrain of the brush, the first land one if unset.
 func (a *app) brushTerrain(conf *config.Config) *config.Terrain {
 	if t := conf.Terrain(a.editor.brush); t != nil {
 		return t
+	}
+	if land := conf.Land(); len(land) > 0 {
+		a.editor.brush = land[0].Name
+		return land[0]
 	}
 	if len(conf.Terrains) == 0 {
 		return nil
@@ -105,13 +121,14 @@ func (a *app) paintInput() bool {
 	mouse := io.MousePos()
 	x, y := a.canvasPosition(float64(mouse.X), float64(mouse.Y))
 	radius := a.settings.BrushRadius
+	shape := a.settings.Brush
 	next := func() uint64 { ed.seed++; return ed.seed }
 
 	c := ed.canvas
 	c.protect = a.shoreLock(conf, t)
 	switch {
 	case c.stroke == nil && imgui.IsMouseClickedBool(imgui.MouseButtonLeft) && !io.WantCaptureMouse():
-		ed.changed = ed.changed.Union(c.beginStroke(x, y, radius, t.Color, next()))
+		ed.changed = ed.changed.Union(c.beginStroke(x, y, radius, t.Color, next(), shape))
 	case c.stroke != nil && imgui.IsMouseDown(imgui.MouseButtonLeft):
 		ed.changed = ed.changed.Union(c.continueStroke(x, y, radius, t.Color, next))
 	case c.stroke != nil:
@@ -123,11 +140,17 @@ func (a *app) paintInput() bool {
 
 	// Brush outline, in the brush's color
 	if !io.WantCaptureMouse() || c.stroke != nil {
-		scale := a.mapView.camera.zoom * a.mapView.camera.width / float64(c.width)
-		col := imgui.ColorConvertFloat4ToU32(imgui.NewVec4(float32(t.Color[0])/255, float32(t.Color[1])/255, float32(t.Color[2])/255, 1))
+		r := float32(radius * a.mapView.camera.zoom * a.mapView.camera.width / float64(c.width))
+		col := imgui.ColorConvertFloat4ToU32(colorVec(t.Color))
 		dl := imgui.ForegroundDrawListViewportPtr()
-		dl.AddCircleV(mouse, float32(radius*scale), 0xff000000, 48, 3)
-		dl.AddCircleV(mouse, float32(radius*scale), col, 48, 1.5)
+		if shape == brushSquare {
+			p0, p1 := imgui.NewVec2(mouse.X-r, mouse.Y-r), imgui.NewVec2(mouse.X+r, mouse.Y+r)
+			dl.AddRectV(p0, p1, 0xff000000, 0, 0, 3)
+			dl.AddRectV(p0, p1, col, 0, 0, 1.5)
+		} else {
+			dl.AddCircleV(mouse, r, 0xff000000, 48, 3)
+			dl.AddCircleV(mouse, r, col, 48, 1.5)
+		}
 	}
 	return c.stroke != nil
 }
@@ -167,153 +190,4 @@ func (a *app) afterEdit(r image.Rectangle) {
 	a.editor.changed = a.editor.changed.Union(r)
 	a.editor.dirty = true
 	a.sendCanvas()
-}
-
-// canvasOutline is the edited map, for saving.
-func (a *app) canvasOutline() *engine.Outline {
-	c := a.editor.canvas
-	if c == nil {
-		return nil
-	}
-	return &engine.Outline{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)}
-}
-
-// newMap replaces the map by an empty one, all of the first sea terrain.
-func (a *app) newMap(width, height int) {
-	conf := a.session.Engine.Config()
-	if conf == nil {
-		return
-	}
-	i := slices.IndexFunc(conf.Terrains, func(t *config.Terrain) bool { return t.Kind == config.Sea })
-	if i < 0 {
-		a.message = &message{text: "no sea terrain in the config", error: true}
-		return
-	}
-
-	pixels := make([]config.Color, width*height)
-	for p := range pixels {
-		pixels[p] = conf.Terrains[i].Color
-	}
-	a.editor.canvas = newCanvas(width, height, pixels)
-	a.editor.stale = true
-	a.editor.dirty = true
-	vw, vh, _ := a.viewSize()
-	a.mapView.setSize(float64(width), float64(height), vw, vh)
-	a.sendCanvas()
-}
-
-func (a *app) drawEditor() {
-	if !imgui.CollapsingHeaderTreeNodeFlagsV("Map editor", imgui.TreeNodeFlagsDefaultOpen) {
-		return
-	}
-	ed := &a.editor
-	conf := a.session.Engine.Config()
-	if conf == nil {
-		return
-	}
-
-	if editing := a.settings.Editing; imgui.Checkbox("Paint the map (e)", &editing) {
-		s := a.settings
-		s.Editing = editing
-		if editing {
-			s.View = "map"
-		}
-		a.setSettings(s)
-	}
-
-	// Brushes: the terrains
-	world, _ := a.session.Engine.Snapshot()
-	mpp := 1.0
-	if world != nil && world.MetersPerPixel > 0 {
-		mpp = world.MetersPerPixel
-	}
-	brush := a.brushTerrain(conf)
-	for _, t := range conf.Terrains {
-		imgui.PushIDStr("brush." + t.Name)
-		col := imgui.NewVec4(float32(t.Color[0])/255, float32(t.Color[1])/255, float32(t.Color[2])/255, 1)
-		if imgui.ColorButtonV("##color", col, imgui.ColorEditFlagsNoTooltip, imgui.NewVec2(0, 0)) {
-			ed.brush = t.Name
-		}
-		imgui.SameLine()
-		label := t.Name
-		switch {
-		case t.Kind == config.Sea:
-			label += " (sea)"
-		case t.Kind == config.Lake:
-			label += " (lake)"
-		case t.Calibrated():
-			label += fmt.Sprintf(" (%.0f m)", t.Height)
-		}
-		if imgui.SelectableBoolV(label, t == brush, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) {
-			ed.brush = t.Name
-		}
-		imgui.PopID()
-	}
-
-	s := a.settings
-	changed := imgui.Checkbox("Lock shoreline (l)", &s.LockShore)
-	imgui.SetItemTooltip("Land brushes leave sea and lakes alone, water brushes leave land alone")
-	sizeLabel := "Brush (px)"
-	if mpp != 1 {
-		sizeLabel = fmt.Sprintf("Brush (px, %.0f km)", s.BrushRadius*mpp/1000)
-	}
-	var c bool
-	s.BrushRadius, c = a.number("editor.radius", sizeLabel, s.BrushRadius, 2, 200, 1, false)
-	changed = changed || c
-	s.PaintOpacity, c = a.number("editor.opacity", "Painting opacity", s.PaintOpacity, 0, 1, 0.05, false)
-	changed = changed || c
-	if changed {
-		s.BrushRadius = math.Max(1, s.BrushRadius)
-		a.setSettings(s)
-	}
-
-	full := imgui.NewVec2(-math.SmallestNonzeroFloat32, 0)
-	half := imgui.NewVec2(imgui.ContentRegionAvail().X/2-imgui.CurrentStyle().ItemSpacing().X/2, 0)
-	canUndo := ed.canvas != nil && len(ed.canvas.undo) > 0
-	canRedo := ed.canvas != nil && len(ed.canvas.redo) > 0
-	imgui.BeginDisabledV(!canUndo)
-	if imgui.ButtonV("Undo (ctrl+z)", half) {
-		a.undo()
-	}
-	imgui.EndDisabled()
-	imgui.SameLine()
-	imgui.BeginDisabledV(!canRedo)
-	if imgui.ButtonV("Redo (ctrl+y)", half) {
-		a.redo()
-	}
-	imgui.EndDisabled()
-
-	label := "Save map"
-	if ed.dirty {
-		label = "Save map (unsaved changes)"
-	}
-	imgui.BeginDisabledV(!ed.dirty)
-	if imgui.ButtonV(label+"###savemap", full) {
-		a.save()
-	}
-	imgui.EndDisabled()
-
-	if imgui.ButtonV("New map...", full) {
-		if ed.newSize == 0 {
-			ed.newSize = 2048
-			if ed.canvas != nil {
-				ed.newSize = int32(ed.canvas.width)
-			}
-		}
-		imgui.OpenPopupStr("New map")
-	}
-	if imgui.BeginPopupModalV("New map", nil, imgui.WindowFlagsAlwaysAutoResize) {
-		imgui.TextUnformatted("Replace the map by an empty sea (undo not possible).")
-		imgui.InputIntV("Size (pixels)", &ed.newSize, 256, 1024, imgui.InputTextFlagsNone)
-		ed.newSize = min(max(ed.newSize, 64), 16384)
-		if imgui.Button("Create") {
-			a.newMap(int(ed.newSize), int(ed.newSize))
-			imgui.CloseCurrentPopup()
-		}
-		imgui.SameLine()
-		if imgui.Button("Cancel") {
-			imgui.CloseCurrentPopup()
-		}
-		imgui.EndPopup()
-	}
 }
