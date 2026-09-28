@@ -52,7 +52,7 @@ jobs:
           fi
 
       - name: Package
-        run: scripts/package.sh "$VERSION"
+        run: bash scripts/package.sh "$VERSION"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -1,28 +1,249 @@
 # wgen
 
-Terrain generator: paint a map where each flat color is a terrain type (sea,
-plains, hills, mountains, lakes, cliffs...), and wgen turns it into a 3D
-landscape with rivers, exported as OBJ, SVG and 8/16 bits heightmaps.
+Paint a map, get a landscape. Each color of the map is a terrain: sea,
+lakes, and land terrains such as plains, hills and mountains, each with a
+target height for its summits. wgen simulates the land rising from the sea
+and rivers eroding it, over millions of years, which gives branching valleys,
+winding ridges and river networks at realistic heights. Export the result as
+a heightmap, a textured 3D mesh or a vector map.
 
-Elevation is not simulated from the peaks down. It is built from the sea shore
-up: each terrain type gives a local slope, and every point is at the lowest
-elevation reachable by climbing from the sea. River flow is then computed on
-that surface, and elevation is rebuilt with gentler slopes along the bigger
-rivers, which carves valleys. The irregular mesh does the rest to make it look
-natural.
+- Paint in the app, with natural looking brushes, or import an image painted
+  anywhere else.
+- See the landscape in 3D or as a map, colored by terrain or by height.
+- Every change regenerates the landscape: a coarse preview first, then the
+  full detail, in seconds.
 
-The interactive viewer shows the result in 3D or as a map, lets you edit
-every parameter and see the effect right away, and follows changes made to
-the config file and the image in other programs.
+## Download
 
-## Building
+Ready to use builds for Windows, macOS and Linux are on the
+[releases page](https://github.com/Castux/wgen/releases). Each has an
+example project, in `example/`.
 
-wgen is a single program, built from source with Go 1.26 and a C/C++
-compiler (the viewer uses OpenGL, GLFW and Dear ImGui, which are C and C++
-libraries):
+- Windows: unzip, and double click `wgen.exe`. `wgen-cli.exe` is the same
+  program, for the command line.
+- macOS: unzip, and move `wgen.app` to Applications. The app isn't
+  notarized by Apple: the first time, right click it and choose Open (or,
+  on recent versions, allow it in System Settings, Privacy & Security).
+- Linux: extract, and run `wgen`. It needs OpenGL 3.3 and X11 (or XWayland).
 
-- Windows: a 64 bits MinGW-w64 GCC on the `PATH`, such as the
-  [WinLibs](https://winlibs.com/) or MinGW-Builds distributions.
+## Using the app
+
+At first, wgen starts a new map with a random island. From the File menu:
+
+- New map: an empty sea or a random island, of a chosen size in pixels
+  (powers of two, 256 to 16384) and a real width in kilometers.
+- Open: a project (`.json`), or an image to import as a map (`.png`,
+  `.jpg`). Files can also be dropped on the window.
+- Save, Save as: a project is a `.json` file and its map, a `.png` image
+  next to it with the same name.
+- Export: see below.
+
+The app reopens the last project at startup. The window title shows a star
+when there are unsaved changes, and the app asks before losing them.
+
+### Views and controls
+
+| Control | |
+|---|---|
+| Left drag | 3D: rotate (pan with `Shift` or `Ctrl`). Map: pan, or paint when painting |
+| Right, middle drag | Pan (middle: zoom, in 3D) |
+| Wheel | Zoom |
+| Double click | Map: fit the map in the window |
+| `V` | 3D or map view |
+| `Shift` (alone) | Terrain or height colors |
+| `Q`, `W` | Lit or unlit, wireframe |
+| `R` | Reset the view |
+| `E` | Paint the map |
+| `[`, `]` | Smaller, larger brush |
+| `L` | Lock the shoreline |
+| `Ctrl+Z`, `Ctrl+Y` | Undo, redo painting |
+| `Ctrl+N`, `O`, `S`, `Shift+S`, `E`, `Q` | New, open, save, save as, export, quit |
+
+On macOS, `Cmd` works as `Ctrl`. Help, Controls lists these in the app.
+Keys are ignored while typing in a field.
+
+Height colors are a rainbow scale (Turbo) on land, or gray, and blue in
+water, darker when deeper. The legend in the top left corner tells the
+heights.
+
+The Display section of the panel has the vertical exaggeration of the 3D
+view (mountains are small on a continent: 10 km high on 1000 km wide), and
+an overlay of rivers, contour lines and a grid.
+
+### Painting
+
+Press `E` (or Edit, Paint the map): the map view shows the painted terrains
+over the generated landscape. The left button paints the terrain selected in
+the panel, the other buttons pan.
+
+- Brushes: natural (irregular edges, different every stamp), hard round,
+  hard square. `[` and `]` change the size.
+- Lock shoreline: land brushes leave the sea and lakes alone, and water
+  brushes the land, to repaint the relief without moving the coasts.
+- Each stroke regenerates the landscape: a coarse preview shows first, and
+  a new stroke cancels the generation in progress.
+
+### Terrains
+
+The Terrains section of the panel lists the terrains, which are also the
+brush colors. The sea and lakes are always there: the sea is at sea level,
+and lakes are flat, at the level of their lowest shore. Land terrains can be
+added, removed, renamed, and recolored (which recolors the map too). For
+each:
+
+- Target height: the summits of each region of this terrain reach about
+  this height, in meters. Most of a region is lower, and its valleys much
+  lower: the heights come from the simulation, the target sets how fast the
+  land rises.
+- Erodibility factor: how easily it erodes, compared to the others.
+- Detail levels: how many times the mesh is refined on it. More detail is
+  slower, and gives finer valleys.
+
+### Importing an image
+
+Opening an image that has no project next to it imports it. The import
+dialog shows the colors of the image: pick the color of the sea, and of each
+terrain, by clicking the image or the list, and choose their terrains. wgen
+guesses a first choice (the border color as the sea, the other main colors
+as land). Every pixel then takes the terrain of the closest picked color,
+which also cleans up antialiased edges: "Show the result" previews it.
+
+A map with only land and sea is fine: pick one color as the sea, the other
+as plains, and paint hills and mountains in the app.
+
+Saving the imported map creates a project next to the image, with a
+`.json` of the same name. Opening an image that has a project opens the
+project.
+
+### Exporting
+
+File, Export writes, next to the project by default:
+
+| File | |
+|---|---|
+| `<name>-height.png` | Heightmap, 16 bits grayscale: in meters above sea level (water at 0), or normalized from the deepest to the highest point |
+| `<name>-water.png` | Water mask: white where there is water |
+| `<name>-texture.png` | Texture: terrain colors, hillshading and rivers, at a chosen scale of the map |
+| `<name>.obj` | 3D mesh, with UVs for the texture, at true proportions |
+| `<name>.svg` | Vector map of the terrain cells and rivers |
+
+### Parameters
+
+The Map section of the panel:
+
+- Map width (km): the real width of the map, which sets the scale of
+  everything.
+- Resolution (px): the mesh spacing of the finest detail level, in pixels
+  of the map. Lower is finer, and slower.
+- Refinement levels: the coarse mesh is 2^levels coarser than the finest.
+- Seed: the randomness of the mesh and of the rock hardness.
+
+The Simulation section has the parameters of the erosion model (hover them
+for help), and "Watch the simulation", which shows the landscape as it is
+simulated: the land rising from the sea, rivers cutting in, the heights
+being calibrated, then each finer mesh. "Replay the simulation" runs it
+again, to watch it.
+
+The project file and its map are watched: edit them in another program, and
+the app follows.
+
+## Command line
+
+```sh
+wgen [flags] [project.json | image.png]
+```
+
+Without flags, opens the app with the given project or image. With
+`-export`, generates the project and writes the files without opening a
+window:
+
+```sh
+wgen -export heightmap,texture,obj example/chasers.json
+wgen -export heightmap -normalized -o out/map example/chasers.json
+```
+
+| Flag | |
+|---|---|
+| `-export list` | comma separated: `heightmap`, `water`, `texture`, `obj`, `svg` |
+| `-normalized` | heightmap from the lowest to the highest point, instead of meters |
+| `-o path` | output path, without extension (default: next to the project) |
+| `-v` | verbose logging (stage timings) |
+| `-version` | print the version |
+
+The app also logs to `wgen.log` in the user config directory
+(`%APPDATA%\wgen` on Windows, `~/Library/Application Support/wgen` on
+macOS, `~/.config/wgen` on Linux), with its settings.
+
+## Project file
+
+```jsonc
+{
+	"image": "chasers.png",       // the map, relative to the project file
+	"mapWidth": 1000,             // km
+	"resolution": 2,              // mesh spacing of the finest level, pixels
+	"levels": 3,                  // the coarse mesh is 2^levels coarser
+	"seed": 0,
+
+	"terrains": {
+		// sea and lake are always there. detail: how many levels refine a
+		// terrain (default: one on water, all on land)
+		"sea": { "color": "#42427d" },
+		"lake": { "color": "#6d94c2", "detail": 1 },
+		// land: height, the target summit height in meters; erodibility, a
+		// factor (default 1)
+		"plains": { "color": "#87a851", "height": 400, "detail": 1 },
+		"hills": { "color": "#d1b886", "height": 1500, "detail": 2 },
+		"mountains": { "color": "#65481f", "height": 4500 }
+	},
+
+	// Optional, these are the defaults
+	"simulation": {
+		"upliftBlur": 30,             // km: uplift ramps up over this distance from lower terrains
+		"erodibility": 2e-6,          // per year: how fast rivers erode. Lower gives higher relief
+		"streamExponent": 0.5,        // how erosion grows with the drainage area
+		"criticalSlope": 30,          // degrees: steeper hillslopes collapse
+		"timeStep": 50,               // thousands of years
+		"steps": 300,                 // time steps on the coarse mesh
+		"refineSteps": 60,            // time steps on each finer mesh
+		"erodibilityNoise": 0.3,      // 0..1: variation of the rock hardness
+		"noiseScale": 30,             // km, of that variation
+		"floorSlope": 0.01            // of the sea and lake floors, meters per meter
+	}
+}
+```
+
+Terrains are listed in the file's order, the sea and lakes first. Pixels
+of a color that matches no terrain are reported, and treated as outside of
+the map.
+
+## How it works
+
+The map is covered by nested meshes: a coarse one, and finer ones where
+terrains want detail. On the coarse mesh, the land starts flat at sea
+level, and rises at a rate set per region of each terrain, ramping up from
+its border with lower terrains. At each time step, water flows downhill
+from vertex to vertex; the drainage area of each vertex (how much land
+drains through it) sets how fast its river cuts down (the stream power law,
+solved implicitly as in Braun and Willett, 2013); slopes steeper than the
+critical slope collapse; depressions are filled so that every river reaches
+the sea. River networks grow into the rising land from the coasts.
+
+The uplift rates are calibrated: the summits of each region are measured
+and its rate adjusted, until they reach the terrain's target height. Then
+each finer mesh starts from the previous one and continues the simulation,
+which carves the finer valleys. Lakes are flat, at the level of their lowest
+shore, and the sea and lake floors slope down from their shores.
+
+The simulation takes seconds: about 8 on the example map (a 2048 x 2048
+image, 160 000 vertices), with a preview after 3.
+
+## Building from source
+
+With Go 1.26 and a C/C++ compiler (the app uses OpenGL, GLFW and Dear
+ImGui):
+
+- Windows: a 64 bits MinGW-w64 GCC on the `PATH`, such as
+  [WinLibs](https://winlibs.com/).
 - macOS: the Xcode command line tools (`xcode-select --install`).
 - Linux: GCC and the X11 and OpenGL development packages. On Debian or
   Ubuntu: `sudo apt install build-essential libgl1-mesa-dev xorg-dev`.
@@ -32,235 +253,5 @@ go build -o bin/wgen ./cmd/wgen
 ```
 
 The first build takes several minutes (compiling the ImGui bindings), later
-ones a few seconds. See [DEVELOPMENT.md](DEVELOPMENT.md) if it fails.
-
-## Usage
-
-```sh
-bin/wgen test/config.json                  # generate and export
-bin/wgen --interactive test/config.json    # open the viewer
-```
-
-Flags:
-
-- `--interactive`: open the viewer instead of exporting.
-- `-v`: log the duration of each generation stage.
-
-Exports are written next to the config: `<config>.obj`, `<config>.svg`,
-`<config>.png` (elevation) and `<config>-w.png` (water level).
-
-## Viewer
-
-Three views, cycled with `Tab`:
-
-| View | Left drag | Right drag | Wheel, middle drag |
-|---|---|---|---|
-| 3D orbit | rotate (pan with `Shift` or `Ctrl`) | pan | zoom |
-| 3D top | pan | pan | zoom |
-| 2D map | pan (any button) | pan | zoom at the cursor |
-
-Double click the map to fit it in the window. "Reset view" in the panel
-reframes the current view.
-
-Height colors are gray on land and blue in water (sea and lakes), darker
-when deeper, so that shorelines show.
-
-Keys: `Shift` switches between terrain and height colors, `q` between lit and
-unlit, `w` toggles the wireframe. Shortcuts (these and `Tab`) are ignored
-while typing in a field or with a dropdown open, and when combined with
-`Ctrl`, `Alt` or `Cmd`. `Shift` only counts when pressed and released alone,
-since it is also a modifier: panning, and horizontal scrolling in the panel.
-
-The panel:
-
-- View: the settings above, and the overlay drawn on the terrain: rivers,
-  contour lines, grid. View settings are remembered between sessions.
-- Actions: "Save config" writes the parameters back to the config file
-  (reformatted, and without unknown keys). "Export files" writes the exports
-  enabled in the config.
-- Generation: every parameter of the config. A change only reruns the
-  generation stages it affects.
-
-Numbers have a slider, for quick changes within a typical range, rounded to
-a sensible step, and a field, to type a precise value (not rounded, and
-possibly outside of the slider range). Changes apply when the slider is
-released, or when pressing `Enter` or leaving the field (`Escape` cancels).
-
-- Simulation (uplift model): "Watch the simulation" shows the landscape as
-  it is simulated, every few time steps ("Time steps per frame"), with what
-  is being done in the status: the land rising from the sea, rivers cutting
-  in, the heights being calibrated, then each finer mesh. "Replay the
-  simulation" runs it again, to watch it. Watching makes generating slower
-  (about a minute on the Chasers map), not different.
-- Map editor: see below.
-
-The status in the bottom left corner shows what is running (generating,
-refining a preview, rendering the overlay, exporting), errors, and whether
-the config or the map have unsaved changes.
-
-### Map editor
-
-The map (the outline image) can be painted in the viewer: check "Paint the
-map" (or press `e`), which shows the 2D view with the painted terrains over
-the generated map. The left button paints the terrain selected in the panel,
-the other buttons pan. Brushes lay stamps with natural looking, irregular
-edges, different every time.
-
-- `[` and `]` change the brush size, "Painting opacity" how much the
-  painted map shows over the generated one.
-- "Lock shoreline" (`l`) keeps the coasts as they are: land brushes leave
-  sea and lakes alone, water brushes leave land alone (water can still
-  change between sea and lake). To repaint the relief without touching the
-  shores.
-- `Ctrl+Z` undoes a stroke, `Ctrl+Y` (or `Ctrl+Shift+Z`) redoes it.
-- Each stroke regenerates the world. With the uplift model, a coarse preview
-  shows first ("Refining..."), and a new stroke cancels the generation in
-  progress.
-- "Save map" (or `Ctrl+S`, which also saves the config) writes the map to
-  the config's image file. "New map..." starts from an empty sea, of a size
-  to choose.
-
-The map is only saved when asked: quitting loses unsaved changes. If the
-image file changes elsewhere, the editor follows it, unless the map has
-unsaved changes.
-
-The config file and the outline image are watched: edit them in any editor
-and the viewer updates. If the config file changes, it replaces any unsaved
-edits made in the panel. A broken config keeps the last good result and
-shows the error.
-
-Large maps work, but take time: a 16384 x 16384 image takes about 20
-seconds to load and generate, and each parameter change several seconds.
-
-## Config
-
-```jsonc
-{
-	"path": "test/Chasers.png",   // outline image, relative to the working directory
-	"resolution": 32,             // mesh spacing, in pixels
-	"grid": "hex",                // "hex" or "square"
-	"jitter": 1.0,                // random displacement of mesh points, 0..1
-	"relax": false,               // one relaxation pass for a more even mesh
-	"seed": 0,                    // random seed (optional, default 0)
-	"smoothingRadius": 20,        // blend slopes across terrain boundaries (0: off)
-	"erosionMinFlow": 10,         // flow above which rivers carve valleys
-	"erosionFactor": 0.75,        // slope multiplier along those rivers
-	"maxHeight": 0,               // rescale so the highest point is this (0: off)
-	"blurRadius": 0,              // blur of the heightmap (0: off)
-
-	"terrains": {
-		// r, g, b: color in the outline image. gradient: slope, negative for
-		// water. fixedShore: marks sea terrains, the elevation of their shore.
-		// smoothing, erosion: whether they apply (default true).
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.1, "fixedShore": 0.0 },
-		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2 },
-		"cliffs": { "r": 148, "g": 10, "b": 0, "gradient": 4.0, "smoothing": false, "erosion": false }
-	},
-
-	"exportOBJ": true,
-	"exportSVG": false,
-	"exportHeightmap": true,      // optional, default true
-	"png16": true                 // 16 bits heightmaps (default 8)
-}
-```
-
-Experimental parameters (optional, only saved when changed):
-
-```jsonc
-{
-	// Erosion model. "step" (default): slopes along rivers are multiplied by
-	// erosionFactor where the flow is above erosionMinFlow. "power": they are
-	// multiplied by (drainage area / channelArea) ^ -erosionTheta, at least
-	// erosionFloor, and the rivers and elevation are computed again,
-	// erosionIterations times, which carves branching valleys into mountains.
-	"erosionModel": "power",
-	"erosionTheta": 0.5,
-	"channelArea": 300,           // square pixels
-	"erosionFloor": 0.05,
-	"erosionIterations": 10,
-
-	// Noise on land slopes: "none" (default), "fbm", "ridged" (slopes lower
-	// along thin lines) or "worley" (lower along the boundaries of cells).
-	// Slopes are multiplied by 1 +- noiseAmplitude.
-	"noiseType": "ridged",
-	"noiseScale": 128,            // pixels, largest octave
-	"noiseAmplitude": 0.5,
-	"noiseOctaves": 3,
-	"noiseStretch": 1,            // elongation of the features along noiseAngle
-	"noiseAngle": 0               // degrees
-}
-```
-
-## Uplift model
-
-With `"elevationModel": "uplift"`, elevation is not built from slopes but
-simulated: the land rises, rivers erode it, hillslopes collapse beyond a
-critical slope, and the sea stays at its level. River networks grow into the
-rising land from the coasts, which gives branching valleys, winding ridges
-and many peaks, at realistic heights: elevations are in meters, for a map of
-the given width.
-
-Terrains are height classes: each gives a target height for the summits of
-its regions ("mountains here, about 4500 m"), and the uplift that reaches
-it is found by the simulation, for every region on its own (a small range
-needs to rise faster than a large one). Summits end up within about 20% of
-their targets: the target is what the high points of a region reach, most of
-the region is lower, valleys much lower.
-
-```jsonc
-{
-	"elevationModel": "uplift",
-	"mapWidth": 1000,             // km
-	"resolution": 2,              // mesh spacing of the finest level, pixels
-	"levels": 3,                  // the coarse mesh is 2^levels coarser
-
-	"terrains": {
-		// gradient still tells water (negative) from land, and is the slope
-		// of the sea floor, in meters per meter
-		"sea": { "r": 66, "g": 66, "b": 125, "gradient": -0.01, "fixedShore": 0.0 },
-		// height: target summit height, meters. detail: how many levels
-		// refine this terrain (default: all on land, none on water)
-		"plains": { "r": 135, "g": 168, "b": 81, "gradient": 0.2, "height": 400, "detail": 1 },
-		"hills": { "r": 209, "g": 184, "b": 134, "gradient": 0.8, "height": 1500, "detail": 2 },
-		"mountains": { "r": 101, "g": 72, "b": 31, "gradient": 1.2, "height": 4500 },
-		// water without fixedShore: a lake, eroded flat down to its outlet
-		"lake": { "r": 109, "g": 148, "b": 194, "gradient": -0.001, "detail": 1 }
-	}
-}
-```
-
-`lab/classes.json` is a complete example. Optional parameters, with their
-defaults:
-
-| Key | Default | |
-|---|---|---|
-| `upliftBlur` | 30 | km: uplift ramps up over this distance from the border of a region with lower terrains, so that ranges rise more in their core |
-| `erodibility` | 2e-6 | per year: how fast rivers erode. Lower gives higher relief |
-| `streamExponent` | 0.5 | how erosion grows with the drainage area |
-| `criticalSlope` | 30 | degrees: steeper hillslopes collapse |
-| `timeStep` | 50 | thousands of years |
-| `steps` | 300 | time steps on the coarse mesh, until the landscape settles |
-| `refineSteps` | 60 | time steps on each finer mesh |
-| `erodibilityNoise` | 0.3 | 0..1: variation of the rock hardness |
-| `erodibilityNoiseScale` | 30 | km |
-
-Terrains can also have an `erodibility` factor (default 1). Instead of a
-`height`, a terrain can give its `uplift` directly, in mm per year (as in
-`lab/uplift.json`): heights then depend on the size of its regions and on
-their neighbours.
-
-The simulation takes seconds: about 8 on the Chasers map (160 000
-vertices), with a preview after 3. Each refinement level multiplies the
-vertices of the refined terrains by 4.
-
-At true scale, mountains are small on a continent: 10 km high on 1000 km
-wide. They show when zooming in, and "Vertical exaggeration" in the viewer
-scales them in the 3D views. Contour intervals are in meters. Heightmap
-PNGs are in meters too: use `png16`, or `maxHeight` to rescale. OBJ
-exports have the elevations converted to pixels, for true proportions.
-
-Heightmap PNGs contain the raw elevations, clamped to the pixel range (0..255
-or 0..65535), so water is 0. Use `maxHeight` to choose the scale.
-
-Mesh points on a color that matches no terrain are reported as warnings in
-the log, and get no terrain, as if they were outside the map.
+ones a few seconds. `scripts/package.sh` builds the distributed packages.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for more.
