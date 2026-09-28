@@ -45,12 +45,10 @@ const testConfig = `{
 // a lake.
 func writeIsland(t *testing.T, path string, size int) {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
-	s := float64(size)
-
 	for y := range size {
 		for x := range size {
-			fx, fy := float64(x)/s, float64(y)/s
-			d := math.Hypot(fx-0.5, fy-0.5)
+			fx, fy := float64(x)/float64(size), float64(y)/float64(size)
+			fromCenter := math.Hypot(fx-0.5, fy-0.5)
 
 			c := sea
 			switch {
@@ -58,9 +56,9 @@ func writeIsland(t *testing.T, path string, size int) {
 				c = lake
 			case math.Hypot(fx-0.6, fy-0.4) < 0.07:
 				c = mountains
-			case d < 0.2:
+			case fromCenter < 0.2:
 				c = hills
-			case d < 0.38:
+			case fromCenter < 0.38:
 				c = plains
 			}
 			img.Set(x, y, c)
@@ -135,27 +133,27 @@ func TestInvariants(t *testing.T) {
 		// Rivers flow down to the sea
 		steps := 0
 		for u := v; ; steps++ {
-			d := w.Downhill[u]
-			if d < 0 {
+			next := w.Downhill[u]
+			if next < 0 {
 				if !w.IsWater(u) && !slices.ContainsFunc(m.Neighbours[u], w.IsWater) {
 					t.Fatalf("river from %d ends at %d, on land", v, u)
 				}
 				break
 			}
 			// (Across lakes, rivers flow on the water, over their bed)
-			if w.Z[d] >= w.Z[u] && w.IsLand(u) && w.IsLand(d) {
-				t.Fatalf("river from %d goes up from %d to %d", v, u, d)
+			if w.Z[next] >= w.Z[u] && w.IsLand(u) && w.IsLand(next) {
+				t.Fatalf("river from %d goes up from %d to %d", v, u, next)
 			}
 			if steps > len(m.Points) {
 				t.Fatalf("river from %d loops", v)
 			}
-			u = d
+			u = next
 		}
 
 		// Hillslopes are at most at the critical slope (the last erosion step
 		// can make them a little steeper)
-		if d := w.Downhill[v]; d >= 0 && w.IsLand(d) {
-			slope := (z - w.Z[d]) / (m.Points[v].Dist(m.Points[d]) * w.MetersPerPixel)
+		if next := w.Downhill[v]; next >= 0 && w.IsLand(next) {
+			slope := (z - w.Z[next]) / (m.Points[v].Dist(m.Points[next]) * w.MetersPerPixel)
 			if slope > critical*1.5 {
 				t.Errorf("slope %.2f from %d, critical %.2f", slope, v, critical)
 			}
@@ -476,16 +474,16 @@ func TestGolden(t *testing.T) {
 		Samples         [n][n]float64
 	}
 
-	s := snapshot{Vertices: len(w.Mesh.Points), Lowest: w.Lowest, Highest: w.Highest}
+	got := snapshot{Vertices: len(w.Mesh.Points), Lowest: w.Lowest, Highest: w.Highest}
 	for i := range n {
 		for j := range n {
 			y, x := (2*i+1)*w.Height/(2*n), (2*j+1)*w.Width/(2*n)
-			s.Samples[i][j] = math.Round(w.Heightmap[y*w.Width+x]*1e3) / 1e3
+			got.Samples[i][j] = math.Round(w.Heightmap[y*w.Width+x]*1e3) / 1e3
 		}
 	}
 
 	if *update {
-		data, _ := json.MarshalIndent(s, "", "\t")
+		data, _ := json.MarshalIndent(got, "", "\t")
 		os.MkdirAll(filepath.Dir(golden), 0o755)
 		if err := os.WriteFile(golden, data, 0o644); err != nil {
 			t.Fatal(err)
@@ -502,14 +500,14 @@ func TestGolden(t *testing.T) {
 
 	near := func(a, b float64) bool { return math.Abs(a-b) <= 1e-3*math.Max(1, math.Abs(b)) }
 
-	if s.Vertices != want.Vertices || !near(s.Lowest, want.Lowest) || !near(s.Highest, want.Highest) {
+	if got.Vertices != want.Vertices || !near(got.Lowest, want.Lowest) || !near(got.Highest, want.Highest) {
 		t.Errorf("got %d vertices, range %f..%f, want %d, %f..%f",
-			s.Vertices, s.Lowest, s.Highest, want.Vertices, want.Lowest, want.Highest)
+			got.Vertices, got.Lowest, got.Highest, want.Vertices, want.Lowest, want.Highest)
 	}
 	for i := range n {
 		for j := range n {
-			if !near(s.Samples[i][j], want.Samples[i][j]) {
-				t.Errorf("sample %d,%d: got %f, want %f", i, j, s.Samples[i][j], want.Samples[i][j])
+			if !near(got.Samples[i][j], want.Samples[i][j]) {
+				t.Errorf("sample %d,%d: got %f, want %f", i, j, got.Samples[i][j], want.Samples[i][j])
 			}
 		}
 	}

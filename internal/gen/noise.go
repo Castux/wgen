@@ -6,8 +6,8 @@ import (
 	"github.com/Castux/wgen/internal/geom"
 )
 
-// Noise for slope variations: deterministic functions of the position and
-// the seed.
+// Noise for the mesh jitter and the rock hardness: deterministic functions of
+// the position and the seed.
 
 // hash2 mixes a seed and integer coordinates into 64 random bits
 // (splitmix64 finalizer).
@@ -31,9 +31,11 @@ func gradientNoise(seed uint64, x, y float64) float64 {
 	fx, fy := x-x0, y-y0
 	ix, iy := int64(x0), int64(y0)
 
+	// Dot product of the random gradient at a lattice point and the offset
+	// from it
 	dot := func(cx, cy int64, dx, dy float64) float64 {
-		a := unit(hash2(seed, cx, cy)) * 2 * math.Pi
-		return math.Cos(a)*dx + math.Sin(a)*dy
+		angle := unit(hash2(seed, cx, cy)) * 2 * math.Pi
+		return math.Cos(angle)*dx + math.Sin(angle)*dy
 	}
 	fade := func(t float64) float64 { return t * t * t * (t*(t*6-15) + 10) }
 
@@ -42,30 +44,6 @@ func gradientNoise(seed uint64, x, y float64) float64 {
 		geom.Lerp(dot(ix, iy, fx, fy), dot(ix+1, iy, fx-1, fy), u),
 		geom.Lerp(dot(ix, iy+1, fx, fy-1), dot(ix+1, iy+1, fx-1, fy-1), u),
 		v)
-}
-
-// cellNoise is the distance between the nearest and second nearest of
-// random points (one per unit cell): 0 on the boundaries between their
-// cells, up to about 0.7 inside.
-func cellNoise(seed uint64, x, y float64) float64 {
-	ix, iy := int64(math.Floor(x)), int64(math.Floor(y))
-	d1, d2 := math.Inf(1), math.Inf(1)
-
-	for cy := iy - 1; cy <= iy+1; cy++ {
-		for cx := ix - 1; cx <= ix+1; cx++ {
-			h := hash2(seed, cx, cy)
-			px := float64(cx) + unit(h)
-			py := float64(cy) + unit(hash2(h, 1, 0))
-			d := math.Hypot(px-x, py-y)
-			switch {
-			case d < d1:
-				d1, d2 = d, d1
-			case d < d2:
-				d2 = d
-			}
-		}
-	}
-	return d2 - d1
 }
 
 // fbm is fractal gradient noise: octaves of halving amplitude and doubling

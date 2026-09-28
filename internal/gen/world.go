@@ -4,7 +4,7 @@
 // The landscape is simulated: the land rises, at rates found so that each
 // terrain reaches its target summit height, rivers erode it following the
 // stream power law, hillslopes collapse beyond a critical slope, and the sea
-// stays at its level (see uplift.go and calibrate.go). River networks grow
+// stays at its level (see simulation.go and calibrate.go). River networks grow
 // into the rising land from the coasts, which gives branching valleys and
 // winding ridges.
 //
@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"math/rand/v2"
 	"time"
 
 	"github.com/Castux/wgen/internal/config"
@@ -29,7 +30,7 @@ type Stage int
 
 const (
 	StageImage   Stage = iota // load the map image
-	StageMesh                 // triangulate
+	StageMesh                 // build the meshes of all levels
 	StageTerrain              // assign terrains, simulate, water depth
 	StageRaster               // rasterize
 	StageNone
@@ -39,6 +40,7 @@ var stageNames = [...]string{"image", "mesh", "terrain", "raster", "none"}
 
 func (s Stage) String() string { return stageNames[s] }
 
+// World is a generated world, immutable once returned.
 type World struct {
 	Conf *config.Config
 
@@ -135,8 +137,8 @@ func (w *World) Update(conf *config.Config) (*World, Stage, error) {
 // UpdateWith is Update, with options.
 func (w *World) UpdateWith(conf *config.Config, opts Options) (*World, Stage, error) {
 	stage := ChangedStage(w.Conf, conf)
-	n, err := w.run(conf, stage, opts)
-	return n, stage, err
+	next, err := w.run(conf, stage, opts)
+	return next, stage, err
 }
 
 // ReloadImage reloads the map image and reruns the pipeline.
@@ -146,14 +148,14 @@ func (w *World) ReloadImage() (*World, Stage, error) {
 
 // ReloadImageWith is ReloadImage, with options.
 func (w *World) ReloadImageWith(opts Options) (*World, Stage, error) {
-	n := *w
-	if err := n.loadOutline(); err != nil {
+	next := *w
+	if err := next.loadOutline(); err != nil {
 		return nil, StageImage, err
 	}
 
-	stage := n.outlineStage(w)
-	res, err := n.run(w.Conf, stage, opts)
-	return res, stage, err
+	stage := next.outlineStage(w)
+	result, err := next.run(w.Conf, stage, opts)
+	return result, stage, err
 }
 
 // WithOutline returns a new world with the given map instead of the image
@@ -163,16 +165,16 @@ func (w *World) WithOutline(conf *config.Config, width, height int, outline []co
 		return nil, StageImage, fmt.Errorf("map of %d pixels for %dx%d", len(outline), width, height)
 	}
 
-	n := *w
-	n.Width, n.Height, n.Outline = width, height, outline
+	next := *w
+	next.Width, next.Height, next.Outline = width, height, outline
 
 	stage := StageMesh
 	if w.Conf != nil {
 		// Not the image stage: it would load the file
-		stage = max(StageMesh, min(ChangedStage(w.Conf, conf), n.outlineStage(w)))
+		stage = max(StageMesh, min(ChangedStage(w.Conf, conf), next.outlineStage(w)))
 	}
-	res, err := n.run(conf, stage, opts)
-	return res, stage, err
+	result, err := next.run(conf, stage, opts)
+	return result, stage, err
 }
 
 // Rerun generates the world again from the simulation, with the same
@@ -181,8 +183,8 @@ func (w *World) Rerun(opts Options) (*World, Stage, error) {
 	if w.Conf == nil || w.Mesh == nil {
 		return nil, StageImage, errors.New("nothing generated yet")
 	}
-	n, err := w.run(w.Conf, StageTerrain, opts)
-	return n, StageTerrain, err
+	next, err := w.run(w.Conf, StageTerrain, opts)
+	return next, StageTerrain, err
 }
 
 // outlineStage is the first stage to rerun when the map changed from the
@@ -195,28 +197,30 @@ func (w *World) outlineStage(old *World) Stage {
 	return StageTerrain
 }
 
+// run returns a new world for the config, rerunning the stages from the
+// given one.
 func (w *World) run(conf *config.Config, from Stage, opts Options) (*World, error) {
 	if err := conf.Validate(); err != nil {
 		return nil, err
 	}
 
-	n := *w
-	n.Conf = conf
-	n.opts = opts
-	defer func() { n.opts = Options{} }()
+	next := *w
+	next.Conf = conf
+	next.opts = opts
+	defer func() { next.opts = Options{} }()
 	start := time.Now()
 
 	steps := []struct {
 		stage Stage
 		name  string
-		f     func() error
+		run   func() error
 	}{
-		{StageImage, "loading image", n.loadOutline},
-		{StageMesh, "triangulating", n.generateMeshes},
-		{StageTerrain, "assigning terrain types", n.assignTerrainTypes},
-		{StageTerrain, "simulating", n.simulate},
-		{StageTerrain, "computing water depth", func() error { n.computeWaterDepth(); n.finalizeElevation(); return nil }},
-		{StageRaster, "rasterizing", func() error { n.rasterize(); return nil }},
+		{StageImage, "loading image", next.loadOutline},
+		{StageMesh, "building meshes", next.generateMeshes},
+		{StageTerrain, "assigning terrains", next.assignTerrains},
+		{StageTerrain, "simulating", next.simulate},
+		{StageTerrain, "computing water depth", func() error { next.computeWaterDepth(); next.computeElevationRange(); return nil }},
+		{StageRaster, "rasterizing", func() error { next.rasterize(); return nil }},
 	}
 
 	for _, step := range steps {
@@ -228,34 +232,34 @@ func (w *World) run(conf *config.Config, from Stage, opts Options) (*World, erro
 			return nil, ErrCanceled
 		}
 
-		t := time.Now()
-		if err := step.f(); err != nil {
+		stepStart := time.Now()
+		if err := step.run(); err != nil {
 			return nil, err
 		}
-		slog.Debug(step.name, "took", time.Since(t).Round(time.Millisecond))
+		slog.Debug(step.name, "took", time.Since(stepStart).Round(time.Millisecond))
 	}
 
 	if from < StageNone {
 		slog.Info("generated",
 			"from", from.String(),
-			"vertices", len(n.Mesh.Points),
-			"range", fmt.Sprintf("%.0f..%.0f m", n.Lowest, n.Highest),
+			"vertices", len(next.Mesh.Points),
+			"range", fmt.Sprintf("%.0f..%.0f m", next.Lowest, next.Highest),
 			"took", time.Since(start).Round(time.Millisecond))
 	}
 
-	return &n, nil
+	return &next, nil
 }
 
 // margin around the map covered by the mesh, pixels.
-func (w *World) margin() float64 { return w.upliftSpacing(0) }
+func (w *World) margin() float64 { return w.levelSpacing(0) }
 
 func (w *World) inBounds(p geom.Vec2) bool {
 	return p.X >= 0 && p.X < float64(w.Width) && p.Y >= 0 && p.Y < float64(w.Height)
 }
 
 func (w *World) inBoundsPlusHalfMargin(p geom.Vec2) bool {
-	h := w.margin() / 2
-	return p.X > -h && p.X < float64(w.Width)+h && p.Y > -h && p.Y < float64(w.Height)+h
+	halfMargin := w.margin() / 2
+	return p.X > -halfMargin && p.X < float64(w.Width)+halfMargin && p.Y > -halfMargin && p.Y < float64(w.Height)+halfMargin
 }
 
 // pixel returns the map color at p, clamped to the image.
@@ -263,6 +267,16 @@ func (w *World) pixel(p geom.Vec2) config.Color {
 	row := int(geom.Clamp(p.Y, 0, float64(w.Height-1)))
 	col := int(geom.Clamp(p.X, 0, float64(w.Width-1)))
 	return w.Outline[row*w.Width+col]
+}
+
+// Random streams, so that each stage's randomness only depends on the seed
+const (
+	streamMesh = iota + 1
+	streamNoise
+)
+
+func (w *World) rng(stream uint64) *rand.Rand {
+	return rand.New(rand.NewPCG(w.Conf.Seed, stream))
 }
 
 // Vertex predicates

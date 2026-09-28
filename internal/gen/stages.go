@@ -7,7 +7,6 @@ import (
 	"image/color"
 	"log/slog"
 	"math"
-	"math/rand/v2"
 	"os"
 	"slices"
 
@@ -17,16 +16,10 @@ import (
 	"github.com/Castux/wgen/internal/config"
 )
 
-// Random streams, so that each stage's randomness only depends on the seed
-const (
-	streamMesh = iota + 1
-	streamNoise
-)
+// The stages of the pipeline, but for the meshes (meshes.go), the simulation
+// (simulation.go) and the rasterization (raster.go).
 
-func (w *World) rng(stream uint64) *rand.Rand {
-	return rand.New(rand.NewPCG(w.Conf.Seed, stream))
-}
-
+// loadOutline loads the map image.
 func (w *World) loadOutline() error {
 	path := w.Conf.ImagePath()
 	f, err := os.Open(path)
@@ -61,7 +54,9 @@ func Outline(img image.Image) (width, height int, outline []config.Color) {
 	return width, height, outline
 }
 
-func (w *World) assignTerrainTypes() error {
+// assignTerrains gives each vertex the terrain of its pixel, and finds the
+// shores.
+func (w *World) assignTerrains() error {
 	numVertices := len(w.Mesh.Points)
 	w.Terrain = make([]*config.Terrain, numVertices)
 	w.Shore = make([]bool, numVertices)
@@ -107,12 +102,17 @@ func (w *World) assignTerrainTypes() error {
 // at level 0, each lake at the level of its lowest shore (where it spills).
 // Their floors go down from their shores, with the floor slope.
 func (w *World) computeWaterDepth() {
-	m := w.Mesh
-	z := slices.Clone(w.Z)
-	water := nanSlice(len(m.Points))
-	slope := w.Conf.Simulation.FloorSlope * w.MetersPerPixel // meters per pixel
+	level := w.waterLevels()
+	w.Z = w.waterFloors(level)
+	w.WaterLevel = level
+}
 
-	// Lake levels, per lake
+// waterLevels returns the level of the water at each vertex, NaN on land.
+func (w *World) waterLevels() []float64 {
+	m := w.Mesh
+	level := nanSlice(len(m.Points))
+
+	// Each lake, found by flood fill
 	visited := make([]bool, len(m.Points))
 	for start := range int32(len(m.Points)) {
 		if !w.IsLake(start) || visited[start] {
@@ -120,11 +120,11 @@ func (w *World) computeWaterDepth() {
 		}
 		lake := []int32{start}
 		visited[start] = true
-		level := math.Inf(1)
+		lakeLevel := math.Inf(1)
 		for i := 0; i < len(lake); i++ {
 			v := lake[i]
 			if w.Shore[v] && !math.IsNaN(w.Z[v]) {
-				level = math.Min(level, w.Z[v])
+				lakeLevel = math.Min(lakeLevel, w.Z[v])
 			}
 			for _, n := range m.Neighbours[v] {
 				if w.IsLake(n) && !visited[n] {
@@ -133,63 +133,73 @@ func (w *World) computeWaterDepth() {
 				}
 			}
 		}
-		if math.IsInf(level, 1) {
-			level = 0
+		if math.IsInf(lakeLevel, 1) {
+			lakeLevel = 0
 		}
 		for _, v := range lake {
-			water[v] = level
+			level[v] = lakeLevel
 		}
 	}
 
-	// Floors: from the shores down, the highest first
-	for v := range m.Points {
-		switch {
-		case w.IsSea(int32(v)):
-			water[v] = 0
-			z[v] = math.NaN()
-		case w.IsLake(int32(v)):
-			z[v] = math.NaN()
+	for v := range int32(len(m.Points)) {
+		if w.IsSea(v) {
+			level[v] = 0
 		}
 	}
-	for _, s := range w.Shores {
-		z[s] = water[s]
+	return level
+}
+
+// waterFloors returns the elevations with the floors of the sea and lakes:
+// from the shores down, the highest first.
+func (w *World) waterFloors(level []float64) []float64 {
+	m := w.Mesh
+	elevation := slices.Clone(w.Z)
+	floorSlope := w.Conf.Simulation.FloorSlope * w.MetersPerPixel // meters per pixel
+
+	for v := range int32(len(m.Points)) {
+		if w.IsWater(v) {
+			elevation[v] = math.NaN()
+		}
+	}
+	for _, v := range w.Shores {
+		elevation[v] = level[v]
 	}
 
-	neg := func(x float64) float64 { return -x }
-	q := &vertexQueue{z: z, key: neg}
-	for _, s := range w.Shores {
-		q.push(s)
+	negate := func(x float64) float64 { return -x }
+	queue := &vertexQueue{elevation: elevation, key: negate}
+	for _, v := range w.Shores {
+		queue.push(v)
 	}
 
-	for q.Len() > 0 {
-		c, cz := q.pop()
-		if cz != z[c] {
+	for queue.Len() > 0 {
+		v, z := queue.pop()
+		if z != elevation[v] {
+			// Raised since it was pushed
 			continue
 		}
-		for _, n := range m.Neighbours[c] {
-			if !w.IsWater(n) || (w.IsSea(c) != w.IsSea(n)) {
+		for _, n := range m.Neighbours[v] {
+			if !w.IsWater(n) || (w.IsSea(v) != w.IsSea(n)) {
 				continue
 			}
-			newZ := cz - slope*m.Points[c].Dist(m.Points[n])
-			if math.IsNaN(z[n]) || newZ > z[n] {
-				z[n] = newZ
-				q.push(n)
+			floor := z - floorSlope*m.Points[v].Dist(m.Points[n])
+			if math.IsNaN(elevation[n]) || floor > elevation[n] {
+				elevation[n] = floor
+				queue.push(n)
 			}
 		}
 	}
 
 	// Water not reached from a shore: at its level
-	for v := range m.Points {
-		if w.IsWater(int32(v)) && math.IsNaN(z[v]) {
-			z[v] = water[v]
+	for v := range int32(len(m.Points)) {
+		if w.IsWater(v) && math.IsNaN(elevation[v]) {
+			elevation[v] = level[v]
 		}
 	}
-
-	w.Z = z
-	w.WaterLevel = water
+	return elevation
 }
 
-func (w *World) finalizeElevation() {
+// computeElevationRange sets the lowest and highest elevations of the map.
+func (w *World) computeElevationRange() {
 	w.Lowest = math.Inf(1)
 	w.Highest = math.Inf(-1)
 
@@ -208,15 +218,15 @@ func (w *World) finalizeElevation() {
 // vertexQueue is a min priority queue of vertices, keyed on their elevation
 // at the time they were pushed (possibly transformed by key).
 type vertexQueue struct {
-	z     []float64
-	key   func(float64) float64
-	items []queueItem
+	elevation []float64
+	key       func(float64) float64
+	items     []queueItem
 }
 
 type queueItem struct {
-	v   int32
-	z   float64
-	key float64
+	v         int32
+	elevation float64 // when pushed
+	key       float64
 }
 
 func (q *vertexQueue) Len() int           { return len(q.items) }
@@ -231,15 +241,16 @@ func (q *vertexQueue) Pop() any {
 }
 
 func (q *vertexQueue) push(v int32) {
-	z := q.z[v]
-	key := z
+	elevation := q.elevation[v]
+	key := elevation
 	if q.key != nil {
-		key = q.key(z)
+		key = q.key(elevation)
 	}
-	heap.Push(q, queueItem{v, z, key})
+	heap.Push(q, queueItem{v, elevation, key})
 }
 
+// pop returns the vertex with the lowest key, and its elevation when pushed.
 func (q *vertexQueue) pop() (int32, float64) {
 	item := heap.Pop(q).(queueItem)
-	return item.v, item.z
+	return item.v, item.elevation
 }

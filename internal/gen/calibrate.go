@@ -10,7 +10,7 @@ import (
 	"github.com/Castux/wgen/internal/geom"
 )
 
-// The uplift field of the uplift model, and its calibration.
+// The uplift field, and its calibration.
 //
 // Every connected region of a land terrain has its own uplift rate. Within a
 // region, uplift ramps up from its border with lower terrains (or water)
@@ -48,71 +48,88 @@ const (
 )
 
 // upliftField holds the regions of land terrains on a grid, and each cell's
-// distance to the border of its region with lower terrains.
+// uplift factor, from its distance to the border of its region with lower
+// terrains.
 type upliftField struct {
-	cell    float64 // pixels
-	gw, gh  int
-	label   []int32           // region of each cell, -1 for water or none
-	terrain []*config.Terrain // of each region
-	ramp    []float64         // uplift factor of each cell, rampFloor..1
+	cellSize      float64           // pixels
+	width, height int               // cells
+	region        []int32           // of each cell, -1 for water or none
+	ramp          []float64         // uplift factor of each cell, rampFloor..1
+	regionTerrain []*config.Terrain // of each region
 }
 
 // rank orders terrains for the ramps: by target height.
 func rank(t *config.Terrain) float64 { return t.Height }
 
 func (w *World) newUpliftField() *upliftField {
-	terrains := w.Conf.TerrainsByColor()
-	cell := w.upliftSpacing(0) / 2
-	f := &upliftField{cell: cell}
-	f.gw, f.gh = int(math.Ceil(float64(w.Width)/cell)), int(math.Ceil(float64(w.Height)/cell))
-	n := f.gw * f.gh
+	cellSize := w.levelSpacing(0) / 2
+	f := &upliftField{cellSize: cellSize}
+	f.width, f.height = int(math.Ceil(float64(w.Width)/cellSize)), int(math.Ceil(float64(w.Height)/cellSize))
 
-	terrainAt := make([]*config.Terrain, n)
-	for y := range f.gh {
-		for x := range f.gw {
-			p := geom.Vec2{X: (float64(x) + 0.5) * cell, Y: (float64(y) + 0.5) * cell}
+	terrainAt := w.landTerrainGrid(f)
+	f.findRegions(terrainAt)
+	radius := w.Conf.Simulation.UpliftBlur * 1000 / w.MetersPerPixel / cellSize // cells
+	f.computeRamps(terrainAt, radius)
+	return f
+}
+
+// landTerrainGrid returns the land terrain at the center of each cell of the
+// field, nil for water.
+func (w *World) landTerrainGrid(f *upliftField) []*config.Terrain {
+	terrains := w.Conf.TerrainsByColor()
+	terrainAt := make([]*config.Terrain, f.width*f.height)
+	for y := range f.height {
+		for x := range f.width {
+			p := geom.Vec2{X: (float64(x) + 0.5) * f.cellSize, Y: (float64(y) + 0.5) * f.cellSize}
 			if t := terrains[w.pixel(p)]; t != nil && !t.IsWater() {
-				terrainAt[y*f.gw+x] = t
+				terrainAt[y*f.width+x] = t
 			}
 		}
 	}
+	return terrainAt
+}
 
-	// Connected regions of the same terrain, 4-connected
-	f.label = make([]int32, n)
-	for i := range f.label {
-		f.label[i] = -1
+// findRegions labels the connected regions of the same terrain,
+// 4-connected.
+func (f *upliftField) findRegions(terrainAt []*config.Terrain) {
+	f.region = make([]int32, len(terrainAt))
+	for i := range f.region {
+		f.region[i] = -1
 	}
 	var stack []int
 	for start, t := range terrainAt {
-		if t == nil || f.label[start] >= 0 {
+		if t == nil || f.region[start] >= 0 {
 			continue
 		}
-		id := int32(len(f.terrain))
-		f.terrain = append(f.terrain, t)
-		f.label[start] = id
+		id := int32(len(f.regionTerrain))
+		f.regionTerrain = append(f.regionTerrain, t)
+		f.region[start] = id
 		stack = append(stack[:0], start)
 
 		for len(stack) > 0 {
 			i := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
 			for _, j := range f.neighbours4(i) {
-				if terrainAt[j] == t && f.label[j] < 0 {
-					f.label[j] = id
+				if terrainAt[j] == t && f.region[j] < 0 {
+					f.region[j] = id
 					stack = append(stack, j)
 				}
 			}
 		}
 	}
+}
 
-	// Distance to lower terrain or water, per rank (chamfer distance)
-	f.ramp = make([]float64, n)
-	radius := w.Conf.Simulation.UpliftBlur * 1000 / w.MetersPerPixel / cell // cells
+// computeRamps sets the uplift factor of each land cell, from its distance to
+// lower terrain or water, per rank: rampFloor at the border, 1 beyond radius
+// (cells).
+func (f *upliftField) computeRamps(terrainAt []*config.Terrain, radius float64) {
+	f.ramp = make([]float64, len(terrainAt))
 	ranks := map[float64]bool{}
-	for _, t := range f.terrain {
+	for _, t := range f.regionTerrain {
 		ranks[rank(t)] = true
 	}
 	for r := range ranks {
-		dist := make([]float64, n)
+		dist := make([]float64, len(terrainAt))
 		for i, t := range terrainAt {
 			if t == nil || rank(t) < r {
 				dist[i] = 0
@@ -120,7 +137,7 @@ func (w *World) newUpliftField() *upliftField {
 				dist[i] = math.Inf(1)
 			}
 		}
-		chamfer(dist, f.gw, f.gh)
+		chamfer(dist, f.width, f.height)
 
 		for i, t := range terrainAt {
 			if t == nil || rank(t) != r {
@@ -134,67 +151,66 @@ func (w *World) newUpliftField() *upliftField {
 			f.ramp[i] = rampFloor + (1-rampFloor)*x
 		}
 	}
-
-	return f
 }
 
 func (f *upliftField) neighbours4(i int) []int {
-	x, y := i%f.gw, i/f.gw
-	ns := make([]int, 0, 4)
+	x, y := i%f.width, i/f.width
+	neighbours := make([]int, 0, 4)
 	if x > 0 {
-		ns = append(ns, i-1)
+		neighbours = append(neighbours, i-1)
 	}
-	if x < f.gw-1 {
-		ns = append(ns, i+1)
+	if x < f.width-1 {
+		neighbours = append(neighbours, i+1)
 	}
 	if y > 0 {
-		ns = append(ns, i-f.gw)
+		neighbours = append(neighbours, i-f.width)
 	}
-	if y < f.gh-1 {
-		ns = append(ns, i+f.gw)
+	if y < f.height-1 {
+		neighbours = append(neighbours, i+f.width)
 	}
-	return ns
+	return neighbours
 }
 
 // chamfer turns a grid of 0 (sources) and infinity into distances to the
-// nearest source, in cells (two pass 3-4 chamfer, about euclidean).
-func chamfer(d []float64, width, height int) {
-	const a, b = 1, math.Sqrt2
+// nearest source, in cells (two pass chamfer, with diagonal steps of √2:
+// about euclidean).
+func chamfer(dist []float64, width, height int) {
+	const straight, diagonal = 1, math.Sqrt2
 	at := func(x, y int) float64 {
 		if x < 0 || y < 0 || x >= width || y >= height {
 			return math.Inf(1)
 		}
-		return d[y*width+x]
+		return dist[y*width+x]
 	}
 	for y := range height {
 		for x := range width {
 			i := y*width + x
-			d[i] = min(d[i], at(x-1, y)+a, at(x, y-1)+a, at(x-1, y-1)+b, at(x+1, y-1)+b)
+			dist[i] = min(dist[i], at(x-1, y)+straight, at(x, y-1)+straight, at(x-1, y-1)+diagonal, at(x+1, y-1)+diagonal)
 		}
 	}
 	for y := height - 1; y >= 0; y-- {
 		for x := width - 1; x >= 0; x-- {
 			i := y*width + x
-			d[i] = min(d[i], at(x+1, y)+a, at(x, y+1)+a, at(x+1, y+1)+b, at(x-1, y+1)+b)
+			dist[i] = min(dist[i], at(x+1, y)+straight, at(x, y+1)+straight, at(x+1, y+1)+diagonal, at(x-1, y+1)+diagonal)
 		}
 	}
 }
 
-// region is the region at a position, -1 if none.
-func (f *upliftField) region(p geom.Vec2) int32 {
-	x := min(max(int(p.X/f.cell), 0), f.gw-1)
-	y := min(max(int(p.Y/f.cell), 0), f.gh-1)
-	return f.label[y*f.gw+x]
+// regionAt is the region at a position, -1 if none.
+func (f *upliftField) regionAt(p geom.Vec2) int32 {
+	x := min(max(int(p.X/f.cellSize), 0), f.width-1)
+	y := min(max(int(p.Y/f.cellSize), 0), f.height-1)
+	return f.region[y*f.width+x]
 }
 
 // initialRates are the uplift rates of the regions before calibration: a
 // first guess from their target height (summits at about 1500 m per mm/yr),
 // 0 for terrains without height.
 func (f *upliftField) initialRates() []float64 {
-	rates := make([]float64, len(f.terrain))
-	for i, t := range f.terrain {
+	rates := make([]float64, len(f.regionTerrain))
+	for region, t := range f.regionTerrain {
 		if t.Calibrated() {
-			rates[i] = geom.Clamp(t.Height/1500, minUplift, maxUplift)
+			rates[region] = geom.Clamp(t.Height/1500, minUplift, maxUplift)
 		}
 	}
 	return rates
@@ -204,36 +220,37 @@ func (f *upliftField) initialRates() []float64 {
 // rates of the regions (copied).
 func (f *upliftField) sampler(rates []float64) func(geom.Vec2) float64 {
 	rates = slices.Clone(rates)
-	value := func(x, y int) float64 {
-		x, y = min(max(x, 0), f.gw-1), min(max(y, 0), f.gh-1)
-		i := y*f.gw + x
-		if f.label[i] < 0 {
+	cellUplift := func(x, y int) float64 {
+		x, y = min(max(x, 0), f.width-1), min(max(y, 0), f.height-1)
+		i := y*f.width + x
+		if f.region[i] < 0 {
 			return 0
 		}
-		return rates[f.label[i]] * f.ramp[i]
+		return rates[f.region[i]] * f.ramp[i]
 	}
 
 	return func(p geom.Vec2) float64 {
 		// Bilinear, but not across the border of the region: the others'
 		// values would leak in
-		r := f.region(p)
-		if r < 0 {
+		region := f.regionAt(p)
+		if region < 0 {
 			return 0
 		}
-		x, y := p.X/f.cell-0.5, p.Y/f.cell-0.5
+		x, y := p.X/f.cellSize-0.5, p.Y/f.cellSize-0.5
 		x0, y0 := int(math.Floor(x)), int(math.Floor(y))
 		fx, fy := x-float64(x0), y-float64(y0)
 
 		sum, weight := 0.0, 0.0
-		for _, c := range [4][3]float64{{0, 0, (1 - fx) * (1 - fy)}, {1, 0, fx * (1 - fy)}, {0, 1, (1 - fx) * fy}, {1, 1, fx * fy}} {
-			cx, cy := min(max(x0+int(c[0]), 0), f.gw-1), min(max(y0+int(c[1]), 0), f.gh-1)
-			if f.label[cy*f.gw+cx] == r {
-				sum += c[2] * value(cx, cy)
-				weight += c[2]
+		// Corners: x and y offsets, and weight
+		for _, corner := range [4][3]float64{{0, 0, (1 - fx) * (1 - fy)}, {1, 0, fx * (1 - fy)}, {0, 1, (1 - fx) * fy}, {1, 1, fx * fy}} {
+			cx, cy := min(max(x0+int(corner[0]), 0), f.width-1), min(max(y0+int(corner[1]), 0), f.height-1)
+			if f.region[cy*f.width+cx] == region {
+				sum += corner[2] * cellUplift(cx, cy)
+				weight += corner[2]
 			}
 		}
 		if weight == 0 {
-			return rates[r] * rampFloor
+			return rates[region] * rampFloor
 		}
 		return sum / weight
 	}
@@ -241,15 +258,15 @@ func (f *upliftField) sampler(rates []float64) func(geom.Vec2) float64 {
 
 // calibrated tells whether some terrain is calibrated.
 func (f *upliftField) calibrated() bool {
-	return slices.ContainsFunc(f.terrain, (*config.Terrain).Calibrated)
+	return slices.ContainsFunc(f.regionTerrain, (*config.Terrain).Calibrated)
 }
 
 // targets are the target heights of the regions (0 for uncalibrated ones).
 func (f *upliftField) targets() []float64 {
-	targets := make([]float64, len(f.terrain))
-	for r, t := range f.terrain {
+	targets := make([]float64, len(f.regionTerrain))
+	for region, t := range f.regionTerrain {
 		if t.Calibrated() {
-			targets[r] = t.Height
+			targets[region] = t.Height
 		}
 	}
 	return targets
@@ -257,22 +274,22 @@ func (f *upliftField) targets() []float64 {
 
 // summits measures the summit height of each region in a simulation: NaN
 // for regions too small to measure.
-func (f *upliftField) summits(s *simState) []float64 {
-	heights := make([][]float64, len(f.terrain))
-	for v, p := range s.m.Points {
-		if r := f.region(p); r >= 0 && s.active[v] {
-			heights[r] = append(heights[r], s.h[v])
+func (f *upliftField) summits(s *simulation) []float64 {
+	elevations := make([][]float64, len(f.regionTerrain))
+	for v, p := range s.mesh.Points {
+		if region := f.regionAt(p); region >= 0 && s.active[v] {
+			elevations[region] = append(elevations[region], s.elevation[v])
 		}
 	}
 
-	summits := make([]float64, len(f.terrain))
-	for r, hs := range heights {
-		if len(hs) < minRegionVertices {
-			summits[r] = math.NaN()
+	summits := make([]float64, len(f.regionTerrain))
+	for region, zs := range elevations {
+		if len(zs) < minRegionVertices {
+			summits[region] = math.NaN()
 			continue
 		}
-		slices.Sort(hs)
-		summits[r] = math.Max(1, hs[int(summitQuantile*float64(len(hs)-1))])
+		slices.Sort(zs)
+		summits[region] = math.Max(1, zs[int(summitQuantile*float64(len(zs)-1))])
 	}
 	return summits
 }
@@ -282,45 +299,50 @@ func (f *upliftField) summits(s *simState) []float64 {
 // land, or from a previous simulation. Each next iteration continues from
 // the previous one, for a third of the steps: the landscape is already
 // close to settled.
-func (w *World) calibrate(f *upliftField, rates, targets []float64, from *simState, erodibilityNoise func(geom.Vec2) float64,
-	run func(*simState, int, string), phase string) *simState {
-
-	s := from
-	for it := range calibrationIterations {
-		prev := s
-		s = w.newSimState(w.levels[0], f.sampler(rates), erodibilityNoise)
-		label := fmt.Sprintf("%s, coarse level (%d vertices): iteration %d", phase, len(s.m.Points), it+1)
-		if prev == nil {
-			s.startFlat(w.rng(streamNoise))
-			run(s, w.Conf.Simulation.Steps, label)
+func (r *simulator) calibrate(rates, targets []float64, from *simulation, phase string) *simulation {
+	sim := from
+	for iteration := range calibrationIterations {
+		previous := sim
+		sim = r.w.newSimulation(r.w.levels[0], r.field.sampler(rates), r.erodibilityNoise)
+		label := fmt.Sprintf("%s, coarse level (%d vertices): iteration %d", phase, len(sim.mesh.Points), iteration+1)
+		if previous == nil {
+			sim.startFlat(r.w.rng(streamNoise))
+			r.run(sim, r.params.Steps, label)
 		} else {
-			s.h = slices.Clone(prev.h)
-			run(s, max(1, w.Conf.Simulation.Steps/3), label)
+			sim.elevation = slices.Clone(previous.elevation)
+			r.run(sim, max(1, r.params.Steps/3), label)
 		}
 
-		worst := 0.0
-		factors := make([]float64, len(rates))
-		for r, summit := range f.summits(s) {
-			factors[r] = 1
-			if targets[r] <= 0 || math.IsNaN(summit) {
-				continue
-			}
-			factors[r] = math.Pow(geom.Clamp(targets[r]/summit, 1.0/3, 3), calibrationDamping)
-
-			// Regions at the uplift limits can't do better
-			if limited := (factors[r] > 1 && rates[r] >= maxUplift) || (factors[r] < 1 && rates[r] <= minUplift); !limited {
-				worst = math.Max(worst, math.Abs(summit/targets[r]-1))
-			}
-		}
-
-		slog.Debug("calibrating", "iteration", it, "regions", len(rates), "worst error", math.Round(worst*1000)/1000)
-		if worst < calibrationTolerance || it == calibrationIterations-1 {
+		factors, worst := corrections(r.field.summits(sim), rates, targets)
+		slog.Debug("calibrating", "iteration", iteration, "regions", len(rates), "worst error", math.Round(worst*1000)/1000)
+		if worst < calibrationTolerance || iteration == calibrationIterations-1 {
 			break
 		}
-		for r := range rates {
-			rates[r] = geom.Clamp(rates[r]*factors[r], minUplift, maxUplift)
+		for region := range rates {
+			rates[region] = geom.Clamp(rates[region]*factors[region], minUplift, maxUplift)
 		}
 	}
 
-	return s
+	return sim
+}
+
+// corrections returns the factors to scale each region's rate by to reach
+// its target from its measured summit (1 for those without target or
+// measure), and the worst relative error of the summits.
+func corrections(summits, rates, targets []float64) (factors []float64, worst float64) {
+	factors = make([]float64, len(rates))
+	for region, summit := range summits {
+		factors[region] = 1
+		if targets[region] <= 0 || math.IsNaN(summit) {
+			continue
+		}
+		factors[region] = math.Pow(geom.Clamp(targets[region]/summit, 1.0/3, 3), calibrationDamping)
+
+		// Regions at the uplift limits can't do better
+		limited := (factors[region] > 1 && rates[region] >= maxUplift) || (factors[region] < 1 && rates[region] <= minUplift)
+		if !limited {
+			worst = math.Max(worst, math.Abs(summit/targets[region]-1))
+		}
+	}
+	return factors, worst
 }
