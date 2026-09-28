@@ -24,7 +24,7 @@ example project, in `example/`.
 - macOS: unzip, and move `wgen.app` to Applications. The app isn't
   notarized by Apple: the first time, right click it and choose Open (or,
   on recent versions, allow it in System Settings, Privacy & Security).
-- Linux: extract, and run `wgen`. It needs OpenGL 3.3 and X11 (or XWayland).
+- Linux: extract, and run `wgen`. It needs OpenGL 3.3, and X11 or Wayland.
 
 ## Using the app
 
@@ -245,8 +245,9 @@ ImGui):
 - Windows: a 64 bits MinGW-w64 GCC on the `PATH`, such as
   [WinLibs](https://winlibs.com/).
 - macOS: the Xcode command line tools (`xcode-select --install`).
-- Linux: GCC and the X11 and OpenGL development packages. On Debian or
-  Ubuntu: `sudo apt install build-essential libgl1-mesa-dev xorg-dev`.
+- Linux: GCC and the X11, Wayland and OpenGL development packages. On Debian or
+  Ubuntu: `sudo apt install build-essential libgl1-mesa-dev xorg-dev
+  libwayland-dev libxkbcommon-dev`.
 
 ```sh
 go build -o bin/wgen ./cmd/wgen
