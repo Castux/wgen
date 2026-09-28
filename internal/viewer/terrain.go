@@ -184,7 +184,7 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 
 	vertices := make([]terrainVertex, len(mesh.Points))
 	for i, p := range mesh.Points {
-		z := w.Z[i]
+		z := w.Elevation[i]
 		if math.IsNaN(z) || math.IsInf(z, 0) {
 			z = 0
 		}
@@ -230,7 +230,7 @@ func (v *terrainView) resetCamera() {
 	v.orbit.reset(v.width, v.height)
 }
 
-// overlayScale is the overlay resolution, relative to the outline image:
+// overlayScale is the overlay resolution, relative to the map image:
 // detailed enough for close ups, within GPU limits.
 func (v *terrainView) overlayScale() float64 {
 	var maxSize int32

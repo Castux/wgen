@@ -68,7 +68,7 @@ func (w *World) newUpliftField() *upliftField {
 
 	terrainAt := w.landTerrainGrid(f)
 	f.findRegions(terrainAt)
-	radius := w.Conf.Simulation.UpliftBlur * 1000 / w.MetersPerPixel / cellSize // cells
+	radius := w.Config.Simulation.UpliftBlur * 1000 / w.MetersPerPixel / cellSize // cells
 	f.computeRamps(terrainAt, radius)
 	return f
 }
@@ -76,7 +76,7 @@ func (w *World) newUpliftField() *upliftField {
 // landTerrainGrid returns the land terrain at the center of each cell of the
 // field, nil for water.
 func (w *World) landTerrainGrid(f *upliftField) []*config.Terrain {
-	terrains := w.Conf.TerrainsByColor()
+	terrains := w.Config.TerrainsByColor()
 	terrainAt := make([]*config.Terrain, f.width*f.height)
 	for y := range f.height {
 		for x := range f.width {

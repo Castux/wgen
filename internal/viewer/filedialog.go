@@ -89,7 +89,7 @@ func (a *app) places() []place {
 			}
 		}
 	}
-	if path := a.session.ConfigPath(); path != "" {
+	if path := a.session.ProjectPath(); path != "" {
 		places = append(places, place{"Project", filepath.Dir(path)})
 	}
 	if runtime.GOOS == "windows" {

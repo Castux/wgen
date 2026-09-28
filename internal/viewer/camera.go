@@ -119,7 +119,7 @@ func (c *mapCamera) zoomAt(x, y, factor, viewWidth, viewHeight float64) {
 	c.zoom = zoom
 }
 
-// imageScale is the map image scale (relative to the outline image) worth
+// imageScale is the map image scale (relative to the map image) worth
 // rendering at the current zoom: a power of two, so that zooming doesn't
 // rerender all the time, and at most maxMapImageSize pixels wide.
 func (c *mapCamera) imageScale(pixelRatio float64) float64 {

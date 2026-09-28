@@ -254,13 +254,13 @@ func (n network) regionMeasures() measures {
 			continue
 		}
 		regionArea += cells[v]
-		if !math.IsNaN(w.Z[v]) {
-			m.maxZ = math.Max(m.maxZ, w.Z[v])
+		if !math.IsNaN(w.Elevation[v]) {
+			m.maxZ = math.Max(m.maxZ, w.Elevation[v])
 		}
 
 		peak := true
 		for _, u := range mesh.Neighbours[v] {
-			if !(w.Z[u] < w.Z[v]) {
+			if !(w.Elevation[u] < w.Elevation[v]) {
 				peak = false
 				break
 			}
@@ -293,9 +293,9 @@ func (n network) landTopDown() []int32 {
 	}
 	slices.SortFunc(order, func(a, b int32) int {
 		switch {
-		case w.Z[a] > w.Z[b]:
+		case w.Elevation[a] > w.Elevation[b]:
 			return -1
-		case w.Z[a] < w.Z[b]:
+		case w.Elevation[a] < w.Elevation[b]:
 			return 1
 		}
 		return 0
@@ -410,14 +410,14 @@ func slope(xs, ys []float64) float64 {
 // its target height, as markdown table rows.
 func heightTable(w *gen.World, name string) string {
 	var b strings.Builder
-	for _, t := range w.Conf.Terrains {
+	for _, t := range w.Config.Terrains {
 		if t.IsWater() {
 			continue
 		}
 		var zs []float64
 		for v, terrain := range w.Terrain {
-			if terrain == t && !math.IsNaN(w.Z[v]) {
-				zs = append(zs, w.Z[v])
+			if terrain == t && !math.IsNaN(w.Elevation[v]) {
+				zs = append(zs, w.Elevation[v])
 			}
 		}
 		if len(zs) == 0 {

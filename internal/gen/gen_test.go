@@ -125,7 +125,7 @@ func TestInvariants(t *testing.T) {
 		if !w.IsLand(v) {
 			continue
 		}
-		z := w.Z[v]
+		z := w.Elevation[v]
 		if math.IsNaN(z) || z < 0 {
 			t.Fatalf("land vertex %d at %v", v, z)
 		}
@@ -141,7 +141,7 @@ func TestInvariants(t *testing.T) {
 				break
 			}
 			// (Across lakes, rivers flow on the water, over their bed)
-			if w.Z[next] >= w.Z[u] && w.IsLand(u) && w.IsLand(next) {
+			if w.Elevation[next] >= w.Elevation[u] && w.IsLand(u) && w.IsLand(next) {
 				t.Fatalf("river from %d goes up from %d to %d", v, u, next)
 			}
 			if steps > len(m.Points) {
@@ -153,7 +153,7 @@ func TestInvariants(t *testing.T) {
 		// Hillslopes are at most at the critical slope (the last erosion step
 		// can make them a little steeper)
 		if next := w.Downhill[v]; next >= 0 && w.IsLand(next) {
-			slope := (z - w.Z[next]) / (m.Points[v].Dist(m.Points[next]) * w.MetersPerPixel)
+			slope := (z - w.Elevation[next]) / (m.Points[v].Dist(m.Points[next]) * w.MetersPerPixel)
 			if slope > critical*1.5 {
 				t.Errorf("slope %.2f from %d, critical %.2f", slope, v, critical)
 			}
@@ -164,12 +164,12 @@ func TestInvariants(t *testing.T) {
 	for v := range int32(len(m.Points)) {
 		switch {
 		case w.IsSea(v):
-			if w.WaterLevel[v] != 0 || w.Z[v] > 0 {
-				t.Fatalf("sea vertex %d: level %v, floor %v", v, w.WaterLevel[v], w.Z[v])
+			if w.WaterLevel[v] != 0 || w.Elevation[v] > 0 {
+				t.Fatalf("sea vertex %d: level %v, floor %v", v, w.WaterLevel[v], w.Elevation[v])
 			}
 		case w.IsLake(v):
-			if w.Z[v] > w.WaterLevel[v] || w.WaterLevel[v] <= 0 {
-				t.Fatalf("lake vertex %d: level %v, floor %v", v, w.WaterLevel[v], w.Z[v])
+			if w.Elevation[v] > w.WaterLevel[v] || w.WaterLevel[v] <= 0 {
+				t.Fatalf("lake vertex %d: level %v, floor %v", v, w.WaterLevel[v], w.Elevation[v])
 			}
 		}
 	}
@@ -195,7 +195,7 @@ func TestCalibration(t *testing.T) {
 		var zs []float64
 		for v, tv := range w.Terrain {
 			if tv != nil && tv.Name == terrain.Name {
-				zs = append(zs, w.Z[v])
+				zs = append(zs, w.Elevation[v])
 			}
 		}
 		slices.Sort(zs)
@@ -257,9 +257,9 @@ func TestIncremental(t *testing.T) {
 		patch string
 		stage Stage
 	}{
-		{`{"terrains": {"mountains": {"height": 2000}}}`, StageTerrain},
-		{`{"simulation": {"erodibility": 4e-6, "criticalSlope": 25}}`, StageTerrain},
-		{`{"mapWidth": 80}`, StageTerrain},
+		{`{"terrains": {"mountains": {"height": 2000}}}`, StageSimulation},
+		{`{"simulation": {"erodibility": 4e-6, "criticalSlope": 25}}`, StageSimulation},
+		{`{"mapWidth": 80}`, StageSimulation},
 		{`{"terrains": {"hills": {"detail": 1}}}`, StageMesh},
 		{`{"levels": 1}`, StageMesh},
 		{`{"seed": 3}`, StageMesh},
@@ -276,12 +276,12 @@ func TestIncremental(t *testing.T) {
 		}
 
 		full := generate(t, patched)
-		if !equalNaN(incremental.Z, full.Z) || !equalNaN(incremental.Heightmap, full.Heightmap) {
+		if !equalNaN(incremental.Elevation, full.Elevation) || !equalNaN(incremental.Heightmap, full.Heightmap) {
 			t.Errorf("%s: incremental update differs from full generation", tc.patch)
 		}
 	}
 
-	if !equalNaN(base.Z, generate(t, conf).Z) {
+	if !equalNaN(base.Elevation, generate(t, conf).Elevation) {
 		t.Error("updates modified the original world")
 	}
 }
@@ -289,10 +289,10 @@ func TestIncremental(t *testing.T) {
 func TestDeterministic(t *testing.T) {
 	conf := setup(t)
 	a, b := generate(t, conf), generate(t, conf)
-	if !equalNaN(a.Z, b.Z) {
+	if !equalNaN(a.Elevation, b.Elevation) {
 		t.Error("two runs differ")
 	}
-	if c := generate(t, patch(t, conf, `{"seed": 8}`)); len(c.Z) == len(a.Z) && equalNaN(c.Z, a.Z) {
+	if c := generate(t, patch(t, conf, `{"seed": 8}`)); len(c.Elevation) == len(a.Elevation) && equalNaN(c.Elevation, a.Elevation) {
 		t.Error("the seed changes nothing")
 	}
 }
@@ -320,7 +320,7 @@ func TestReloadImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !equalNaN(reloaded.Z, generate(t, conf).Z) {
+	if !equalNaN(reloaded.Elevation, generate(t, conf).Elevation) {
 		t.Error("reloaded image differs from a full generation")
 	}
 }
@@ -345,7 +345,7 @@ func TestMapEdge(t *testing.T) {
 
 	w := generate(t, patch(t, conf, `{"image": "edge.png"}`))
 	for v := range int32(len(w.Mesh.Points)) {
-		if w.IsLand(v) && math.IsNaN(w.Z[v]) {
+		if w.IsLand(v) && math.IsNaN(w.Elevation[v]) {
 			t.Fatalf("land vertex %d at %v has no elevation", v, w.Mesh.Points[v])
 		}
 	}
@@ -379,7 +379,7 @@ func TestPreviewCancel(t *testing.T) {
 		t.Fatalf("%d previews", len(previews))
 	}
 	p := previews[0]
-	if p.Mesh != full.levels[0] || len(p.Z) != len(p.Mesh.Points) || len(p.Heightmap) != p.Width*p.Height {
+	if p.Mesh != full.levels[0] || len(p.Elevation) != len(p.Mesh.Points) || len(p.Heightmap) != p.Width*p.Height {
 		t.Errorf("preview not of the coarse mesh")
 	}
 
@@ -411,7 +411,7 @@ func TestWatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !equalNaN(plain.Z, watched.Z) {
+	if !equalNaN(plain.Elevation, watched.Elevation) {
 		t.Error("watching changes the result")
 	}
 	if len(frames) < 10 {
@@ -428,35 +428,35 @@ func TestWatch(t *testing.T) {
 func TestRerun(t *testing.T) {
 	w := generate(t, setup(t))
 	again, stage, err := w.Rerun(Options{})
-	if err != nil || stage != StageTerrain || !equalNaN(w.Z, again.Z) {
+	if err != nil || stage != StageSimulation || !equalNaN(w.Elevation, again.Elevation) {
 		t.Errorf("rerun: stage %v, err %v", stage, err)
 	}
 }
 
 // A map given in memory gives the same world as from the file.
-func TestWithOutline(t *testing.T) {
+func TestWithMap(t *testing.T) {
 	conf := setup(t)
 	fromFile := generate(t, conf)
 
-	outline := slices.Clone(fromFile.Outline)
-	fromMemory, _, err := (&World{}).WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+	paintedMap := slices.Clone(fromFile.Map)
+	fromMemory, _, err := (&World{}).WithMap(conf, fromFile.Width, fromFile.Height, paintedMap, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !equalNaN(fromFile.Z, fromMemory.Z) {
+	if !equalNaN(fromFile.Elevation, fromMemory.Elevation) {
 		t.Error("map in memory differs from the file")
 	}
 
 	// Painting mountains in the sea
 	for i := range 200 {
-		outline[i*fromFile.Width+i/2] = config.Color{101, 72, 31}
+		paintedMap[i*fromFile.Width+i/2] = config.Color{101, 72, 31}
 	}
-	painted, _, err := fromFile.WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
+	painted, _, err := fromFile.WithMap(conf, fromFile.Width, fromFile.Height, paintedMap, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	full, _, _ := (&World{}).WithOutline(conf, fromFile.Width, fromFile.Height, outline, Options{})
-	if !equalNaN(painted.Z, full.Z) || equalNaN(painted.Z, fromFile.Z) {
+	full, _, _ := (&World{}).WithMap(conf, fromFile.Width, fromFile.Height, paintedMap, Options{})
+	if !equalNaN(painted.Elevation, full.Elevation) || equalNaN(painted.Elevation, fromFile.Elevation) {
 		t.Error("painted map not regenerated right")
 	}
 }

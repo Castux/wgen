@@ -70,7 +70,7 @@ func (w *World) rasterize() {
 	w.RasterizeTriangles(w.Width, w.Height, 1, func(t, x, y int, a, b, c float64) {
 		tri := triangles[t]
 		i := y*w.Width + x
-		heightmap[i] = a*w.Z[tri[0]] + b*w.Z[tri[1]] + c*w.Z[tri[2]]
+		heightmap[i] = a*w.Elevation[tri[0]] + b*w.Elevation[tri[1]] + c*w.Elevation[tri[2]]
 		water[i] = triangleWater[t]
 	})
 

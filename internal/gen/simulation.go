@@ -61,12 +61,12 @@ type simulator struct {
 // simulate runs the simulation on all levels, and sets the elevation and the
 // rivers of the final mesh.
 func (w *World) simulate() error {
-	w.MetersPerPixel = w.Conf.MetersPerPixel(w.Width)
+	w.MetersPerPixel = w.Config.MetersPerPixel(w.Width)
 	start := time.Now()
 
 	r := &simulator{
 		w:                w,
-		params:           w.Conf.Simulation,
+		params:           w.Config.Simulation,
 		erodibilityNoise: w.erodibilityNoise(),
 		snapshots:        map[*mesh.Mesh]*World{},
 	}
@@ -149,7 +149,7 @@ func (r *simulator) refine(coarse *simulation, rates []float64, pass string) *si
 	for k := 1; k < len(r.w.levels); k++ {
 		previous := sim
 		sim = r.w.newSimulation(r.w.levels[k], upliftAt, r.erodibilityNoise)
-		sim.transfer(previous, hash2(r.w.Conf.Seed, int64(k), 99))
+		sim.transfer(previous, hash2(r.w.Config.Seed, int64(k), 99))
 		r.run(sim, r.params.RefineSteps, fmt.Sprintf("%sRefining, level %d of %d (%d vertices)",
 			pass, k, len(r.w.levels)-1, len(sim.mesh.Points)))
 	}
@@ -195,9 +195,9 @@ func (r *simulator) snapshot(sim *simulation) *World {
 // vertices, their uplift rates (mm per year, from upliftAt) and
 // erodibility. The elevation is left to set.
 func (w *World) newSimulation(levelMesh *mesh.Mesh, upliftAt, erodibilityNoise func(geom.Vec2) float64) *simulation {
-	params := w.Conf.Simulation
+	params := w.Config.Simulation
 	n := len(levelMesh.Points)
-	terrains := w.Conf.TerrainsByColor()
+	terrains := w.Config.TerrainsByColor()
 	metersPerPixel := w.MetersPerPixel
 
 	s := &simulation{
@@ -245,7 +245,7 @@ func (w *World) newSimulation(levelMesh *mesh.Mesh, upliftAt, erodibilityNoise f
 // erodibilityNoise returns the erodibility multiplier at a position: rocks
 // are not all as hard.
 func (w *World) erodibilityNoise() func(geom.Vec2) float64 {
-	params := w.Conf.Simulation
+	params := w.Config.Simulation
 	if params.ErodibilityNoise == 0 {
 		return func(geom.Vec2) float64 { return 1 }
 	}
@@ -500,27 +500,16 @@ func (s *simulation) collapse(criticalSlope float64) {
 // simulation of its mesh.
 func (w *World) setSimulationResult(s *simulation) {
 	n := len(s.elevation)
-	w.Z = make([]float64, n)
+	w.Elevation = make([]float64, n)
 	w.Downhill = make([]int32, n)
-	w.Flow = make([]int32, n)
 	w.Drainage = make([]float64, n)
 
 	for v := range n {
-		w.Z[v] = s.elevation[v]
+		w.Elevation[v] = s.elevation[v]
 		w.Downhill[v] = -1
 		if r := s.receiver[v]; s.active[v] && r != int32(v) && (s.active[r] || s.baseLevel[r]) {
 			w.Downhill[v] = r
 		}
 		w.Drainage[v] = s.drainageArea[v] / (s.metersPerPixel * s.metersPerPixel)
-		if s.active[v] || s.baseLevel[v] {
-			w.Flow[v] = 1
-		}
-	}
-
-	for i := len(s.order) - 1; i >= 0; i-- {
-		v := s.order[i]
-		if r := s.receiver[v]; r != v {
-			w.Flow[r] += w.Flow[v]
-		}
 	}
 }

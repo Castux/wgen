@@ -19,9 +19,9 @@ import (
 // The stages of the pipeline, but for the meshes (meshes.go), the simulation
 // (simulation.go) and the rasterization (raster.go).
 
-// loadOutline loads the map image.
-func (w *World) loadOutline() error {
-	path := w.Conf.ImagePath()
+// loadMap loads the map image.
+func (w *World) loadMap() error {
+	path := w.Config.ImagePath()
 	f, err := os.Open(path)
 	if err != nil {
 		return fmt.Errorf("could not load the map: %w", err)
@@ -33,25 +33,25 @@ func (w *World) loadOutline() error {
 		return fmt.Errorf("could not load the map %s: %w", path, err)
 	}
 
-	w.Width, w.Height, w.Outline = Outline(img)
+	w.Width, w.Height, w.Map = MapColors(img)
 	return nil
 }
 
-// Outline converts an image to a map: its colors, bottom row first.
-func Outline(img image.Image) (width, height int, outline []config.Color) {
+// MapColors converts an image to a map: its colors, bottom row first.
+func MapColors(img image.Image) (width, height int, colors []config.Color) {
 	b := img.Bounds()
 	width, height = b.Dx(), b.Dy()
-	outline = make([]config.Color, width*height)
+	colors = make([]config.Color, width*height)
 
 	// Flip vertically: world y goes up
 	for y := range height {
 		row := height - 1 - y
 		for x := range width {
 			c := color.NRGBAModel.Convert(img.At(b.Min.X+x, b.Min.Y+y)).(color.NRGBA)
-			outline[row*width+x] = config.Color{c.R, c.G, c.B}
+			colors[row*width+x] = config.Color{c.R, c.G, c.B}
 		}
 	}
-	return width, height, outline
+	return width, height, colors
 }
 
 // assignTerrains gives each vertex the terrain of its pixel, and finds the
@@ -62,7 +62,7 @@ func (w *World) assignTerrains() error {
 	w.Shore = make([]bool, numVertices)
 	w.Shores = nil
 
-	terrains := w.Conf.TerrainsByColor()
+	terrains := w.Config.TerrainsByColor()
 	badPixels := map[config.Color]int{}
 
 	for v, p := range w.Mesh.Points {
@@ -103,7 +103,7 @@ func (w *World) assignTerrains() error {
 // Their floors go down from their shores, with the floor slope.
 func (w *World) computeWaterDepth() {
 	level := w.waterLevels()
-	w.Z = w.waterFloors(level)
+	w.Elevation = w.waterFloors(level)
 	w.WaterLevel = level
 }
 
@@ -123,8 +123,8 @@ func (w *World) waterLevels() []float64 {
 		lakeLevel := math.Inf(1)
 		for i := 0; i < len(lake); i++ {
 			v := lake[i]
-			if w.Shore[v] && !math.IsNaN(w.Z[v]) {
-				lakeLevel = math.Min(lakeLevel, w.Z[v])
+			if w.Shore[v] && !math.IsNaN(w.Elevation[v]) {
+				lakeLevel = math.Min(lakeLevel, w.Elevation[v])
 			}
 			for _, n := range m.Neighbours[v] {
 				if w.IsLake(n) && !visited[n] {
@@ -153,8 +153,8 @@ func (w *World) waterLevels() []float64 {
 // from the shores down, the highest first.
 func (w *World) waterFloors(level []float64) []float64 {
 	m := w.Mesh
-	elevation := slices.Clone(w.Z)
-	floorSlope := w.Conf.Simulation.FloorSlope * w.MetersPerPixel // meters per pixel
+	elevation := slices.Clone(w.Elevation)
+	floorSlope := w.Config.Simulation.FloorSlope * w.MetersPerPixel // meters per pixel
 
 	for v := range int32(len(m.Points)) {
 		if w.IsWater(v) {
@@ -203,7 +203,7 @@ func (w *World) computeElevationRange() {
 	w.Lowest = math.Inf(1)
 	w.Highest = math.Inf(-1)
 
-	for v, z := range w.Z {
+	for v, z := range w.Elevation {
 		if w.Terrain[v] == nil || math.IsNaN(z) {
 			continue
 		}

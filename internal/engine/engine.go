@@ -44,9 +44,9 @@ type Engine struct {
 	subscribers map[chan State]struct{}
 }
 
-// Outline is a map given in memory rather than by the image file: pixel
+// Map is a map given in memory rather than by the image file: pixel
 // colors, bottom row first.
-type Outline struct {
+type Map struct {
 	Width, Height int
 	Pixels        []config.Color
 }
@@ -66,15 +66,15 @@ type State struct {
 // request is what is asked of the engine: the requests that arrived since
 // the last generation started, merged.
 type request struct {
-	conf    *config.Config // a new config
-	image   bool           // reload the image file
-	outline *Outline       // a map in memory
-	rerun   bool           // generate again, to watch the simulation
-	fresh   bool           // don't start from the current world: another project
+	conf       *config.Config // a new config
+	image      bool           // reload the image file
+	paintedMap *Map           // a map in memory
+	rerun      bool           // generate again, to watch the simulation
+	fresh      bool           // don't start from the current world: another project
 }
 
 func (r request) empty() bool {
-	return r.conf == nil && !r.image && r.outline == nil && !r.rerun && !r.fresh
+	return r.conf == nil && !r.image && r.paintedMap == nil && !r.rerun && !r.fresh
 }
 
 func NewEngine() *Engine {
@@ -134,11 +134,11 @@ func (e *Engine) ReloadImage() {
 	e.signal()
 }
 
-// SetOutline requests a generation with a map given in memory, which
+// SetMap requests a generation with a map given in memory, which
 // replaces the image file's (until the file is reloaded).
-func (e *Engine) SetOutline(outline *Outline) {
+func (e *Engine) SetMap(paintedMap *Map) {
 	e.mu.Lock()
-	e.pending.outline = outline
+	e.pending.paintedMap = paintedMap
 	e.pending.image = false
 	e.mu.Unlock()
 	e.signal()
@@ -146,21 +146,21 @@ func (e *Engine) SetOutline(outline *Outline) {
 
 // Replace requests generating another project from scratch: a config, and
 // its map in memory (nil: its image file). The config is unsaved until
-// MarkSaved.
-func (e *Engine) Replace(conf *config.Config, outline *Outline) {
+// MarkClean.
+func (e *Engine) Replace(conf *config.Config, paintedMap *Map) {
 	e.mu.Lock()
 	e.conf = conf
-	e.pending = request{conf: conf, outline: outline, fresh: true}
+	e.pending = request{conf: conf, paintedMap: paintedMap, fresh: true}
 	e.dirty = true
 	e.err = nil
 	e.mu.Unlock()
 	e.signal()
 }
 
-// SetSaved records that the project was saved: to conf's file, with the
+// SavedAs records that the project was saved: to conf's file, with the
 // current map in conf's image file. Nothing is regenerated for the new
 // paths.
-func (e *Engine) SetSaved(conf *config.Config) {
+func (e *Engine) SavedAs(conf *config.Config) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.savedImage = conf.ImagePath()
@@ -182,17 +182,17 @@ func rebaseConfig(c, paths *config.Config) *config.Config {
 		return nil
 	}
 	rebased := c.Clone()
-	rebased.ConfigPath, rebased.Image = paths.ConfigPath, paths.Image
+	rebased.Path, rebased.Image = paths.Path, paths.Image
 	return rebased
 }
 
 // rebase returns a world whose config has the paths of another.
 func rebase(w *gen.World, paths *config.Config) *gen.World {
-	if w == nil || w.Conf == nil {
+	if w == nil || w.Config == nil {
 		return w
 	}
 	rebased := *w
-	rebased.Conf = rebaseConfig(w.Conf, paths)
+	rebased.Config = rebaseConfig(w.Config, paths)
 	return &rebased
 }
 
@@ -222,8 +222,8 @@ func (e *Engine) SetError(err error) {
 	e.mu.Unlock()
 }
 
-// MarkSaved records that the current config was written to its file.
-func (e *Engine) MarkSaved() {
+// MarkClean records that the current config was written to its file.
+func (e *Engine) MarkClean() {
 	e.mu.Lock()
 	e.dirty = false
 	e.publishLocked("")
@@ -278,7 +278,7 @@ func (e *Engine) takeRequest() (job, bool) {
 		j.base = nil
 	}
 	// Moved to where the map was saved: the same map
-	if j.base != nil && j.latest != nil && j.base.Conf.ImagePath() != j.latest.ImagePath() && j.latest.ImagePath() == e.savedImage {
+	if j.base != nil && j.latest != nil && j.base.Config.ImagePath() != j.latest.ImagePath() && j.latest.ImagePath() == e.savedImage {
 		j.base = rebase(j.base, j.latest)
 	}
 
@@ -338,12 +338,12 @@ func (j job) generate(options gen.Options) (next *gen.World, stage gen.Stage, er
 	case j.latest == nil:
 		err = errors.New("no config loaded")
 
-	case j.outline != nil:
+	case j.paintedMap != nil:
 		base := j.base
 		if base == nil {
 			base = &gen.World{}
 		}
-		next, stage, err = base.WithOutline(j.latest, j.outline.Width, j.outline.Height, j.outline.Pixels, options)
+		next, stage, err = base.WithMap(j.latest, j.paintedMap.Width, j.paintedMap.Height, j.paintedMap.Pixels, options)
 
 	case j.rerun && j.conf == nil && !j.image && j.base != nil:
 		next, stage, err = j.base.Rerun(options)
@@ -377,8 +377,8 @@ func (e *Engine) finish(done request, next *gen.World, stage gen.Stage, err erro
 		if e.pending.conf == nil {
 			e.pending.conf = done.conf
 		}
-		if e.pending.outline == nil {
-			e.pending.outline = done.outline
+		if e.pending.paintedMap == nil {
+			e.pending.paintedMap = done.paintedMap
 		}
 		e.pending.image = e.pending.image || done.image
 		// Any other request generates again anyway

@@ -89,10 +89,10 @@ func (h *harness) waitFor(f func(State) bool) State {
 	}
 }
 
-// outline returns the map of the displayed world.
-func (h *harness) outline() *Outline {
+// paintedMap returns the map of the displayed world.
+func (h *harness) paintedMap() *Map {
 	w, _ := h.s.Engine.Snapshot()
-	return &Outline{Width: w.Width, Height: w.Height, Pixels: slices.Clone(w.Outline)}
+	return &Map{Width: w.Width, Height: w.Height, Pixels: slices.Clone(w.Map)}
 }
 
 func TestPatchSaveExport(t *testing.T) {
@@ -116,7 +116,7 @@ func TestPatchSaveExport(t *testing.T) {
 
 	// Save writes the files, which the watcher ignores: nothing regenerated
 	v1 := st.Version
-	if _, err := h.s.Save(h.outline()); err != nil {
+	if _, err := h.s.Save(h.paintedMap()); err != nil {
 		t.Fatal(err)
 	}
 	saved, _ := os.ReadFile("config.json")
@@ -168,13 +168,13 @@ func TestHotReload(t *testing.T) {
 	}
 }
 
-func TestOutline(t *testing.T) {
+func TestPaintedMap(t *testing.T) {
 	h := setup(t)
 	world, _ := h.s.Engine.Snapshot()
 	v0 := h.s.Engine.State().Version
 
 	// Paint the island away: all sea but a corner
-	o := h.outline()
+	o := h.paintedMap()
 	sea, land := o.Pixels[0], o.Pixels[40*o.Width+50]
 	for i := range o.Pixels {
 		o.Pixels[i] = sea
@@ -185,10 +185,10 @@ func TestOutline(t *testing.T) {
 		}
 	}
 
-	h.s.SetOutline(o)
+	h.s.SetMap(o)
 	h.waitFor(func(st State) bool { return st.Version > v0 && !st.Busy })
 	painted, v1 := h.s.Engine.Snapshot()
-	if painted.Outline[40*o.Width+50] != sea {
+	if painted.Map[40*o.Width+50] != sea {
 		t.Errorf("painted map not generated")
 	}
 
@@ -226,7 +226,7 @@ func TestNewSaveAs(t *testing.T) {
 		t.Fatal(err)
 	}
 	sea, land := conf.Terrain("sea").Color, conf.Terrain("land").Color
-	o := &Outline{Width: 64, Height: 64, Pixels: make([]config.Color, 64*64)}
+	o := &Map{Width: 64, Height: 64, Pixels: make([]config.Color, 64*64)}
 	for i := range o.Pixels {
 		o.Pixels[i] = sea
 		if x, y := i%64, i/64; math.Hypot(float64(x-32), float64(y-32)) < 20 {
@@ -236,8 +236,8 @@ func TestNewSaveAs(t *testing.T) {
 
 	s.New(conf, o)
 	st := h.waitFor(func(st State) bool { return st.Ready && !st.Busy })
-	if !st.Dirty || s.ConfigPath() != "" || st.Error != "" {
-		t.Errorf("new project: %+v, path %q", st, s.ConfigPath())
+	if !st.Dirty || s.ProjectPath() != "" || st.Error != "" {
+		t.Errorf("new project: %+v, path %q", st, s.ProjectPath())
 	}
 	if _, err := s.Save(o); err == nil {
 		t.Error("saved a project without a file")
@@ -247,8 +247,8 @@ func TestNewSaveAs(t *testing.T) {
 	if err := s.SaveAs(path, o); err != nil {
 		t.Fatal(err)
 	}
-	if s.ConfigPath() != path+".json" {
-		t.Errorf("project path %q", s.ConfigPath())
+	if s.ProjectPath() != path+".json" {
+		t.Errorf("project path %q", s.ProjectPath())
 	}
 	loaded, _, err := config.Load(path + ".json")
 	if err != nil || loaded.Image != "new.png" {
@@ -299,7 +299,7 @@ func TestPreviewAndSupersede(t *testing.T) {
 	h.waitFor(func(st State) bool {
 		previewed = previewed || st.Preview
 		world, _ := h.s.Engine.Snapshot()
-		return !st.Busy && !st.Preview && world.Conf.Terrain("land").Height == 2000
+		return !st.Busy && !st.Preview && world.Config.Terrain("land").Height == 2000
 	})
 	if !previewed {
 		t.Error("no preview shown")

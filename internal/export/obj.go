@@ -21,7 +21,7 @@ func OBJ(w *gen.World, path string) error {
 		}
 
 		for v, p := range mesh.Points {
-			z := w.Z[v]
+			z := w.Elevation[v]
 			if math.IsNaN(z) || math.IsInf(z, 0) {
 				z = 0
 			}

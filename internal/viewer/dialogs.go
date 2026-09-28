@@ -135,7 +135,7 @@ var textureScales = []float64{0.5, 1, 2, 4}
 func (a *app) openExport() {
 	d := &a.dialogs.export
 	d.opening = true
-	if path := a.session.ConfigPath(); path != "" {
+	if path := a.session.ProjectPath(); path != "" {
 		if abs, err := filepath.Abs(path); err == nil {
 			path = abs
 		}

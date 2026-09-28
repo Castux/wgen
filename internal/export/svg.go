@@ -39,7 +39,7 @@ func SVG(w *gen.World, path string) error {
 
 		// River widths grow like the square root of the drainage, in vertices
 		// of the finest mesh (hexagonal cells, the resolution apart)
-		resolution := w.Conf.Resolution
+		resolution := w.Config.Resolution
 		vertexArea := resolution * resolution * math.Sqrt(3) / 2
 		for v, d := range w.Downhill {
 			if d < 0 {
@@ -61,7 +61,7 @@ func SVG(w *gen.World, path string) error {
 // when deeper, and from green to white on land.
 func cellColor(w *gen.World, v int) string {
 	terrain := w.Terrain[v]
-	z := w.Z[v]
+	z := w.Elevation[v]
 	lerp := geom.Lerp
 
 	switch {

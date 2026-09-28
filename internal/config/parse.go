@@ -21,7 +21,7 @@ func Load(path string) (conf *Config, warnings []string, err error) {
 	}
 	conf, warnings, err = Parse(data)
 	if conf != nil {
-		conf.ConfigPath = path
+		conf.Path = path
 	}
 	return conf, warnings, err
 }

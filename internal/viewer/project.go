@@ -59,7 +59,7 @@ func (a *app) unsaved() bool {
 
 // projectName is the name of the project, for the window title.
 func (a *app) projectName() string {
-	if path := a.session.ConfigPath(); path != "" {
+	if path := a.session.ProjectPath(); path != "" {
 		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
 	return "Untitled"
@@ -100,7 +100,7 @@ func (a *app) newProject(width, height int, mapWidth float64, island, keepTerrai
 // yet. suggested is where to save it, by default.
 func (a *app) startProject(conf *config.Config, c *canvas, suggested string) {
 	a.setCanvas(c, true)
-	a.session.New(conf, a.canvasOutline())
+	a.session.New(conf, a.canvasMap())
 	a.suggestedPath = suggested
 	a.projectChanged()
 }
@@ -159,7 +159,7 @@ func (a *app) importImage(path string) {
 		a.message = &message{text: fmt.Sprintf("could not read %s: %v", filepath.Base(path), err), error: true}
 		return
 	}
-	width, height, pixels := gen.Outline(img)
+	width, height, pixels := gen.MapColors(img)
 	a.openImport(path, width, height, pixels)
 }
 
@@ -175,11 +175,11 @@ func (a *app) rememberProject(path string) {
 // saveProject saves the project, then does then (if not nil). A new
 // project is saved as.
 func (a *app) saveProject(then func()) {
-	if a.session.ConfigPath() == "" {
+	if a.session.ProjectPath() == "" {
 		a.saveProjectAs(then)
 		return
 	}
-	path, err := a.session.Save(a.canvasOutline())
+	path, err := a.session.Save(a.canvasMap())
 	if err != nil {
 		a.message = &message{text: err.Error(), error: true}
 		return
@@ -193,18 +193,18 @@ func (a *app) saveProject(then func()) {
 // saveProjectAs asks where to save the project, and saves it there.
 func (a *app) saveProjectAs(then func()) {
 	dir, name := "", "map"+projectExt
-	switch path := a.session.ConfigPath(); {
+	switch path := a.session.ProjectPath(); {
 	case path != "":
 		dir, name = filepath.Dir(path), filepath.Base(path)
 	case a.suggestedPath != "":
 		dir, name = filepath.Dir(a.suggestedPath), filepath.Base(a.suggestedPath)
 	}
 	a.openFile("Save the project as", dir, name, true, projectExts, func(path string) {
-		if err := a.session.SaveAs(path, a.canvasOutline()); err != nil {
+		if err := a.session.SaveAs(path, a.canvasMap()); err != nil {
 			a.message = &message{text: err.Error(), error: true}
 			return
 		}
-		a.saved(a.session.ConfigPath())
+		a.saved(a.session.ProjectPath())
 		if then != nil {
 			then()
 		}
@@ -222,7 +222,7 @@ func (a *app) saved(path string) {
 func (a *app) openDialog() {
 	a.unsavedThen("open another map", func() {
 		dir := ""
-		if path := a.session.ConfigPath(); path != "" {
+		if path := a.session.ProjectPath(); path != "" {
 			dir = filepath.Dir(path)
 		} else if path := a.settings.LastProject; path != "" {
 			dir = filepath.Dir(path)

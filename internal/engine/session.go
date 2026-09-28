@@ -26,10 +26,10 @@ type Session struct {
 
 	watcher *Watcher
 
-	mu         sync.Mutex
-	configPath string              // watched, "" if not saved yet
-	imagePath  string              // watched
-	written    map[string][32]byte // hash of what the session wrote last, per file
+	mu          sync.Mutex
+	projectPath string              // watched, "" if not saved yet
+	imagePath   string              // watched
+	written     map[string][32]byte // hash of what the session wrote last, per file
 }
 
 var errNoConfig = errors.New("no project loaded")
@@ -46,12 +46,12 @@ func NewSession() (*Session, error) {
 // Open returns a session with a project file loaded. A broken project file
 // is not an error: it is reported in the engine state, and loaded again
 // when fixed.
-func Open(configPath string) (*Session, error) {
+func Open(projectPath string) (*Session, error) {
 	s, err := NewSession()
 	if err != nil {
 		return nil, err
 	}
-	if err := s.Load(configPath); err != nil {
+	if err := s.Load(projectPath); err != nil {
 		s.Close()
 		return nil, err
 	}
@@ -61,36 +61,36 @@ func Open(configPath string) (*Session, error) {
 // Close stops watching the files.
 func (s *Session) Close() error { return s.watcher.Close() }
 
-// ConfigPath is the path of the project file, "" if not saved yet.
-func (s *Session) ConfigPath() string {
+// ProjectPath is the path of the project file, "" if not saved yet.
+func (s *Session) ProjectPath() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.configPath
+	return s.projectPath
 }
 
 // Load switches to a project file, and generates it.
-func (s *Session) Load(configPath string) error {
-	if _, err := os.Stat(configPath); err != nil {
+func (s *Session) Load(projectPath string) error {
+	if _, err := os.Stat(projectPath); err != nil {
 		return err
 	}
-	s.watchConfig(configPath)
+	s.watchConfig(projectPath)
 	s.loadConfig(true)
 	return nil
 }
 
 // New switches to a new project, not saved yet: a config and its map.
-func (s *Session) New(conf *config.Config, outline *Outline) {
+func (s *Session) New(conf *config.Config, paintedMap *Map) {
 	conf = conf.Clone()
-	conf.ConfigPath = ""
+	conf.Path = ""
 	s.watchConfig("")
 	s.watchImage("")
-	s.Engine.Replace(conf, outline)
+	s.Engine.Replace(conf, paintedMap)
 }
 
 func (s *Session) watchConfig(path string) {
 	s.mu.Lock()
-	old := s.configPath
-	s.configPath = path
+	old := s.projectPath
+	s.projectPath = path
 	s.mu.Unlock()
 
 	if old != "" && old != path {
@@ -111,7 +111,7 @@ func (s *Session) watchConfig(path string) {
 // kept and the error reported in the engine state. fresh starts from
 // nothing: another project was shown.
 func (s *Session) loadConfig(fresh bool) {
-	path := s.ConfigPath()
+	path := s.ProjectPath()
 	if path == "" {
 		return
 	}
@@ -129,7 +129,7 @@ func (s *Session) loadConfig(fresh bool) {
 	s.watchImage(conf.ImagePath())
 	if fresh {
 		s.Engine.Replace(conf, nil)
-		s.Engine.MarkSaved()
+		s.Engine.MarkClean()
 	} else {
 		s.Engine.SetConfig(conf, true)
 	}
@@ -205,67 +205,67 @@ func (s *Session) SetConfig(conf *config.Config) error {
 	if err := conf.Validate(); err != nil {
 		return err
 	}
-	if s.ConfigPath() != "" {
+	if s.ProjectPath() != "" {
 		s.watchImage(conf.ImagePath())
 	}
 	s.Engine.SetConfig(conf, false)
 	return nil
 }
 
-// SetOutline regenerates with a map given in memory (the editor's), instead
+// SetMap regenerates with a map given in memory (the editor's), instead
 // of the image file.
-func (s *Session) SetOutline(outline *Outline) {
-	s.Engine.SetOutline(outline)
+func (s *Session) SetMap(paintedMap *Map) {
+	s.Engine.SetMap(paintedMap)
 }
 
 // Save writes the project file and its map image, and returns the project
 // file path. The project must have a file already (see SaveAs).
-func (s *Session) Save(outline *Outline) (string, error) {
-	path := s.ConfigPath()
+func (s *Session) Save(paintedMap *Map) (string, error) {
+	path := s.ProjectPath()
 	if path == "" {
 		return "", errors.New("the project has no file yet: save it as")
 	}
-	return path, s.SaveAs(path, outline)
+	return path, s.SaveAs(path, paintedMap)
 }
 
 // SaveAs writes the project to a file, and its map image next to it (keeping
 // its name, or <project>.png for new projects), and makes it the project's
 // file.
-func (s *Session) SaveAs(configPath string, outline *Outline) error {
+func (s *Session) SaveAs(projectPath string, paintedMap *Map) error {
 	conf := s.Engine.Config()
 	if conf == nil {
 		return errNoConfig
 	}
 	conf = conf.Clone()
 
-	if !strings.EqualFold(filepath.Ext(configPath), ".json") {
-		configPath += ".json"
+	if !strings.EqualFold(filepath.Ext(projectPath), ".json") {
+		projectPath += ".json"
 	}
-	if conf.Image == "" || s.ConfigPath() != configPath {
-		conf.Image = strings.TrimSuffix(filepath.Base(configPath), filepath.Ext(configPath)) + ".png"
+	if conf.Image == "" || s.ProjectPath() != projectPath {
+		conf.Image = strings.TrimSuffix(filepath.Base(projectPath), filepath.Ext(projectPath)) + ".png"
 	}
-	conf.ConfigPath = configPath
+	conf.Path = projectPath
 
-	data, err := EncodeOutline(outline)
+	data, err := EncodeMap(paintedMap)
 	if err != nil {
 		return err
 	}
 	if err := s.write(conf.ImagePath(), data); err != nil {
 		return err
 	}
-	if err := s.write(configPath, conf.Marshal()); err != nil {
+	if err := s.write(projectPath, conf.Marshal()); err != nil {
 		return err
 	}
 
-	s.watchConfig(configPath)
+	s.watchConfig(projectPath)
 	s.watchImage(conf.ImagePath())
-	s.Engine.SetSaved(conf)
-	slog.Info("saved project", "path", configPath, "image", conf.ImagePath())
+	s.Engine.SavedAs(conf)
+	slog.Info("saved project", "path", projectPath, "image", conf.ImagePath())
 	return nil
 }
 
-// EncodeOutline encodes a map as a PNG image.
-func EncodeOutline(o *Outline) ([]byte, error) {
+// EncodeMap encodes a map as a PNG image.
+func EncodeMap(o *Map) ([]byte, error) {
 	if o == nil || len(o.Pixels) != o.Width*o.Height {
 		return nil, fmt.Errorf("no map to save")
 	}

@@ -28,11 +28,11 @@ type editor struct {
 // canvas has unsaved changes.
 func (a *app) syncCanvas(w *gen.World) {
 	ed := &a.editor
-	ours := len(ed.sent) > 0 && len(w.Outline) > 0 && &ed.sent[0] == &w.Outline[0]
+	ours := len(ed.sent) > 0 && len(w.Map) > 0 && &ed.sent[0] == &w.Map[0]
 	if ed.canvas != nil && (ours || ed.dirty || ed.canvas.stroke != nil) {
 		return
 	}
-	ed.canvas = newCanvas(w.Width, w.Height, w.Outline)
+	ed.canvas = newCanvas(w.Width, w.Height, w.Map)
 	ed.stale = true
 }
 
@@ -51,7 +51,7 @@ func (a *app) sendCanvas() {
 		return // not loaded yet
 	}
 	a.editor.sent = slices.Clone(c.pixels)
-	a.session.SetOutline(&engine.Outline{Width: c.width, Height: c.height, Pixels: a.editor.sent})
+	a.session.SetMap(&engine.Map{Width: c.width, Height: c.height, Pixels: a.editor.sent})
 }
 
 // recolorCanvas replaces a color in the edited map, a terrain's that
@@ -67,13 +67,13 @@ func (a *app) recolorCanvas(from, to config.Color) bool {
 	return true
 }
 
-// canvasOutline is the edited map, for saving.
-func (a *app) canvasOutline() *engine.Outline {
+// canvasMap is the edited map, for saving.
+func (a *app) canvasMap() *engine.Map {
 	c := a.editor.canvas
 	if c == nil {
 		return nil
 	}
-	return &engine.Outline{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)}
+	return &engine.Map{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)}
 }
 
 // updatePaintTexture uploads the edited map to the map view.

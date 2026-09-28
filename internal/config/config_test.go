@@ -137,11 +137,11 @@ func TestDefaultAndPaths(t *testing.T) {
 	}
 
 	// The image is relative to the project file
-	c.ConfigPath = filepath.Join("some", "dir", "map.json")
+	c.Path = filepath.Join("some", "dir", "map.json")
 	if got := c.ImagePath(); got != filepath.Join("some", "dir", "new.png") {
 		t.Errorf("image path %q", got)
 	}
-	c.ConfigPath = ""
+	c.Path = ""
 	if c.ImagePath() != "new.png" {
 		t.Error("image path without a project file")
 	}

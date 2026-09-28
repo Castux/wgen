@@ -18,7 +18,7 @@ import (
 // levelSpacing is the mesh spacing of a level, in pixels. The last level has
 // the configured resolution.
 func (w *World) levelSpacing(level int) float64 {
-	return w.Conf.Resolution * math.Pow(2, float64(w.Conf.Levels-level))
+	return w.Config.Resolution * math.Pow(2, float64(w.Config.Levels-level))
 }
 
 // detailAt is the number of refinement levels wanted at a position.
@@ -35,7 +35,7 @@ func (w *World) detailAt(p geom.Vec2, terrains map[config.Color]*config.Terrain)
 	case terrain.IsWater():
 		return 0
 	}
-	return w.Conf.Levels
+	return w.Config.Levels
 }
 
 // maxDetailAround is the highest detail within radius of p (sampled), so
@@ -60,7 +60,7 @@ type meshPoint struct {
 func (w *World) generateMeshes() error {
 	points := w.meshPoints()
 
-	w.levels = make([]*mesh.Mesh, w.Conf.Levels+1)
+	w.levels = make([]*mesh.Mesh, w.Config.Levels+1)
 	for k := range w.levels {
 		var positions []geom.Vec2
 		for _, p := range points {
@@ -85,12 +85,12 @@ func (w *World) generateMeshes() error {
 // and kept at the finer levels. It is jittered once, when added, so that it
 // is at the same position at every level.
 func (w *World) meshPoints() []meshPoint {
-	terrains := w.Conf.TerrainsByColor()
+	terrains := w.Config.TerrainsByColor()
 	margin := w.margin()
 	seed := w.rng(streamMesh).Uint64()
 
 	var points []meshPoint
-	for k := 0; k <= w.Conf.Levels; k++ {
+	for k := 0; k <= w.Config.Levels; k++ {
 		spacing := w.levelSpacing(k)
 		rowSpacing := spacing * math.Sqrt(3) / 2
 		jitter := 0.35 * spacing

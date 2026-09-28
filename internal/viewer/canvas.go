@@ -11,7 +11,7 @@ import (
 )
 
 // canvas is the map being edited: a terrain color per pixel, bottom row
-// first (as gen.World.Outline). Positions are in image coordinates: x to the
+// first (as gen.World.Map). Positions are in image coordinates: x to the
 // right, rows from the top.
 type canvas struct {
 	width, height int

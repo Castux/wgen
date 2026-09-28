@@ -35,7 +35,7 @@ import (
 type Config struct {
 	// Path of the project file, not serialized. Empty for a project not saved
 	// yet.
-	ConfigPath string `json:"-"`
+	Path string `json:"-"`
 
 	Image      string  `json:"image"`      // map image, relative to the project file
 	MapWidth   float64 `json:"mapWidth"`   // km
@@ -89,10 +89,10 @@ func Default(image string) *Config {
 
 // ImagePath is the path of the map image: relative to the project file.
 func (c *Config) ImagePath() string {
-	if c.ConfigPath == "" || filepath.IsAbs(c.Image) {
+	if c.Path == "" || filepath.IsAbs(c.Image) {
 		return c.Image
 	}
-	return filepath.Join(filepath.Dir(c.ConfigPath), c.Image)
+	return filepath.Join(filepath.Dir(c.Path), c.Image)
 }
 
 // Validate checks the values, and reports all the invalid ones.
