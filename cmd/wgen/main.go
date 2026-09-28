@@ -117,25 +117,12 @@ func exportProject(path, list string, normalized bool, output string) error {
 		return err
 	}
 
-	o := export.Options{Normalized: normalized}
-	for _, name := range strings.Split(list, ",") {
-		switch strings.TrimSpace(name) {
-		case "heightmap":
-			o.Heightmap = true
-		case "water":
-			o.WaterMask = true
-		case "texture":
-			o.Texture = true
-		case "obj":
-			o.OBJ = true
-		case "svg":
-			o.SVG = true
-		default:
-			return fmt.Errorf("unknown export %q (expected heightmap, water, texture, obj, svg)", name)
-		}
+	options, err := exportOptions(list, normalized)
+	if err != nil {
+		return err
 	}
 
-	w, err := gen.New(conf)
+	world, err := gen.New(conf)
 	if err != nil {
 		return err
 	}
@@ -143,9 +130,31 @@ func exportProject(path, list string, normalized bool, output string) error {
 	if output == "" {
 		output = strings.TrimSuffix(path, filepath.Ext(path))
 	}
-	files, err := export.All(w, output, o)
-	for _, f := range files {
-		fmt.Println(f)
+	files, err := export.All(world, output, options)
+	for _, file := range files {
+		fmt.Println(file)
 	}
 	return err
+}
+
+// exportOptions reads the -export list.
+func exportOptions(list string, normalized bool) (export.Options, error) {
+	options := export.Options{Normalized: normalized}
+	for _, name := range strings.Split(list, ",") {
+		switch strings.TrimSpace(name) {
+		case "heightmap":
+			options.Heightmap = true
+		case "water":
+			options.WaterMask = true
+		case "texture":
+			options.Texture = true
+		case "obj":
+			options.OBJ = true
+		case "svg":
+			options.SVG = true
+		default:
+			return options, fmt.Errorf("unknown export %q (expected heightmap, water, texture, obj, svg)", name)
+		}
+	}
+	return options, nil
 }

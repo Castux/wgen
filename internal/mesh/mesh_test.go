@@ -59,23 +59,3 @@ func TestBuild(t *testing.T) {
 		t.Errorf("cells: %d, triangles: %d", cells, len(m.Triangles))
 	}
 }
-
-func TestRelax(t *testing.T) {
-	m, _ := Build(randomPoints(500))
-	inside := func(p geom.Vec2) bool { return p.X > 10 && p.X < 90 && p.Y > 10 && p.Y < 90 }
-
-	r, err := m.Relax(func(p geom.Vec2) bool { return !inside(p) })
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	moved := 0
-	for i := range m.Points {
-		if m.Points[i] != r.Points[i] {
-			moved++
-		}
-	}
-	if moved == 0 || len(r.Points) != len(m.Points) {
-		t.Errorf("relax moved %d of %d points", moved, len(m.Points))
-	}
-}

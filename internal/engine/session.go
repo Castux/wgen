@@ -195,8 +195,7 @@ func (s *Session) Patch(patch []byte) error {
 	if err != nil {
 		return err
 	}
-	s.SetConfig(patched)
-	return nil
+	return s.SetConfig(patched)
 }
 
 // SetConfig replaces the config (such as edited terrains), and regenerates.
@@ -213,24 +212,24 @@ func (s *Session) SetConfig(conf *config.Config) error {
 
 // SetOutline regenerates with a map given in memory (the editor's), instead
 // of the image file.
-func (s *Session) SetOutline(o *Outline) {
-	s.Engine.SetOutline(o)
+func (s *Session) SetOutline(outline *Outline) {
+	s.Engine.SetOutline(outline)
 }
 
 // Save writes the project file and its map image, and returns the project
 // file path. The project must have a file already (see SaveAs).
-func (s *Session) Save(o *Outline) (string, error) {
+func (s *Session) Save(outline *Outline) (string, error) {
 	path := s.ConfigPath()
 	if path == "" {
 		return "", errors.New("the project has no file yet: save it as")
 	}
-	return path, s.SaveAs(path, o)
+	return path, s.SaveAs(path, outline)
 }
 
 // SaveAs writes the project to a file, and its map image next to it (keeping
 // its name, or <project>.png for new projects), and makes it the project's
 // file.
-func (s *Session) SaveAs(configPath string, o *Outline) error {
+func (s *Session) SaveAs(configPath string, outline *Outline) error {
 	conf := s.Engine.Config()
 	if conf == nil {
 		return errNoConfig
@@ -245,7 +244,7 @@ func (s *Session) SaveAs(configPath string, o *Outline) error {
 	}
 	conf.ConfigPath = configPath
 
-	data, err := EncodeOutline(o)
+	data, err := EncodeOutline(outline)
 	if err != nil {
 		return err
 	}
@@ -286,10 +285,10 @@ func EncodeOutline(o *Outline) ([]byte, error) {
 
 // Export writes the chosen outputs of the current world, named from base (a
 // path without extension), and returns the files written.
-func (s *Session) Export(base string, o export.Options) ([]string, error) {
+func (s *Session) Export(base string, options export.Options) ([]string, error) {
 	world, _ := s.Engine.Snapshot()
 	if world == nil {
 		return nil, errors.New("nothing generated yet")
 	}
-	return export.All(world, base, o)
+	return export.All(world, base, options)
 }

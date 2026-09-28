@@ -1,5 +1,5 @@
 // Package engine regenerates the world in the background, as the config or
-// the outline image change.
+// the map image change.
 package engine
 
 import (
@@ -31,12 +31,8 @@ type Engine struct {
 	busy    bool
 	dirty   bool // conf differs from the file
 
-	pendingConf    *config.Config
-	pendingImage   bool
-	pendingOutline *Outline
-	pendingRerun   bool
-	pendingFresh   bool // don't start from the current world: another project
-	wake           chan struct{}
+	pending request // not generated yet
+	wake    chan struct{}
 
 	// Image file known to hold the current map (saved there): moving the
 	// project to it is not a new image
@@ -65,6 +61,20 @@ type State struct {
 	Dirty    bool   // the config differs from its file
 	Ready    bool   // a world was generated
 	Stage    string // first stage rerun by the last generation
+}
+
+// request is what is asked of the engine: the requests that arrived since
+// the last generation started, merged.
+type request struct {
+	conf    *config.Config // a new config
+	image   bool           // reload the image file
+	outline *Outline       // a map in memory
+	rerun   bool           // generate again, to watch the simulation
+	fresh   bool           // don't start from the current world: another project
+}
+
+func (r request) empty() bool {
+	return r.conf == nil && !r.image && r.outline == nil && !r.rerun && !r.fresh
 }
 
 func NewEngine() *Engine {
@@ -110,26 +120,26 @@ func (e *Engine) stateLocked(stage string) State {
 func (e *Engine) SetConfig(conf *config.Config, fromFile bool) {
 	e.mu.Lock()
 	e.conf = conf
-	e.pendingConf = conf
+	e.pending.conf = conf
 	e.dirty = !fromFile
 	e.mu.Unlock()
 	e.signal()
 }
 
-// ReloadImage requests reloading the outline image.
+// ReloadImage requests reloading the map image file.
 func (e *Engine) ReloadImage() {
 	e.mu.Lock()
-	e.pendingImage = true
+	e.pending.image = true
 	e.mu.Unlock()
 	e.signal()
 }
 
 // SetOutline requests a generation with a map given in memory, which
 // replaces the image file's (until the file is reloaded).
-func (e *Engine) SetOutline(o *Outline) {
+func (e *Engine) SetOutline(outline *Outline) {
 	e.mu.Lock()
-	e.pendingOutline = o
-	e.pendingImage = false
+	e.pending.outline = outline
+	e.pending.image = false
 	e.mu.Unlock()
 	e.signal()
 }
@@ -137,13 +147,10 @@ func (e *Engine) SetOutline(o *Outline) {
 // Replace requests generating another project from scratch: a config, and
 // its map in memory (nil: its image file). The config is unsaved until
 // MarkSaved.
-func (e *Engine) Replace(conf *config.Config, o *Outline) {
+func (e *Engine) Replace(conf *config.Config, outline *Outline) {
 	e.mu.Lock()
 	e.conf = conf
-	e.pendingConf = conf
-	e.pendingOutline = o
-	e.pendingImage, e.pendingRerun = false, false
-	e.pendingFresh = true
+	e.pending = request{conf: conf, outline: outline, fresh: true}
 	e.dirty = true
 	e.err = nil
 	e.mu.Unlock()
@@ -158,8 +165,8 @@ func (e *Engine) SetSaved(conf *config.Config) {
 	defer e.mu.Unlock()
 	e.savedImage = conf.ImagePath()
 	e.conf = rebaseConfig(e.conf, conf)
-	if e.pendingConf != nil {
-		e.pendingConf = rebaseConfig(e.pendingConf, conf)
+	if e.pending.conf != nil {
+		e.pending.conf = rebaseConfig(e.pending.conf, conf)
 	}
 	e.world = rebase(e.world, conf)
 	if !e.preview {
@@ -174,9 +181,9 @@ func rebaseConfig(c, paths *config.Config) *config.Config {
 	if c == nil {
 		return nil
 	}
-	n := c.Clone()
-	n.ConfigPath, n.Image = paths.ConfigPath, paths.Image
-	return n
+	rebased := c.Clone()
+	rebased.ConfigPath, rebased.Image = paths.ConfigPath, paths.Image
+	return rebased
 }
 
 // rebase returns a world whose config has the paths of another.
@@ -184,9 +191,9 @@ func rebase(w *gen.World, paths *config.Config) *gen.World {
 	if w == nil || w.Conf == nil {
 		return w
 	}
-	n := *w
-	n.Conf = rebaseConfig(w.Conf, paths)
-	return &n
+	rebased := *w
+	rebased.Conf = rebaseConfig(w.Conf, paths)
+	return &rebased
 }
 
 // SetWatch chooses to show the simulation as it runs, every that many time
@@ -201,7 +208,7 @@ func (e *Engine) SetWatch(steps int) {
 // simulation.
 func (e *Engine) Rerun() {
 	e.mu.Lock()
-	e.pendingRerun = true
+	e.pending.rerun = true
 	e.mu.Unlock()
 	e.signal()
 }
@@ -237,51 +244,67 @@ func (e *Engine) loop() {
 	}
 }
 
-// pendingLocked tells whether a request is waiting.
-func (e *Engine) pendingLocked() bool {
-	return e.pendingConf != nil || e.pendingImage || e.pendingOutline != nil || e.pendingRerun || e.pendingFresh
+// job is a request, with the state it applies to.
+type job struct {
+	request
+	base       *gen.World     // the world to update, nil to generate from scratch
+	latest     *config.Config // the latest requested config
+	watchSteps int
+}
+
+// step runs one pending request, returns false if there was none.
+func (e *Engine) step() bool {
+	j, ok := e.takeRequest()
+	if !ok {
+		return false
+	}
+	next, stage, err := j.generate(e.options(j.watchSteps))
+	e.finish(j.request, next, stage, err)
+	return true
+}
+
+// takeRequest takes the pending request, if any, and marks the engine busy.
+func (e *Engine) takeRequest() (job, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	j := job{request: e.pending, base: e.world, latest: e.conf, watchSteps: e.watchSteps}
+	e.pending = request{}
+	if j.empty() {
+		return j, false
+	}
+
+	if j.fresh {
+		j.base = nil
+	}
+	// Moved to where the map was saved: the same map
+	if j.base != nil && j.latest != nil && j.base.Conf.ImagePath() != j.latest.ImagePath() && j.latest.ImagePath() == e.savedImage {
+		j.base = rebase(j.base, j.latest)
+	}
+
+	e.busy = true
+	e.publishLocked("")
+	return j, true
 }
 
 // Watched frames are shown for at least this long, so that fast phases can
 // be seen
 const minFrameTime = time.Second / 15
 
-// step runs one pending request, returns false if there was none.
-func (e *Engine) step() bool {
-	e.mu.Lock()
-	conf, image, outline, rerun, fresh := e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun, e.pendingFresh
-	e.pendingConf, e.pendingImage, e.pendingOutline, e.pendingRerun, e.pendingFresh = nil, false, nil, false, false
-	world := e.world
-	latest := e.conf
-	watchSteps := e.watchSteps
-	if fresh {
-		world = nil
-	}
-	// Moved to where the map was saved: the same map
-	if world != nil && latest != nil && world.Conf.ImagePath() != latest.ImagePath() && latest.ImagePath() == e.savedImage {
-		world = rebase(world, latest)
-	}
-
-	if conf == nil && !image && outline == nil && !rerun && !fresh {
-		e.mu.Unlock()
-		return false
-	}
-
-	e.busy = true
-	e.publishLocked("")
-	e.mu.Unlock()
-
-	opts := gen.Options{
+// options are the options of a generation: canceled by newer requests,
+// showing its preview, and the simulation every watchSteps steps (0: not).
+func (e *Engine) options(watchSteps int) gen.Options {
+	options := gen.Options{
 		// Newer requests supersede this one
 		Canceled: func() bool {
 			e.mu.Lock()
 			defer e.mu.Unlock()
-			return e.pendingLocked()
+			return !e.pending.empty()
 		},
-		Preview: func(p *gen.World) {
+		Preview: func(preview *gen.World) {
 			e.mu.Lock()
 			defer e.mu.Unlock()
-			e.display, e.preview = p, true
+			e.display, e.preview = preview, true
 			e.version++
 			e.publishLocked("")
 		},
@@ -289,10 +312,10 @@ func (e *Engine) step() bool {
 
 	if watchSteps > 0 {
 		var last time.Time
-		opts.WatchSteps = watchSteps
-		opts.Watch = func(p *gen.World, progress string) {
+		options.WatchSteps = watchSteps
+		options.Watch = func(watched *gen.World, progress string) {
 			e.mu.Lock()
-			e.display, e.preview, e.progress = p, true, progress
+			e.display, e.preview, e.progress = watched, true, progress
 			e.version++
 			e.publishLocked("")
 			e.mu.Unlock()
@@ -303,57 +326,65 @@ func (e *Engine) step() bool {
 			last = time.Now()
 		}
 	}
+	return options
+}
 
-	var next *gen.World
-	var err error
-	stage := gen.StageNone
+// generate runs the job, and returns the new world and the first stage that
+// was rerun.
+func (j job) generate(options gen.Options) (next *gen.World, stage gen.Stage, err error) {
+	stage = gen.StageNone
 
 	switch {
-	case latest == nil:
+	case j.latest == nil:
 		err = errors.New("no config loaded")
 
-	case outline != nil:
-		base := world
+	case j.outline != nil:
+		base := j.base
 		if base == nil {
 			base = &gen.World{}
 		}
-		next, stage, err = base.WithOutline(latest, outline.Width, outline.Height, outline.Pixels, opts)
+		next, stage, err = base.WithOutline(j.latest, j.outline.Width, j.outline.Height, j.outline.Pixels, options)
 
-	case rerun && conf == nil && !image && world != nil:
-		next, stage, err = world.Rerun(opts)
+	case j.rerun && j.conf == nil && !j.image && j.base != nil:
+		next, stage, err = j.base.Rerun(options)
 
-	case world == nil:
+	case j.base == nil:
 		// Nothing generated yet (or the first generation failed): full run
 		stage = gen.StageImage
-		next, _, err = (&gen.World{}).UpdateWith(latest, opts)
+		next, _, err = (&gen.World{}).UpdateWith(j.latest, options)
 
 	default:
-		next = world
-		if conf != nil {
-			next, stage, err = next.UpdateWith(conf, opts)
+		next = j.base
+		if j.conf != nil {
+			next, stage, err = next.UpdateWith(j.conf, options)
 		}
-		if err == nil && image {
+		if err == nil && j.image {
 			var imageStage gen.Stage
-			next, imageStage, err = next.ReloadImageWith(opts)
+			next, imageStage, err = next.ReloadImageWith(options)
 			stage = min(stage, imageStage)
 		}
 	}
+	return next, stage, err
+}
 
+// finish records the result of a generation. A canceled one is requested
+// again, merged with what superseded it.
+func (e *Engine) finish(done request, next *gen.World, stage gen.Stage, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
 	if errors.Is(err, gen.ErrCanceled) {
-		// Redone with what superseded it
-		if e.pendingConf == nil && conf != nil {
-			e.pendingConf = conf
+		if e.pending.conf == nil {
+			e.pending.conf = done.conf
 		}
-		if e.pendingOutline == nil && outline != nil {
-			e.pendingOutline = outline
+		if e.pending.outline == nil {
+			e.pending.outline = done.outline
 		}
-		e.pendingImage = e.pendingImage || image
-		e.pendingRerun = e.pendingRerun || (rerun && !e.pendingLocked())
-		e.pendingFresh = e.pendingFresh || fresh
-		return true
+		e.pending.image = e.pending.image || done.image
+		// Any other request generates again anyway
+		e.pending.rerun = e.pending.rerun || (done.rerun && e.pending.empty())
+		e.pending.fresh = e.pending.fresh || done.fresh
+		return
 	}
 
 	e.busy = false
@@ -367,7 +398,7 @@ func (e *Engine) step() bool {
 			e.version++
 		}
 		e.publishLocked("")
-		return true
+		return
 	}
 
 	e.world, e.display = next, next
@@ -375,7 +406,6 @@ func (e *Engine) step() bool {
 		e.version++
 	}
 	e.publishLocked(stage.String())
-	return true
 }
 
 // Subscribe returns a channel receiving state changes, starting with the

@@ -1,14 +1,15 @@
-// Package export writes a generated world to image and mesh files.
+// Package export writes a generated world to image, mesh and vector files.
 package export
 
 import (
+	"bufio"
+	"image"
 	"image/png"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/Castux/wgen/internal/gen"
-	"github.com/Castux/wgen/internal/render"
 )
 
 // Options chooses the files to write.
@@ -25,52 +26,54 @@ type Options struct {
 
 // All writes the files chosen by the options, named from base (a path
 // without extension), and returns the files written.
-func All(w *gen.World, base string, o Options) ([]string, error) {
+func All(w *gen.World, base string, options Options) ([]string, error) {
 	if err := os.MkdirAll(filepath.Dir(base), 0o755); err != nil {
 		return nil, err
-	}
-	var files []string
-	write := func(path string, f func(string) error) error {
-		slog.Info("exporting", "path", path)
-		if err := f(path); err != nil {
-			return err
-		}
-		files = append(files, path)
-		return nil
 	}
 
 	type output struct {
 		enabled bool
 		path    string
-		f       func(string) error
+		write   func(path string) error
 	}
+	var files []string
 	for _, out := range []output{
-		{o.Heightmap, base + "-height.png", func(p string) error { return Heightmap(w, p, o.Normalized) }},
-		{o.WaterMask, base + "-water.png", func(p string) error { return WaterMask(w, p) }},
-		{o.Texture, base + "-texture.png", func(p string) error { return Texture(w, p, o.TextureScale) }},
-		{o.OBJ, base + ".obj", func(p string) error { return OBJ(w, p) }},
-		{o.SVG, base + ".svg", func(p string) error { return SVG(w, p) }},
+		{options.Heightmap, base + "-height.png", func(path string) error { return Heightmap(w, path, options.Normalized) }},
+		{options.WaterMask, base + "-water.png", func(path string) error { return WaterMask(w, path) }},
+		{options.Texture, base + "-texture.png", func(path string) error { return Texture(w, path, options.TextureScale) }},
+		{options.OBJ, base + ".obj", func(path string) error { return OBJ(w, path) }},
+		{options.SVG, base + ".svg", func(path string) error { return SVG(w, path) }},
 	} {
 		if !out.enabled {
 			continue
 		}
-		if err := write(out.path, out.f); err != nil {
+		slog.Info("exporting", "path", out.path)
+		if err := out.write(out.path); err != nil {
 			return files, err
 		}
+		files = append(files, out.path)
 	}
 	return files, nil
 }
 
-// Texture writes the map as seen in the viewer's 2D view: terrain colors,
-// hillshading and rivers.
-func Texture(w *gen.World, path string, scale float64) error {
-	if scale <= 0 {
-		scale = 1
+// writeFile writes a text file, through a buffer.
+func writeFile(path string, write func(*bufio.Writer)) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
 	}
-	img := render.Render(w, render.Options{
-		Scale: scale, Base: render.BaseTerrain, Shading: true,
-		RiverPower: 0.5, RiverWidth: 4,
-	})
+
+	out := bufio.NewWriter(file)
+	write(out)
+
+	if err := out.Flush(); err != nil {
+		file.Close()
+		return err
+	}
+	return file.Close()
+}
+
+func writePNG(path string, img image.Image) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return err

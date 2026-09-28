@@ -2,12 +2,11 @@ package export
 
 import (
 	"image"
-	"image/png"
 	"log/slog"
 	"math"
-	"os"
 
 	"github.com/Castux/wgen/internal/gen"
+	"github.com/Castux/wgen/internal/render"
 )
 
 // Heightmap writes the elevation as a 16 bits grayscale PNG: in meters above
@@ -60,14 +59,15 @@ func WaterMask(w *gen.World, path string) error {
 	return writePNG(path, img)
 }
 
-func writePNG(path string, img image.Image) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return err
+// Texture writes the map as seen in the viewer's 2D view: terrain colors,
+// hillshading and rivers, at a scale of the map image.
+func Texture(w *gen.World, path string, scale float64) error {
+	if scale <= 0 {
+		scale = 1
 	}
-	if err := png.Encode(f, img); err != nil {
-		f.Close()
-		return err
-	}
-	return f.Close()
+	img := render.Render(w, render.Options{
+		Scale: scale, Base: render.BaseTerrain, Shading: true,
+		RiverPower: 0.5, RiverWidth: 4,
+	})
+	return writePNG(path, img)
 }

@@ -2,7 +2,7 @@
 // colors or elevation), hillshading, and an overlay of rivers, contour lines
 // and a grid.
 //
-// Images are top row first, at a scale relative to the outline image.
+// Images are top row first, at a scale relative to the map image.
 package render
 
 import (
@@ -19,6 +19,7 @@ import (
 	"github.com/Castux/wgen/internal/geom"
 )
 
+// Base is the bottom layer of an image.
 type Base string
 
 const (
@@ -28,9 +29,9 @@ const (
 )
 
 type Options struct {
-	Scale   float64
+	Scale   float64 // image pixels per world unit (map image pixel)
 	Base    Base
-	Shading bool
+	Shading bool // hillshading, on a base
 
 	// River width in world units is (drainage / max drainage) ^ RiverPower *
 	// RiverWidth
@@ -61,7 +62,8 @@ var light = func() [3]float64 {
 	return [3]float64{l[0] / n, l[1] / n, l[2] / n}
 }()
 
-// Size of the image rendered at a given scale, clamped to MaxSize.
+// Size returns the size of the image rendered at a given scale, and the
+// scale, lowered to keep the image within MaxSize.
 func Size(w *gen.World, scale float64) (int, int, float64) {
 	scale = math.Min(scale, MaxSize/float64(max(w.Width, w.Height)))
 	return max(1, int(math.Round(float64(w.Width)*scale))),
@@ -69,30 +71,32 @@ func Size(w *gen.World, scale float64) (int, int, float64) {
 		scale
 }
 
-func Render(w *gen.World, o Options) *image.RGBA {
-	width, height, scale := Size(w, o.Scale)
-	o.Scale = scale
+// Render draws the layers chosen by the options: the base, hillshading, the
+// grid and contour lines, then rivers.
+func Render(w *gen.World, options Options) *image.RGBA {
+	width, height, scale := Size(w, options.Scale)
+	options.Scale = scale
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
-	switch o.Base {
+	switch options.Base {
 	case BaseTerrain:
 		drawTerrainColors(w, img, scale)
 	case BaseHeight:
-		drawHeightColors(w, img, scale, o.HeightScale)
+		drawHeightColors(w, img, scale, options.HeightScale)
 	default:
 		draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
 	}
 
-	if o.Shading && o.Base != BaseNone {
+	if options.Shading && options.Base != BaseNone {
 		shade(w, img, scale)
 	}
 
-	if o.Contours > 0 || o.Grid > 0 {
-		drawLines(w, img, o)
+	if options.Contours > 0 || options.Grid > 0 {
+		drawLines(w, img, options)
 	}
 
-	if o.RiverWidth > 0 {
-		drawRivers(w, img, o)
+	if options.RiverWidth > 0 {
+		drawRivers(w, img, options)
 	}
 
 	return img
@@ -141,8 +145,8 @@ func drawTerrainColors(w *gen.World, img *image.RGBA, scale float64) {
 	}
 
 	w.RasterizeTriangles(width, height, scale, func(t, x, y int, a, b, c float64) {
-		tri := m.Triangles[t]
-		c0, c1, c2 := colors[tri[0]], colors[tri[1]], colors[tri[2]]
+		triangle := m.Triangles[t]
+		c0, c1, c2 := colors[triangle[0]], colors[triangle[1]], colors[triangle[2]]
 		i := img.PixOffset(x, height-1-y)
 		for k := range 3 {
 			img.Pix[i+k] = uint8(math.Round(a*c0[k] + b*c1[k] + c*c2[k]))
@@ -214,35 +218,38 @@ func Sample(w *gen.World, data []float64, p geom.Vec2) float64 {
 // shade multiplies the image by a Lambertian hillshade of the heightmap.
 func shade(w *gen.World, img *image.RGBA, scale float64) {
 	const ambient = 0.4
-	const d = 1.0 // finite differences step, in world units
-	mpp := metersPerPixel(w)
+	const step = 1.0 // of the finite differences, in world units
+
+	// Elevations are in meters, positions in pixels
+	metersPerPixel := 1.0
+	if w.MetersPerPixel > 0 {
+		metersPerPixel = w.MetersPerPixel
+	}
 
 	forEachPixel(img, scale, func(i int, p geom.Vec2) {
-		dx := (Sample(w, w.Heightmap, geom.Vec2{X: p.X + d, Y: p.Y}) -
-			Sample(w, w.Heightmap, geom.Vec2{X: p.X - d, Y: p.Y})) / (2 * d)
-		dy := (Sample(w, w.Heightmap, geom.Vec2{X: p.X, Y: p.Y + d}) -
-			Sample(w, w.Heightmap, geom.Vec2{X: p.X, Y: p.Y - d})) / (2 * d)
-
-		// Elevations may be in other units than pixels
-		dx /= mpp
-		dy /= mpp
+		dx := (Sample(w, w.Heightmap, geom.Vec2{X: p.X + step, Y: p.Y}) -
+			Sample(w, w.Heightmap, geom.Vec2{X: p.X - step, Y: p.Y})) / (2 * step)
+		dy := (Sample(w, w.Heightmap, geom.Vec2{X: p.X, Y: p.Y + step}) -
+			Sample(w, w.Heightmap, geom.Vec2{X: p.X, Y: p.Y - step})) / (2 * step)
+		dx /= metersPerPixel
+		dy /= metersPerPixel
 
 		// Normal is (-dx, -dy, 1), normalized
-		n := math.Sqrt(dx*dx + dy*dy + 1)
-		lambert := math.Max(0, (-dx*light[0]-dy*light[1]+light[2])/n)
+		length := math.Sqrt(dx*dx + dy*dy + 1)
+		lambert := math.Max(0, (-dx*light[0]-dy*light[1]+light[2])/length)
 
 		// Normalized so that flat ground keeps its color
-		f := (ambient + (1-ambient)*lambert) / (ambient + (1-ambient)*light[2])
+		factor := (ambient + (1-ambient)*lambert) / (ambient + (1-ambient)*light[2])
 		for k := range 3 {
-			img.Pix[i+k] = uint8(math.Min(255, float64(img.Pix[i+k])*f))
+			img.Pix[i+k] = uint8(math.Min(255, float64(img.Pix[i+k])*factor))
 		}
 	})
 }
 
 // drawLines draws contour lines and the grid, about one world unit wide (at
 // least one pixel), so that they stay visible as a texture.
-func drawLines(w *gen.World, img *image.RGBA, o Options) {
-	lineWidth := math.Max(1, math.Round(o.Scale)) / o.Scale
+func drawLines(w *gen.World, img *image.RGBA, options Options) {
+	lineWidth := math.Max(1, math.Round(options.Scale)) / options.Scale
 
 	blend := func(i int, c [3]float64, alpha float64) {
 		for k := range 3 {
@@ -251,23 +258,23 @@ func drawLines(w *gen.World, img *image.RGBA, o Options) {
 		}
 	}
 
-	forEachPixel(img, o.Scale, func(i int, p geom.Vec2) {
-		if o.Grid > 0 {
-			fx := math.Mod(p.X, o.Grid)
-			fy := math.Mod(p.Y, o.Grid)
-			if fx < lineWidth || fy < lineWidth {
+	// Contour level of a point
+	level := func(p geom.Vec2) float64 {
+		return math.Floor(Sample(w, w.Heightmap, p) / options.Contours)
+	}
+
+	forEachPixel(img, options.Scale, func(i int, p geom.Vec2) {
+		if options.Grid > 0 {
+			if math.Mod(p.X, options.Grid) < lineWidth || math.Mod(p.Y, options.Grid) < lineWidth {
 				blend(i, gridColor, gridAlpha)
 			}
 		}
 
 		// A contour crosses this pixel if the level changes within a line
 		// width to the right or above
-		if o.Contours > 0 {
-			level := func(q geom.Vec2) float64 {
-				return math.Floor(Sample(w, w.Heightmap, q) / o.Contours)
-			}
-			l := level(p)
-			if l != level(geom.Vec2{X: p.X + lineWidth, Y: p.Y}) || l != level(geom.Vec2{X: p.X, Y: p.Y + lineWidth}) {
+		if options.Contours > 0 {
+			here := level(p)
+			if here != level(geom.Vec2{X: p.X + lineWidth, Y: p.Y}) || here != level(geom.Vec2{X: p.X, Y: p.Y + lineWidth}) {
 				blend(i, contourColor, contourAlpha)
 			}
 		}
@@ -285,27 +292,19 @@ func MaxDrainage(w *gen.World) float64 {
 	return maxDrainage
 }
 
-// metersPerPixel is the elevation unit, per horizontal unit (pixel).
-func metersPerPixel(w *gen.World) float64 {
-	if w.MetersPerPixel > 0 {
-		return w.MetersPerPixel
-	}
-	return 1
-}
-
 // drawRivers draws every downhill link as an antialiased segment with round
 // caps, its width growing with the drainage area.
-func drawRivers(w *gen.World, img *image.RGBA, o Options) {
+func drawRivers(w *gen.World, img *image.RGBA, options Options) {
 	width, height := img.Rect.Dx(), img.Rect.Dy()
 	maxDrainage := MaxDrainage(w)
 	m := w.Mesh
 
 	// World to image coordinates, pixel centers at +0.5
 	toImage := func(p geom.Vec2) geom.Vec2 {
-		return geom.Vec2{X: p.X*o.Scale + 0.5, Y: float64(height-1) - p.Y*o.Scale + 0.5}
+		return geom.Vec2{X: p.X*options.Scale + 0.5, Y: float64(height-1) - p.Y*options.Scale + 0.5}
 	}
 
-	r := vector.NewRasterizer(width, height)
+	rasterizer := vector.NewRasterizer(width, height)
 	visible := geom.Vec2{X: float64(width), Y: float64(height)}
 
 	for v, d := range w.Downhill {
@@ -313,7 +312,7 @@ func drawRivers(w *gen.World, img *image.RGBA, o Options) {
 			continue
 		}
 
-		radius := math.Pow(w.Drainage[v]/maxDrainage, o.RiverPower) * o.RiverWidth * o.Scale / 2
+		radius := math.Pow(w.Drainage[v]/maxDrainage, options.RiverPower) * options.RiverWidth * options.Scale / 2
 		a, b := toImage(m.Points[v]), toImage(m.Points[d])
 
 		if math.Max(a.X, b.X) < -radius || math.Min(a.X, b.X) > visible.X+radius ||
@@ -321,10 +320,10 @@ func drawRivers(w *gen.World, img *image.RGBA, o Options) {
 			continue
 		}
 
-		capsule(r, a, b, radius)
+		capsule(rasterizer, a, b, radius)
 	}
 
-	r.Draw(img, img.Bounds(), image.NewUniform(riverColor), image.Point{})
+	rasterizer.Draw(img, img.Bounds(), image.NewUniform(riverColor), image.Point{})
 }
 
 // capsule adds a segment with round caps to the rasterizer. All capsules have

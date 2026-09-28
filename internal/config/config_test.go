@@ -62,7 +62,7 @@ func TestErrors(t *testing.T) {
 		`{"image": "a.png", "terrains": {"sea": {"color": "red"}}}`,
 		`{"image": "a.png", "terrains": {"sea": {"color": "#000000"}, "hills": {"color": "#000000"}}}`,
 		`{"image": "a.png", "terrains": {"sea": {"color": "#000000"}, "hills": {"color": "#000001", "height": -1}}}`,
-		`{"image": "a.png", "terrains": {"sea": {"color": "#000000", "gradient": 1}}}`,
+		`{"image": "a.png", "terrains": {"sea": {"color": "#000000", "unknown": 1}}}`,
 		`{"image": "a.png", "resolution": 0, "terrains": {"sea": {"color": "#000000"}}}`,
 		`{"image": "a.png", "simulation": {"steps": 0}, "terrains": {"sea": {"color": "#000000"}}}`,
 	} {
