@@ -69,7 +69,7 @@ or quitting, removes the copy.
 | Double click | 3D: center the view there (at sea level). Map: fit the map in the window |
 | `V` | 3D, map or eye level view |
 | `W` `A` `S` `D`, arrows | Eye level: move (`Shift`: faster, wheel: speed) |
-| `Shift` (alone) | Terrain or height colors |
+| `Shift` (alone) | Terrain, height or single colors |
 | `Q`, `W` | Lit or unlit, wireframe |
 | `R` | Reset the view |
 | `E` | Paint the map |
@@ -87,6 +87,10 @@ Keys are ignored while typing in a field.
 Height colors are a rainbow scale (Turbo) on land, or gray, and blue in
 water, darker when deeper. The legend in the top left corner tells the
 heights.
+
+Single color draws the land in one color, a nature green at first (View,
+Land color to change it), the sea and lakes in theirs: to see the relief
+alone, with shading.
 
 The View menu also has the vertical exaggeration of the 3D view (mountains
 are small on a continent: 10 km high on 1000 km wide), and the overlay:

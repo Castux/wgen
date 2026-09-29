@@ -56,6 +56,8 @@ uniform mat4 projection;
 uniform vec2 size;
 uniform float lowest;
 uniform bool heightColors;
+uniform bool singleColor;
+uniform vec3 landColor; // sRGB, of the single color mode
 uniform bool rainbow;
 uniform float highest;
 uniform float zScale; // elevation to map units
@@ -103,7 +105,13 @@ void main() {
 	vec4 viewPosition = view * vec4(position.xy - size / 2.0, position.z * zScale, 1.0);
 	vViewPosition = viewPosition.xyz;
 
-	vColor = heightColors ? heightColor(position.z, terrainColor.a > 0.5) : srgbToLinear(terrainColor.rgb);
+	bool water = terrainColor.a > 0.5;
+	if (heightColors)
+		vColor = heightColor(position.z, water);
+	else if (singleColor && !water)
+		vColor = srgbToLinear(landColor);
+	else
+		vColor = srgbToLinear(terrainColor.rgb);
 
 	// The overlay is top row first
 	vUV = vec2(position.x / size.x, 1.0 - position.y / size.y);
@@ -355,6 +363,9 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 	p.setVec2("size", v.width, v.height)
 	p.setFloat("lowest", v.lowest)
 	p.setInt("heightColors", boolInt(settings.Color == colorHeight))
+	p.setInt("singleColor", boolInt(settings.Color == colorSingle))
+	land := settings.LandColor
+	p.setVec3("landColor", mgl64.Vec3{float64(land[0]) / 255, float64(land[1]) / 255, float64(land[2]) / 255})
 	p.setInt("rainbow", boolInt(settings.HeightScale == render.ScaleRainbow))
 	p.setFloat("highest", v.highest)
 	p.setFloat("zScale", settings.VerticalScale/v.metersPerPixel)

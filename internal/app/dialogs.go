@@ -282,7 +282,7 @@ var controls = [][2]string{
 	{"Double click", "3D: center the view there. Map: fit the map in the window. Measuring: finish the ruler"},
 	{"V", "3D, map or eye level view"},
 	{"WASD, arrows", "Eye level: move (Shift: faster; wheel: speed)"},
-	{"Shift", "Terrain or height colors"},
+	{"Shift", "Terrain, height or single colors"},
 	{"Q / W", "Lit or unlit / wireframe"},
 	{"R", "Reset the view"},
 	{"E", "Paint the map"},

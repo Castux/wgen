@@ -27,6 +27,7 @@ const (
 	BaseNone    Base = "none" // transparent, for overlay textures
 	BaseTerrain Base = "terrain"
 	BaseHeight  Base = "height"
+	BaseSingle  Base = "single" // land in LandColor, water in its terrain's color
 )
 
 type Options struct {
@@ -46,6 +47,8 @@ type Options struct {
 	Grid     float64 // grid size in world units, 0 for none
 
 	HeightScale string // colors of BaseHeight on land: ScaleGray (default) or ScaleRainbow
+
+	LandColor [3]uint8 // of BaseSingle
 }
 
 // MaxSize is the largest image side Render will produce.
@@ -84,7 +87,9 @@ func Render(w *gen.World, options Options) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	switch options.Base {
 	case BaseTerrain:
-		drawTerrainColors(w, img, scale)
+		drawTerrainColors(w, img, scale, nil)
+	case BaseSingle:
+		drawTerrainColors(w, img, scale, &options.LandColor)
 	case BaseHeight:
 		drawHeightColors(w, img, scale, options.HeightScale)
 	}
@@ -137,13 +142,18 @@ func VertexColor(w *gen.World, v int32) [3]uint8 {
 	return [3]uint8{0, 0, 0}
 }
 
-func drawTerrainColors(w *gen.World, img *image.RGBA, scale float64) {
+// drawTerrainColors draws the terrain colors, or with land, if not nil,
+// all in that color.
+func drawTerrainColors(w *gen.World, img *image.RGBA, scale float64, land *[3]uint8) {
 	width, height := img.Rect.Dx(), img.Rect.Dy()
 	m := w.Mesh
 
 	colors := make([][3]float64, len(m.Points))
 	for v := range m.Points {
 		c := VertexColor(w, int32(v))
+		if land != nil && w.IsLand(int32(v)) {
+			c = *land
+		}
 		colors[v] = [3]float64{float64(c[0]), float64(c[1]), float64(c[2])}
 	}
 

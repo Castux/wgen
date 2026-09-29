@@ -138,6 +138,13 @@ func (a *app) drawViewMenu() {
 	imgui.SeparatorText("Colors")
 	choice("Terrains", "Shift", &settings.Color, colorTerrain)
 	choice("Heights", "Shift", &settings.Color, colorHeight)
+	choice("Single color", "Shift", &settings.Color, colorSingle)
+	imgui.SetItemTooltip("Land in one color, the sea and lakes in theirs")
+	imgui.BeginDisabledV(settings.Color != colorSingle)
+	if land := colorFloats(settings.LandColor); imgui.ColorEdit3V("Land color", &land, imgui.ColorEditFlagsNoInputs|imgui.ColorEditFlagsPickerHueWheel) {
+		settings.LandColor, changed = colorBytes(land), true
+	}
+	imgui.EndDisabled()
 	imgui.BeginDisabledV(settings.Color != colorHeight)
 	if imgui.BeginMenu("Height scale") {
 		choice("Rainbow", "", &settings.HeightScale, render.ScaleRainbow)

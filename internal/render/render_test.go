@@ -196,3 +196,20 @@ func TestBasinColors(t *testing.T) {
 		t.Error("basin colors not distinct, or not stable")
 	}
 }
+
+func TestSingleColor(t *testing.T) {
+	w := island(t)
+	green := [3]uint8{86, 130, 60}
+	img := Render(w, Options{Scale: 1, Base: BaseSingle, LandColor: green})
+
+	// Land in the color, the sea in its own
+	center := img.RGBAAt(50, 40)
+	if [3]uint8{center.R, center.G, center.B} != green {
+		t.Errorf("land %v, want %v", center, green)
+	}
+	corner := img.RGBAAt(2, 2)
+	sea := w.Config.Terrain("sea").Color
+	if [3]uint8{corner.R, corner.G, corner.B} != [3]uint8(sea) {
+		t.Errorf("sea %v, want its color %v", corner, sea)
+	}
+}

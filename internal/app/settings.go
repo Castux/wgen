@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 
+	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/export"
 	"github.com/Castux/wgen/internal/render"
 )
@@ -14,17 +15,18 @@ import (
 // Settings are the app settings: not part of the project, saved in the
 // user's config directory.
 type Settings struct {
-	View        string  `json:"view"`
-	Color       string  `json:"color"`
-	HeightScale string  `json:"heightScale"`
-	Legend      bool    `json:"legend"`
-	Shading     string  `json:"shading"`
-	Wireframe   bool    `json:"wireframe"`
-	RiverPower  float64 `json:"riverPower"`
-	RiverWidth  float64 `json:"riverWidth"`
-	BasinColors bool    `json:"basinColors"` // rivers in a color per drainage basin
-	Contours    float64 `json:"contours"`
-	Grid        float64 `json:"grid"`
+	View        string       `json:"view"`
+	Color       string       `json:"color"`
+	HeightScale string       `json:"heightScale"`
+	LandColor   config.Color `json:"landColor"` // of the single color mode
+	Legend      bool         `json:"legend"`
+	Shading     string       `json:"shading"`
+	Wireframe   bool         `json:"wireframe"`
+	RiverPower  float64      `json:"riverPower"`
+	RiverWidth  float64      `json:"riverWidth"`
+	BasinColors bool         `json:"basinColors"` // rivers in a color per drainage basin
+	Contours    float64      `json:"contours"`
+	Grid        float64      `json:"grid"`
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D view
 	EyeGround     string  `json:"eyeGround"`     // at eye level: facets, smooth, blocks
@@ -59,6 +61,7 @@ const (
 	// Colors: the render bases of the same names
 	colorTerrain = string(render.BaseTerrain)
 	colorHeight  = string(render.BaseHeight)
+	colorSingle  = string(render.BaseSingle) // land in one color
 
 	// Shadings
 	shadingLit   = "lit"
@@ -72,7 +75,7 @@ const (
 
 var (
 	views        = []string{viewOrbit, viewMap, viewEye}
-	colorModes   = []string{colorTerrain, colorHeight}
+	colorModes   = []string{colorTerrain, colorHeight, colorSingle}
 	shadings     = []string{shadingLit, shadingUnlit}
 	heightScales = []string{render.ScaleRainbow, render.ScaleGray}
 	brushes      = []string{brushNatural, brushRound, brushSquare}
@@ -90,6 +93,7 @@ var defaultSettings = Settings{
 	View:        viewOrbit,
 	Color:       colorTerrain,
 	HeightScale: render.ScaleRainbow,
+	LandColor:   config.Color{86, 130, 60}, // a nature green
 	Legend:      true,
 	Shading:     shadingLit,
 	RiverPower:  0.5,
@@ -184,6 +188,7 @@ func (s *Settings) overlayOptions() render.Options {
 		Contours:    s.Contours,
 		Grid:        s.Grid,
 		HeightScale: s.HeightScale,
+		LandColor:   s.LandColor,
 	}
 }
 
