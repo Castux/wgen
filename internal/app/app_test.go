@@ -285,3 +285,16 @@ func TestImportClassification(t *testing.T) {
 		t.Errorf("exact picks %v", picks)
 	}
 }
+
+func TestPaintingOnlyInMapView(t *testing.T) {
+	settings := defaultSettings
+	settings.setEditing(true)
+	if settings.View != viewMap || !settings.painting() {
+		t.Fatalf("painting shows the map: view %q, editing %v", settings.View, settings.Editing)
+	}
+	settings.View = viewOrbit
+	settings.keepConsistent()
+	if settings.Editing {
+		t.Error("painting still on in the 3D view")
+	}
+}

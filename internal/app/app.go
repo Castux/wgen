@@ -251,16 +251,21 @@ func (a *app) viewSize() (width, height, pixelRatio float64) {
 func (a *app) frame() {
 	implgl.NewFrame()
 	implglfw.NewFrame()
+	a.devClick()
 	imgui.NewFrame()
 
 	state := a.session.Engine.State()
 	a.update()
 	a.handleInput()
 	a.drawMenu(state)
-	a.drawPanel(state)
+	a.drawPanel()
 	a.drawStatus(state)
 	a.drawLegend()
 	a.drawDialogs()
+	if !imgui.IsAnyItemActive() {
+		// An edit left without committing, as a closed menu's
+		a.widget.key = ""
+	}
 	imgui.Render()
 	a.updateTitle()
 

@@ -7,6 +7,10 @@ import (
 	"github.com/Castux/wgen/internal/render"
 )
 
+// The menus have the commands and how the landscape is shown; the panel
+// has the project (terrains, map and simulation parameters) and the
+// painting tools. Each option is in one place.
+
 // drawMenu is the main menu bar.
 func (a *app) drawMenu(state engine.State) {
 	if !imgui.BeginMainMenuBar() {
@@ -15,107 +19,21 @@ func (a *app) drawMenu(state engine.State) {
 	a.menuHeight = imgui.WindowSize().Y
 
 	if imgui.BeginMenu("File") {
-		if imgui.MenuItemBoolV("New map...", "Ctrl+N", false, true) {
-			a.newDialog()
-		}
-		if imgui.MenuItemBoolV("Open...", "Ctrl+O", false, true) {
-			a.openDialog()
-		}
-		imgui.SetItemTooltip("A project, or an image to import as a map")
-		imgui.Separator()
-		if imgui.MenuItemBoolV("Save", "Ctrl+S", false, true) {
-			a.saveProject(nil)
-		}
-		if imgui.MenuItemBoolV("Save as...", "Ctrl+Shift+S", false, true) {
-			a.saveProjectAs(nil)
-		}
-		imgui.Separator()
-		if imgui.MenuItemBoolV("Export...", "Ctrl+E", false, a.world != nil) {
-			a.openExport()
-		}
-		imgui.Separator()
-		if imgui.MenuItemBoolV("Quit", "Ctrl+Q", false, true) {
-			a.quit()
-		}
+		a.drawFileMenu()
 		imgui.EndMenu()
 	}
-
 	if imgui.BeginMenu("Edit") {
-		c := a.editor.canvas
-		if imgui.MenuItemBoolV("Undo", "Ctrl+Z", false, c != nil && len(c.undo) > 0) {
-			a.undo()
-		}
-		if imgui.MenuItemBoolV("Redo", "Ctrl+Y", false, c != nil && len(c.redo) > 0) {
-			a.redo()
-		}
-		imgui.Separator()
-		settings := a.settings
-		if editing := settings.Editing; imgui.MenuItemBoolPtrV("Paint the map", "E", &editing, true) {
-			settings.setEditing(editing)
-		}
-		imgui.MenuItemBoolPtrV("Lock the shoreline", "L", &settings.LockShore, true)
-		if imgui.BeginMenu("Brush") {
-			for _, brush := range brushes {
-				if imgui.MenuItemBoolV(brush, "", settings.Brush == brush, true) {
-					settings.Brush = brush
-				}
-			}
-			imgui.EndMenu()
-		}
-		if settings != a.settings {
-			a.setSettings(settings)
-		}
+		a.drawEditMenu()
 		imgui.EndMenu()
 	}
-
 	if imgui.BeginMenu("View") {
-		settings := a.settings
-		choice := func(label, shortcut string, value *string, option string) {
-			if imgui.MenuItemBoolV(label, shortcut, *value == option, true) {
-				*value = option
-			}
-		}
-		choice("3D", "V", &settings.View, viewOrbit)
-		choice("Map", "V", &settings.View, viewMap)
-		imgui.Separator()
-		choice("Terrain colors", "Shift", &settings.Color, colorTerrain)
-		choice("Height colors", "Shift", &settings.Color, colorHeight)
-		if imgui.BeginMenu("Height scale") {
-			choice("Rainbow", "", &settings.HeightScale, render.ScaleRainbow)
-			choice("Gray", "", &settings.HeightScale, render.ScaleGray)
-			imgui.EndMenu()
-		}
-		imgui.MenuItemBoolPtrV("Height legend", "", &settings.Legend, true)
-		imgui.Separator()
-		if lit := settings.Shading == shadingLit; imgui.MenuItemBoolPtrV("Lit", "Q", &lit, true) {
-			settings.Shading = shadingUnlit
-			if lit {
-				settings.Shading = shadingLit
-			}
-		}
-		imgui.MenuItemBoolPtrV("Wireframe", "W", &settings.Wireframe, true)
-		imgui.Separator()
-		if imgui.MenuItemBoolV("Reset the view", "R", false, true) {
-			a.resetView()
-		}
-		if settings != a.settings {
-			a.setSettings(settings)
-		}
+		a.drawViewMenu()
 		imgui.EndMenu()
 	}
-
 	if imgui.BeginMenu("Simulation") {
-		settings := a.settings
-		imgui.MenuItemBoolPtrV("Watch the simulation", "", &settings.Watch, true)
-		if settings != a.settings {
-			a.setSettings(settings)
-		}
-		if imgui.MenuItemBoolV("Replay the simulation", "", false, !state.Busy && a.world != nil) {
-			a.replay()
-		}
+		a.drawSimulationMenu(state)
 		imgui.EndMenu()
 	}
-
 	if imgui.BeginMenu("Help") {
 		if imgui.MenuItemBool("Controls") {
 			a.dialogs.help = true
@@ -126,4 +44,128 @@ func (a *app) drawMenu(state engine.State) {
 	}
 
 	imgui.EndMainMenuBar()
+}
+
+func (a *app) drawFileMenu() {
+	if imgui.MenuItemBoolV("New map...", "Ctrl+N", false, true) {
+		a.newDialog()
+	}
+	if imgui.MenuItemBoolV("Open...", "Ctrl+O", false, true) {
+		a.openDialog()
+	}
+	imgui.SetItemTooltip("A project, or an image to import as a map")
+	imgui.Separator()
+	if imgui.MenuItemBoolV("Save", "Ctrl+S", false, true) {
+		a.saveProject(nil)
+	}
+	if imgui.MenuItemBoolV("Save as...", "Ctrl+Shift+S", false, true) {
+		a.saveProjectAs(nil)
+	}
+	imgui.Separator()
+	if imgui.MenuItemBoolV("Export...", "Ctrl+E", false, a.world != nil) {
+		a.openExport()
+	}
+	imgui.Separator()
+	if imgui.MenuItemBoolV("Quit", "Ctrl+Q", false, true) {
+		a.quit()
+	}
+}
+
+func (a *app) drawEditMenu() {
+	canvas := a.editor.canvas
+	if imgui.MenuItemBoolV("Undo painting", "Ctrl+Z", false, canvas != nil && len(canvas.undo) > 0) {
+		a.undo()
+	}
+	if imgui.MenuItemBoolV("Redo painting", "Ctrl+Y", false, canvas != nil && len(canvas.redo) > 0) {
+		a.redo()
+	}
+}
+
+// drawViewMenu has every display setting: the view, colors, shading, and
+// the overlay.
+func (a *app) drawViewMenu() {
+	settings := a.settings
+	changed := false
+	choice := func(label, shortcut string, value *string, option string) {
+		if imgui.MenuItemBoolV(label, shortcut, *value == option, true) && *value != option {
+			*value, changed = option, true
+		}
+	}
+	toggle := func(label, shortcut string, value *bool) {
+		changed = imgui.MenuItemBoolPtrV(label, shortcut, value, true) || changed
+	}
+	number := func(key, label string, value *float64, lo, hi, step float64, tooltip string) {
+		var edited bool
+		*value, edited = a.number(key, label, *value, lo, hi, step, false, false, tooltip)
+		changed = changed || edited
+	}
+	imgui.PushItemWidth(90 * a.uiScale)
+	defer imgui.PopItemWidth()
+
+	choice("3D", "V", &settings.View, viewOrbit)
+	choice("Map", "V", &settings.View, viewMap)
+
+	imgui.SeparatorText("Colors")
+	choice("Terrains", "Shift", &settings.Color, colorTerrain)
+	choice("Heights", "Shift", &settings.Color, colorHeight)
+	imgui.BeginDisabledV(settings.Color != colorHeight)
+	if imgui.BeginMenu("Height scale") {
+		choice("Rainbow", "", &settings.HeightScale, render.ScaleRainbow)
+		choice("Gray", "", &settings.HeightScale, render.ScaleGray)
+		imgui.EndMenu()
+	}
+	toggle("Height legend", "", &settings.Legend)
+	imgui.EndDisabled()
+
+	imgui.SeparatorText("Shading")
+	if lit := settings.Shading == shadingLit; imgui.MenuItemBoolPtrV("Lit", "Q", &lit, true) {
+		settings.Shading, changed = shadingUnlit, true
+		if lit {
+			settings.Shading = shadingLit
+		}
+	}
+	toggle("Wireframe", "W", &settings.Wireframe)
+	number("view.verticalScale", "Vertical exaggeration", &settings.VerticalScale, 0.1, 100, 0.5,
+		"Of the 3D view: at 1, mountains have their true proportions")
+
+	imgui.SeparatorText("Overlay")
+	number("view.riverWidth", "River width (px)", &settings.RiverWidth, 0, 100, 0.1,
+		"Width of the largest river, in map pixels (0: no rivers)")
+	number("view.riverPower", "River width growth", &settings.RiverPower, 0, 1, 0.01,
+		"How much wider big rivers are than small ones")
+	number("view.contours", "Contour interval (m)", &settings.Contours, 0, 10000, 1, "0: no contour lines")
+	number("view.grid", "Grid size (px)", &settings.Grid, 0, 10000, 10, "0: no grid")
+
+	imgui.Separator()
+	if imgui.MenuItemBoolV("Reset the view", "R", false, true) {
+		a.resetView()
+	}
+
+	if changed {
+		a.setSettings(settings)
+	}
+}
+
+// drawSimulationMenu is about watching the simulation. Its parameters are
+// the project's, in the panel.
+func (a *app) drawSimulationMenu(state engine.State) {
+	settings := a.settings
+	changed := imgui.MenuItemBoolPtrV("Watch the simulation", "", &settings.Watch, true)
+	imgui.SetItemTooltip("Show the landscape as it is simulated, instead of the result only")
+
+	imgui.PushItemWidth(90 * a.uiScale)
+	imgui.BeginDisabledV(!settings.Watch)
+	var edited bool
+	settings.WatchSteps, edited = a.number("simulation.watchSteps", "Time steps per frame", settings.WatchSteps, 1, 1000, 1, true, false, "")
+	imgui.EndDisabled()
+	imgui.PopItemWidth()
+	if changed || edited {
+		a.setSettings(settings)
+	}
+
+	imgui.Separator()
+	if imgui.MenuItemBoolV("Replay the simulation", "", false, !state.Busy && a.world != nil) {
+		a.replay()
+	}
+	imgui.SetItemTooltip("Run it again, to watch it")
 }

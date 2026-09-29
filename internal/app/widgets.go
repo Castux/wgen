@@ -137,19 +137,6 @@ func roundToStep(v, step float64) float64 {
 	return math.Round(v*p) / p
 }
 
-func combo(label, value string, options []string) (string, bool) {
-	changed := false
-	if imgui.BeginCombo(label, value) {
-		for _, option := range options {
-			if imgui.SelectableBoolV(option, option == value, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && option != value {
-				value, changed = option, true
-			}
-		}
-		imgui.EndCombo()
-	}
-	return value, changed
-}
-
 // keepInside moves (and shrinks, if needed) the current window back inside
 // the display, when the display got smaller than when the window was placed:
 // its position is saved between sessions.

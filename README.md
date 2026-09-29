@@ -28,6 +28,11 @@ example project, in `example/`.
 
 ## Using the app
 
+The menus have the commands and how the landscape is shown: File, Edit
+(undo and redo), View (every display setting), Simulation (watching it),
+Help. The panel on the right is the project: its terrains, painting, and
+the map and simulation parameters.
+
 At first, wgen starts a new map with a random island. From the File menu:
 
 - New map: an empty sea or a random island, of a chosen size in pixels
@@ -66,15 +71,16 @@ Height colors are a rainbow scale (Turbo) on land, or gray, and blue in
 water, darker when deeper. The legend in the top left corner tells the
 heights.
 
-The Display section of the panel has the vertical exaggeration of the 3D
-view (mountains are small on a continent: 10 km high on 1000 km wide), and
-an overlay of rivers, contour lines and a grid.
+The View menu also has the vertical exaggeration of the 3D view (mountains
+are small on a continent: 10 km high on 1000 km wide), and the overlay:
+rivers, contour lines and a grid.
 
 ### Painting
 
-Press `E` (or Edit, Paint the map): the map view shows the painted terrains
-over the generated landscape. The left button paints the terrain selected in
-the panel, the other buttons pan.
+Press `E` (or check "Paint the map" in the Painting section of the panel):
+the map view shows the painted terrains over the generated landscape. The
+left button paints the terrain selected in the panel, the other buttons pan.
+Painting is only in the map view: switching to 3D stops it.
 
 - Brushes: natural (irregular edges, different every stamp), hard round,
   hard square. `[` and `]` change the size.
@@ -139,10 +145,10 @@ The Map section of the panel:
 - Seed: the randomness of the mesh and of the rock hardness.
 
 The Simulation section has the parameters of the erosion model (hover them
-for help), and "Watch the simulation", which shows the landscape as it is
-simulated: the land rising from the sea, rivers cutting in, the heights
-being calibrated, then each finer mesh. "Replay the simulation" runs it
-again, to watch it.
+for help). The Simulation menu has "Watch the simulation", which shows the
+landscape as it is simulated: the land rising from the sea, rivers cutting
+in, the heights being calibrated, then each finer mesh. "Replay the
+simulation" runs it again, to watch it.
 
 The project file and its map are watched: edit them in another program, and
 the app follows.

@@ -130,6 +130,7 @@ func loadSettings(path string) Settings {
 	valid(&settings.Shading, shadings, defaultSettings.Shading)
 	valid(&settings.HeightScale, heightScales, defaultSettings.HeightScale)
 	valid(&settings.Brush, brushes, defaultSettings.Brush)
+	settings.keepConsistent()
 	positive := func(value *float64, fallback float64) {
 		if !(*value > 0) {
 			*value = fallback
@@ -178,6 +179,14 @@ func (s *Settings) overlayOptions() render.Options {
 // in the map view.
 func (s *Settings) painting() bool { return s.Editing && s.View == viewMap }
 
+// keepConsistent turns painting off out of the map view, where it can't
+// happen, so that the painting checkbox tells the truth.
+func (s *Settings) keepConsistent() {
+	if s.View != viewMap {
+		s.Editing = false
+	}
+}
+
 // setEditing turns painting on or off. Painting shows the map, where it
 // happens.
 func (s *Settings) setEditing(editing bool) {
@@ -199,6 +208,7 @@ func (a *app) initSettings(dir string) {
 
 // setSettings changes the settings, and saves them.
 func (a *app) setSettings(settings Settings) {
+	settings.keepConsistent()
 	watch := settings.Watch != a.settings.Watch || settings.WatchSteps != a.settings.WatchSteps
 	a.settings = settings
 	if watch {

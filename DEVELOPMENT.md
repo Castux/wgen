@@ -243,7 +243,10 @@ Files:
 - `project.go`: projects: startup (the given file, else the last project,
   else a new map), new, open (a project, or an image to import), save,
   save as, export, quit, all asking about unsaved changes first.
-- `menu.go`: the menu bar.
+- `menu.go`: the menu bar: commands, and every display setting (View) and
+  watching the simulation (Simulation). Each option is in one place: the
+  menus for commands and how things are shown, the panel for the project
+  and painting.
 - `dialogs.go`: modal dialogs: new map, export, unsaved changes, controls.
 - `filedialog.go`: the file browser (ImGui, with places and drives; no
   native dialog, to avoid more C dependencies).
@@ -253,7 +256,8 @@ Files:
   picked color. No GL: unit tested.
 - `terrains.go`: the terrain list of the panel, which is the brush palette,
   and editing terrains (rename, recolor, add, remove).
-- `panel.go`: the panel. Map and simulation parameters come from
+- `panel.go`: the panel: terrains, painting, map and simulation
+  parameters. The parameters come from
   `config.Schema`, their values from `config.Value`; edits are sent to the
   session as partial configs, unless the value is unchanged. The height
   legend. The panel is kept inside the window, as its saved position may be
@@ -300,6 +304,8 @@ Environment variables, for development:
   ups: target in image pixels (top left origin), distance in pixels, tilt
   from vertical and turn in degrees.
 - `WGEN_DIALOG=new|open|export|help`: open that dialog at startup.
+- `WGEN_CLICK=x,y`: click there (window coordinates) after a second, for
+  instance on a menu to open it.
 
 ```sh
 WGEN_SCREENSHOT=shot.png WGEN_CAMERA=200,1600,150,60,20 bin/wgen lab/chasers.json

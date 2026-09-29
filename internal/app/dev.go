@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/AllenDang/cimgui-go/imgui"
 	"github.com/go-gl/gl/v3.3-core/gl"
 	"github.com/go-gl/mathgl/mgl64"
 
@@ -24,10 +25,15 @@ import (
 //   - WGEN_SCREENSHOT_AT=seconds: take it at that time instead
 //   - WGEN_CAMERA=x,y,distance,tilt,turn: place the orbit camera
 //   - WGEN_DIALOG=new|open|export|help: open that dialog at startup
+//   - WGEN_CLICK=x,y: click there (window coordinates) after a second, to
+//     open a menu
 
 type devHooks struct {
 	screenshot   string        // save a screenshot there once ready, and quit
 	screenshotAt time.Duration // or at that time
+
+	click      *imgui.Vec2 // where to click, if anywhere
+	clickFrame int         // frames since the click started
 }
 
 func loadDevHooks() devHooks {
@@ -35,7 +41,30 @@ func loadDevHooks() devHooks {
 	if at, err := strconv.ParseFloat(os.Getenv("WGEN_SCREENSHOT_AT"), 64); err == nil {
 		d.screenshotAt = time.Duration(at * float64(time.Second))
 	}
+	var x, y float32
+	if _, err := fmt.Sscanf(os.Getenv("WGEN_CLICK"), "%g,%g", &x, &y); err == nil {
+		d.click = &imgui.Vec2{X: x, Y: y}
+	}
 	return d
+}
+
+// devClick clicks where WGEN_CLICK says, a second after the start: the
+// button down one frame, up the next, the mouse staying there. Called
+// before ImGui's frame starts.
+func (a *app) devClick() {
+	if a.dev.click == nil || time.Since(a.start) < time.Second {
+		return
+	}
+	io := imgui.CurrentIO()
+	io.AddMousePosEvent(a.dev.click.X, a.dev.click.Y)
+	switch a.dev.clickFrame {
+	case 0:
+		io.AddMouseButtonEvent(int32(imgui.MouseButtonLeft), true)
+	case 1:
+		io.AddMouseButtonEvent(int32(imgui.MouseButtonLeft), false)
+	}
+	a.dev.clickFrame++
+	a.activity()
 }
 
 // devDialog opens the dialog given by WGEN_DIALOG, for screenshots.

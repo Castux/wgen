@@ -201,16 +201,17 @@ func (a *app) removeTerrain(conf *config.Config, t *config.Terrain) {
 	}
 }
 
-// drawBrush is the map editor's brush: painting mode, shape, size.
-func (a *app) drawBrush() {
-	if !imgui.CollapsingHeaderTreeNodeFlagsV("Brush", imgui.TreeNodeFlagsDefaultOpen) {
+// drawPainting is painting the map: the mode, the brush, the shoreline
+// lock. Undo and redo are in the Edit menu.
+func (a *app) drawPainting() {
+	if !imgui.CollapsingHeaderTreeNodeFlagsV("Painting", imgui.TreeNodeFlagsDefaultOpen) {
 		return
 	}
 
 	settings := a.settings
 	changed := false
 
-	if editing := settings.Editing; imgui.Checkbox("Paint the map (e)", &editing) {
+	if editing := settings.Editing; imgui.Checkbox("Paint the map (E)", &editing) {
 		settings.setEditing(editing)
 		changed = true
 	}
@@ -236,25 +237,11 @@ func (a *app) drawBrush() {
 		"Radius, [ and ] to change it")
 	changed = changed || edited
 
-	changed = imgui.Checkbox("Lock shoreline (l)", &settings.LockShore) || changed
+	changed = imgui.Checkbox("Lock the shoreline (L)", &settings.LockShore) || changed
 	imgui.SetItemTooltip("Land brushes leave sea and lakes alone, water brushes leave land alone")
 	settings.PaintOpacity, edited = a.number("brush.opacity", "Painting opacity", settings.PaintOpacity, 0, 1, 0.05, false, false,
 		"How much the painted map shows over the generated one, while painting")
 	changed = changed || edited
-
-	half := imgui.NewVec2(imgui.ContentRegionAvail().X/2-imgui.CurrentStyle().ItemSpacing().X/2, 0)
-	canvas := a.editor.canvas
-	imgui.BeginDisabledV(canvas == nil || len(canvas.undo) == 0)
-	if imgui.ButtonV("Undo (ctrl+z)", half) {
-		a.undo()
-	}
-	imgui.EndDisabled()
-	imgui.SameLine()
-	imgui.BeginDisabledV(canvas == nil || len(canvas.redo) == 0)
-	if imgui.ButtonV("Redo (ctrl+y)", half) {
-		a.redo()
-	}
-	imgui.EndDisabled()
 
 	if changed {
 		a.setSettings(settings)
