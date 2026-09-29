@@ -34,7 +34,7 @@ Windows notes:
   2`), try building from PowerShell or `cmd`: this happened with a gcc whose
   `cc1.exe` couldn't run from Git Bash but was fine from Windows shells.
 
-Everything but `internal/app`, `assets` and `cmd/wgen` is pure Go, and
+Everything but `internal/app` and `cmd/wgen` is pure Go, and
 can be built and tested without a C compiler.
 
 ## Releases
@@ -55,7 +55,7 @@ into `dist/`:
   needs a signature), not notarized.
 - Linux: the binary, in a tarball.
 
-Each has the README and `lab/chasers.json` as an example. The version is set
+Each has the README and `assets/example/chasers.json` as an example. The version is set
 with `-X main.version`, shown by `-version` and in the Help menu.
 
 `.github/workflows/build.yml` runs the tests and the script on Windows,
@@ -82,7 +82,7 @@ scale); elsewhere it follows the monitor's content scale.
 |---|---|
 | `cmd/wgen` | the app, and the command line export |
 | `cmd/wgenlab` | experiments: compare generation variants (see below) |
-| `assets` | files built into the app: the icon |
+| `assets` | files built into the app: the icon, the example project (`assets/example`) |
 | `internal/config` | the project format: loading, validation, patching, saving; parameter schema for the panel |
 | `internal/mesh` | Delaunay triangulation and dual graph |
 | `internal/gen` | the generation pipeline, in stages; immutable `World` snapshots |
@@ -249,6 +249,9 @@ Files:
 - `project.go`: projects: startup (the given file, else the last project,
   else a new map), new, open (a project, or an image to import), save,
   save as, export, quit, all asking about unsaved changes first.
+- `welcome.go`: the welcome card. `recent.go`: the recent projects, in
+  `recent.json` next to the settings (a slice would make `Settings`, compared
+  by value, incomparable).
 - `menu.go`: the menu bar: commands, and every display setting (View) and
   watching the simulation (Simulation). Each option is in one place: the
   menus for commands and how things are shown, the panel for the project
@@ -321,8 +324,8 @@ Environment variables, for development:
   click): to open a menu, or draw a ruler.
 
 ```sh
-WGEN_SCREENSHOT=shot.png WGEN_CAMERA=200,1600,150,60,20 bin/wgen lab/chasers.json
-WGEN_SCREENSHOT=dialog.png WGEN_SCREENSHOT_AT=2 WGEN_DIALOG=export bin/wgen lab/chasers.json
+WGEN_SCREENSHOT=shot.png WGEN_CAMERA=200,1600,150,60,20 bin/wgen assets/example/chasers.json
+WGEN_SCREENSHOT=dialog.png WGEN_SCREENSHOT_AT=2 WGEN_DIALOG=export bin/wgen assets/example/chasers.json
 ```
 
 Back up `viewer.json` and `imgui.ini` first: the app saves its settings.

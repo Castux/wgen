@@ -11,3 +11,4 @@
 !/assets/*.png
 /dist/
 *.syso
+!/assets/example/*.png

@@ -24,6 +24,7 @@ type dialogs struct {
 	imports importDialog
 	confirm confirmDialog
 	help    bool
+	welcome bool
 }
 
 func (a *app) drawDialogs() {
@@ -33,6 +34,7 @@ func (a *app) drawDialogs() {
 	a.drawImport()
 	a.drawConfirm()
 	a.drawHelp()
+	a.drawWelcome()
 }
 
 // modal opens a modal popup (once, when asked) and begins it, centered.

@@ -171,3 +171,11 @@ func colorFloats(c config.Color) [3]float32 {
 func colorBytes(c [3]float32) config.Color {
 	return config.Color{uint8(math.Round(float64(c[0]) * 255)), uint8(math.Round(float64(c[1]) * 255)), uint8(math.Round(float64(c[2]) * 255))}
 }
+
+// tooltipEvenDisabled shows a tooltip on the last item, even if it is
+// disabled.
+func tooltipEvenDisabled(text string) {
+	if imgui.IsItemHoveredV(imgui.HoveredFlagsAllowWhenDisabled | imgui.HoveredFlagsForTooltip) {
+		imgui.SetTooltip(noFormat(text))
+	}
+}

@@ -362,7 +362,7 @@ codebase (S: hours, M: a few days, L: weeks).
 | # | Proposal | Journey | Value | Effort |
 |---|---|---|---|---|
 | 1 | Hover readout: position, elevation, terrain, drainage (done, with rulers and profiles) | cross | High | S |
-| 2 | Welcome card, Open example, Open recent | 1, 7 | High | S |
+| 2 | Welcome card, Open example, Open recent (done) | 1, 7 | High | S |
 | 3 | Map width and target size in the import dialog | 3 | High | S |
 | 4 | Export metadata sidecar, height range in the dialog | 5 | High | S |
 | 5 | Terrain keys `1`..`9`, eyedropper, fill tool | 2 | High | S |

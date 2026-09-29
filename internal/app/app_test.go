@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -301,5 +302,27 @@ func TestPaintingOrMeasuring(t *testing.T) {
 	settings.setMeasuring(true)
 	if settings.Editing {
 		t.Error("measuring doesn't stop painting")
+	}
+}
+
+func TestRecent(t *testing.T) {
+	var recent []string
+	for _, path := range []string{"a.json", "b.json", "a.json"} {
+		recent = withRecent(recent, path)
+	}
+	if !slices.Equal(recent, []string{"a.json", "b.json"}) {
+		t.Errorf("recent %v, want a then b, once each", recent)
+	}
+	for i := range 20 {
+		recent = withRecent(recent, fmt.Sprintf("%d.json", i))
+	}
+	if len(recent) != maxRecent || recent[0] != "19.json" {
+		t.Errorf("%d recent, first %q", len(recent), recent[0])
+	}
+
+	path := filepath.Join(t.TempDir(), "recent.json")
+	saveRecent(path, recent)
+	if loaded := loadRecent(path); !slices.Equal(loaded, recent) {
+		t.Errorf("loaded %v, saved %v", loaded, recent)
 	}
 }

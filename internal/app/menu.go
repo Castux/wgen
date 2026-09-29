@@ -35,6 +35,9 @@ func (a *app) drawMenu(state engine.State) {
 		imgui.EndMenu()
 	}
 	if imgui.BeginMenu("Help") {
+		if imgui.MenuItemBool("Welcome") {
+			a.openWelcome()
+		}
 		if imgui.MenuItemBool("Controls") {
 			a.dialogs.help = true
 		}
@@ -54,6 +57,22 @@ func (a *app) drawFileMenu() {
 		a.openDialog()
 	}
 	imgui.SetItemTooltip("A project, or an image to import as a map")
+	if imgui.BeginMenuV("Open recent", len(a.recent) > 0) {
+		for _, path := range a.recent {
+			if imgui.MenuItemBoolV(displayName(path)+"##"+path, "", false, isFile(path)) {
+				a.openRecent(path)
+			}
+			tooltipEvenDisabled(path)
+		}
+		imgui.Separator()
+		if imgui.MenuItemBool("Clear the list") {
+			a.clearRecent()
+		}
+		imgui.EndMenu()
+	}
+	if imgui.MenuItemBool("Open the example") {
+		a.openExample()
+	}
 	imgui.Separator()
 	if imgui.MenuItemBoolV("Save", "Ctrl+S", false, true) {
 		a.saveProject(nil)

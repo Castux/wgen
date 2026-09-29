@@ -44,6 +44,8 @@ type app struct {
 
 	settingsPath string
 	settings     Settings
+	recentPath   string
+	recent       []string // projects, most recent first
 
 	terrain *terrainView
 	mapView *mapView

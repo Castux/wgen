@@ -25,7 +25,7 @@ import (
 //     are ready, and quit
 //   - WGEN_SCREENSHOT_AT=seconds: take it at that time instead
 //   - WGEN_CAMERA=x,y,distance,tilt,turn: place the orbit camera
-//   - WGEN_DIALOG=new|open|export|help: open that dialog at startup
+//   - WGEN_DIALOG=new|open|export|help|welcome: open that dialog at startup
 //   - WGEN_CLICK=x,y;x,y...: click there (window coordinates) once the
 //     world is ready, one click every 10 frames (the same point twice is a
 //     double click), to open a menu or draw a ruler; the screenshot waits
@@ -110,6 +110,8 @@ func (a *app) devDialog() {
 		a.openExport()
 	case "help":
 		a.dialogs.help = true
+	case "welcome":
+		a.openWelcome()
 	}
 }
 

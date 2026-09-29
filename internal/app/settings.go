@@ -44,6 +44,7 @@ type Settings struct {
 
 	// Projects
 	LastProject string         `json:"lastProject"`
+	ShowWelcome bool           `json:"showWelcome"` // the welcome card, at startup
 	Export      export.Options `json:"export"`
 }
 
@@ -95,6 +96,8 @@ var defaultSettings = Settings{
 	VerticalScale: 1,
 
 	HoverInfo: true,
+
+	ShowWelcome: true,
 
 	WatchSteps: 10,
 
@@ -217,6 +220,11 @@ func (a *app) initSettings(dir string) {
 	}
 	a.settingsPath = filepath.Join(dir, "viewer.json") // named when the app was a viewer
 	a.settings = loadSettings(a.settingsPath)
+	a.recentPath = filepath.Join(dir, "recent.json")
+	a.recent = loadRecent(a.recentPath)
+	if len(a.recent) == 0 && a.settings.LastProject != "" {
+		a.recent = []string{a.settings.LastProject}
+	}
 }
 
 // setSettings changes the settings, and saves them.

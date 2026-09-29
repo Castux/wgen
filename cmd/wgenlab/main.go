@@ -10,7 +10,7 @@
 // The experiment file:
 //
 //	{
-//		"config": "lab/chasers.json",       // base config, relative to the experiment file
+//		"config": "../assets/example/chasers.json", // base config, relative to the experiment file
 //		"cases": {"small": {}, "continent": {"resolution": 8}},
 //		"variants": {"baseline": {}, "soft": {"simulation": {"erodibility": 4e-6}}},
 //		"region": "mountains",              // terrain measured

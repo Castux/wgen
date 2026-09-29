@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Castux/wgen/assets"
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/export"
 	"github.com/Castux/wgen/internal/gen"
@@ -50,6 +51,9 @@ func (a *app) startup(path string) {
 	default:
 		a.newDefaultProject()
 	}
+	if path == "" && a.settings.ShowWelcome {
+		a.openWelcome()
+	}
 }
 
 // unsaved tells whether the project has changes not saved.
@@ -66,8 +70,38 @@ func (a *app) projectName() string {
 }
 
 // newDefaultProject starts a new map, of the default size, with an island.
+// Nothing is lost if it isn't saved: it doesn't count as unsaved changes.
 func (a *app) newDefaultProject() {
 	a.newProject(defaultMapSize, defaultMapSize, defaultMapWidth, true, false)
+	a.editor.dirty = false
+	a.session.Engine.MarkClean()
+}
+
+// openExample starts a new project from the example, untitled so that
+// saving it doesn't overwrite it.
+func (a *app) openExample() {
+	a.unsavedThen("open the example", func() {
+		project, mapImage := assets.Example()
+		conf, _, err := config.Parse(project)
+		if err != nil {
+			a.message = &message{text: err.Error(), error: true}
+			return
+		}
+		conf.Image = ""
+		width, height, pixels := gen.MapColors(mapImage)
+		suggested := assets.ExampleName + projectExt
+		if home, err := os.UserHomeDir(); err == nil {
+			suggested = filepath.Join(home, suggested)
+		}
+		a.startProject(conf, newCanvas(width, height, pixels), suggested)
+		a.editor.dirty = false
+		a.session.Engine.MarkClean()
+	})
+}
+
+// openRecent opens a recent project.
+func (a *app) openRecent(path string) {
+	a.unsavedThen("open another map", func() { a.open(path) })
 }
 
 // newProject starts a new map of the given size, all sea or with an island,
@@ -171,6 +205,7 @@ func (a *app) rememberProject(path string) {
 	settings := a.settings
 	settings.LastProject = path
 	a.setSettings(settings)
+	a.addRecent(path)
 }
 
 // saveProject saves the project, then does then (if not nil). A new

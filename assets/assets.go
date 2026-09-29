@@ -1,4 +1,5 @@
-// Package assets holds the files built into the app.
+// Package assets holds the files built into the app: the icon, and the
+// example project.
 package assets
 
 import (
@@ -18,4 +19,22 @@ func Icon() image.Image {
 		panic(err)
 	}
 	return img
+}
+
+//go:embed example/chasers.json
+var exampleProject []byte
+
+//go:embed example/chasers.png
+var exampleMap []byte
+
+// ExampleName is the name of the example project.
+const ExampleName = "chasers"
+
+// Example is the example project: its file, and its map image.
+func Example() (project []byte, mapImage image.Image) {
+	img, err := png.Decode(bytes.NewReader(exampleMap))
+	if err != nil {
+		panic(err)
+	}
+	return exampleProject, img
 }

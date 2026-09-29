@@ -33,7 +33,7 @@ mkdir -p "$out"
 # The example project and the readme, next to the app
 examples() {
 	mkdir -p "$1/example"
-	cp lab/chasers.json lab/chasers.png "$1/example/"
+	cp assets/example/chasers.json assets/example/chasers.png "$1/example/"
 	cp README.md "$1/"
 }
 
