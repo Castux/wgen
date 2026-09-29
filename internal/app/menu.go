@@ -125,6 +125,15 @@ func (a *app) drawViewMenu() {
 	choice("Map", "V", &settings.View, viewMap)
 	choice("Eye level", "V", &settings.View, viewEye)
 	imgui.SetItemTooltip("Standing on the terrain, at the center of the 3D view: WASD or arrows move, a drag looks around")
+	if imgui.BeginMenu("Eye level ground") {
+		choice("Facets", "", &settings.EyeGround, groundFacets)
+		imgui.SetItemTooltip("The mesh as it is: flat facets, about a kilometer wide")
+		choice("Smooth", "", &settings.EyeGround, groundSmooth)
+		imgui.SetItemTooltip("Finer ground around you (4 m, then 32 m), smoothly interpolated, with small details")
+		choice("Blocks", "", &settings.EyeGround, groundBlocks)
+		imgui.SetItemTooltip("1 m blocks around you, rounded from the smooth ground, then the smooth ground")
+		imgui.EndMenu()
+	}
 
 	imgui.SeparatorText("Colors")
 	choice("Terrains", "Shift", &settings.Color, colorTerrain)

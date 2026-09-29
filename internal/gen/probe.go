@@ -163,6 +163,81 @@ func (p *Probe) Surface(position geom.Vec2) float64 {
 	return ground
 }
 
+// TerrainAt is the terrain of the map pixel at a position, nil if none.
+func (p *Probe) TerrainAt(position geom.Vec2) *config.Terrain {
+	w := p.w
+	if !p.Inside(position) || len(w.Map) != w.Width*w.Height {
+		return nil
+	}
+	x, y := min(int(position.X), w.Width-1), min(int(position.Y), w.Height-1)
+	return p.terrains[w.Map[y*w.Width+x]]
+}
+
+// SmoothGround is the ground (the bed under water) at a position, in
+// meters, smoothly interpolated in the heightmap (Catmull-Rom, through its
+// pixels), for detailed ground at eye level. NaN outside of the map.
+func (p *Probe) SmoothGround(position geom.Vec2) float64 {
+	w := p.w
+	if !p.Inside(position) || len(w.Heightmap) != w.Width*w.Height {
+		return math.NaN()
+	}
+	x := geom.Clamp(position.X, 0, float64(w.Width-1))
+	y := geom.Clamp(position.Y, 0, float64(w.Height-1))
+	x0, y0 := int(math.Floor(x)), int(math.Floor(y))
+	fx, fy := x-float64(x0), y-float64(y0)
+
+	at := func(x, y int) float64 {
+		x, y = max(0, min(x, w.Width-1)), max(0, min(y, w.Height-1))
+		if z := w.Heightmap[y*w.Width+x]; !math.IsNaN(z) {
+			return z
+		}
+		return w.Lowest
+	}
+	var rows [4]float64
+	for j := range 4 {
+		rows[j] = catmullRom(at(x0-1, y0-1+j), at(x0, y0-1+j), at(x0+1, y0-1+j), at(x0+2, y0-1+j), fx)
+	}
+	return catmullRom(rows[0], rows[1], rows[2], rows[3], fy)
+}
+
+// catmullRom interpolates between b and c (t from 0 to 1), a and d the
+// points around them.
+func catmullRom(a, b, c, d, t float64) float64 {
+	return b + 0.5*t*(c-a+t*(2*a-5*b+4*c-d+t*(3*(b-c)+d-a)))
+}
+
+// DetailedGround is the smooth ground with details down to finest meters:
+// fractal noise, stronger on steep slopes, none under water; the same at
+// every finest, but for the smaller details.
+func (p *Probe) DetailedGround(position geom.Vec2, finest float64) float64 {
+	ground := p.SmoothGround(position)
+	if math.IsNaN(ground) {
+		return ground
+	}
+	if t := p.TerrainAt(position); t == nil || t.IsWater() {
+		return ground
+	}
+
+	// Slope, meters per meter
+	const d = 0.5 // map pixels
+	metersPerPixel := p.w.MetersPerPixel
+	dx := p.SmoothGround(geom.Vec2{X: position.X + d, Y: position.Y}) - p.SmoothGround(geom.Vec2{X: position.X - d, Y: position.Y})
+	dy := p.SmoothGround(geom.Vec2{X: position.X, Y: position.Y + d}) - p.SmoothGround(geom.Vec2{X: position.X, Y: position.Y - d})
+	slope := math.Hypot(dx, dy) / (2 * d * metersPerPixel)
+	if math.IsNaN(slope) {
+		slope = 0
+	}
+	roughness := geom.Clamp(3*slope, 0.15, 1)
+
+	seed := p.w.Config.Seed ^ 0x6a09e667f3bcc908
+	x, y := position.X*metersPerPixel, position.Y*metersPerPixel
+	for wavelength := 256.0; wavelength >= finest; wavelength /= 2 {
+		ground += 0.06 * wavelength * roughness * Noise(seed, x/wavelength, y/wavelength)
+		seed++
+	}
+	return ground
+}
+
 // closest is the vertex closest to a position, among those of its cell and
 // the neighbouring ones: -1 if none.
 func (p *Probe) closest(position geom.Vec2) int32 {

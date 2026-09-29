@@ -142,3 +142,31 @@ func TestSurface(t *testing.T) {
 		t.Error("no surface between vertices")
 	}
 }
+
+func TestSmoothGround(t *testing.T) {
+	w := generate(t, setup(t))
+	probe := NewProbe(w)
+
+	// Through the heightmap's pixels
+	for _, p := range [][2]int{{50, 60}, {100, 100}, {120, 120}, {150, 90}} {
+		want := w.Heightmap[p[1]*w.Width+p[0]]
+		if got := probe.SmoothGround(geom.Vec2{X: float64(p[0]), Y: float64(p[1])}); math.Abs(got-want) > 1e-9 {
+			t.Errorf("at %v: %g, heightmap %g", p, got, want)
+		}
+	}
+
+	// Continuous, and details small next to the relief
+	previous := probe.SmoothGround(geom.Vec2{X: 60, Y: 120})
+	for x := 60.0; x < 180; x += 0.1 {
+		position := geom.Vec2{X: x, Y: 120}
+		z := probe.SmoothGround(position)
+		if math.Abs(z-previous) > 0.2*(w.Highest-w.Lowest) {
+			t.Fatalf("jump at x %g: %g to %g", x, previous, z)
+		}
+		previous = z
+		detailed := probe.DetailedGround(position, 8)
+		if math.Abs(detailed-z) > 60 {
+			t.Fatalf("details of %g m at x %g", detailed-z, x)
+		}
+	}
+}

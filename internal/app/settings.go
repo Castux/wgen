@@ -27,6 +27,7 @@ type Settings struct {
 	Grid        float64 `json:"grid"`
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D view
+	EyeGround     string  `json:"eyeGround"`     // at eye level: facets, smooth, blocks
 
 	// Inspecting: what is under the cursor, measuring with rulers
 	HoverInfo bool `json:"hoverInfo"`
@@ -95,6 +96,7 @@ var defaultSettings = Settings{
 	RiverWidth:  10,
 
 	VerticalScale: 1,
+	EyeGround:     groundSmooth,
 
 	HoverInfo: true,
 
@@ -138,6 +140,7 @@ func loadSettings(path string) Settings {
 	valid(&settings.Shading, shadings, defaultSettings.Shading)
 	valid(&settings.HeightScale, heightScales, defaultSettings.HeightScale)
 	valid(&settings.Brush, brushes, defaultSettings.Brush)
+	valid(&settings.EyeGround, groundModes, defaultSettings.EyeGround)
 	settings.keepConsistent()
 	positive := func(value *float64, fallback float64) {
 		if !(*value > 0) {

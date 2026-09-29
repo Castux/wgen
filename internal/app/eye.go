@@ -96,7 +96,7 @@ func (a *app) placeEye() {
 	x := geom.Clamp(eye.position.X(), -v.width/2, v.width/2)
 	y := geom.Clamp(eye.position.Y(), -v.height/2, v.height/2)
 	z := eye.position.Z()
-	if surface := a.inspect.probe.Surface(geom.Vec2{X: x + v.width/2, Y: y + v.height/2}); !math.IsNaN(surface) {
+	if surface := a.groundHeight(geom.Vec2{X: x + v.width/2, Y: y + v.height/2}); !math.IsNaN(surface) {
 		z = surface*a.zScale() + eyeHeight/v.metersPerPixel
 	}
 	eye.position = mgl64.Vec3{x, y, z}

@@ -142,7 +142,7 @@ func (a *app) devCamera() {
 // devScreenshot saves the screenshot asked by WGEN_SCREENSHOT when it is
 // time: once everything is drawn, or at WGEN_SCREENSHOT_AT.
 func (a *app) devScreenshot(state engine.State, framebufferWidth, framebufferHeight int) {
-	ready := a.world != nil && !state.Busy && !a.loading() && a.redraw == 0 && a.devClicksDone()
+	ready := a.world != nil && !state.Busy && !a.loading() && !a.ground.building && a.redraw == 0 && a.devClicksDone()
 	if a.dev.screenshotAt > 0 {
 		ready = time.Since(a.start) > a.dev.screenshotAt
 		a.activity() // keep drawing until then

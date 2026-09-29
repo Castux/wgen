@@ -20,9 +20,9 @@ import (
 // 3, unlit its basic material, computed in linear colors and displayed in
 // sRGB.
 type terrainView struct {
-	program       *program
-	vao, vbo, ebo uint32
-	count         int32 // indices
+	program *program
+	mesh    meshBuffers
+	details []groundLayer // finer ground around the eye, from the coarsest
 
 	width, height   float64 // map size, 0 before the first mesh
 	lowest, highest float64
@@ -133,6 +133,8 @@ uniform bool hasOverlay;
 uniform sampler2D overlay;
 uniform bool hasPaint;
 uniform sampler2D paint; // top row first, as the overlay
+uniform bool hasHole;
+uniform vec4 hole; // a rectangle not drawn, where finer ground is: x0, y0, x1, y1
 uniform float paintOpacity;
 
 out vec4 fragColor;
@@ -148,8 +150,10 @@ vec3 linearToSrgb(vec3 c) {
 }
 
 void main() {
-	// Hide the margin around the map
+	// Hide the margin around the map, and the hole
 	if (any(lessThan(vPosition.xy, vec2(0.0))) || any(greaterThan(vPosition.xy, size)))
+		discard;
+	if (hasHole && all(greaterThan(vPosition.xy, hole.xy)) && all(lessThan(vPosition.xy, hole.zw)))
 		discard;
 
 	vec3 color = vColor;
@@ -191,14 +195,24 @@ func newTerrainView() (*terrainView, error) {
 	}
 
 	v := &terrainView{program: p} // the overlay is decoded in the shader
+	v.mesh.init()
+	return v, nil
+}
 
-	gl.GenVertexArrays(1, &v.vao)
-	gl.GenBuffers(1, &v.vbo)
-	gl.GenBuffers(1, &v.ebo)
+// meshBuffers are the buffers of a mesh of terrain vertices.
+type meshBuffers struct {
+	vao, vbo, ebo uint32
+	count         int32 // indices
+}
 
-	gl.BindVertexArray(v.vao)
-	gl.BindBuffer(gl.ARRAY_BUFFER, v.vbo)
-	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, v.ebo)
+func (m *meshBuffers) init() {
+	gl.GenVertexArrays(1, &m.vao)
+	gl.GenBuffers(1, &m.vbo)
+	gl.GenBuffers(1, &m.ebo)
+
+	gl.BindVertexArray(m.vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, m.vbo)
+	gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ebo)
 
 	stride := int32(unsafe.Sizeof(terrainVertex{}))
 	gl.EnableVertexAttribArray(0)
@@ -206,8 +220,40 @@ func newTerrainView() (*terrainView, error) {
 	gl.EnableVertexAttribArray(1)
 	gl.VertexAttribPointerWithOffset(1, 4, gl.UNSIGNED_BYTE, true, stride, 12)
 	gl.BindVertexArray(0)
+}
 
-	return v, nil
+func (m *meshBuffers) upload(vertices []terrainVertex, indices []uint32) {
+	if m.vao == 0 {
+		m.init()
+	}
+	gl.BindVertexArray(m.vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, m.vbo)
+	if len(vertices) > 0 {
+		gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*int(unsafe.Sizeof(terrainVertex{})), gl.Ptr(vertices), gl.STATIC_DRAW)
+	}
+	if len(indices) > 0 {
+		gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW)
+	}
+	gl.BindVertexArray(0)
+	m.count = int32(len(indices))
+}
+
+func (m *meshBuffers) draw() {
+	if m.count == 0 {
+		return
+	}
+	gl.BindVertexArray(m.vao)
+	gl.DrawElementsWithOffset(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0)
+	gl.BindVertexArray(0)
+}
+
+func (m *meshBuffers) delete() {
+	if m.vao != 0 {
+		gl.DeleteVertexArrays(1, &m.vao)
+		gl.DeleteBuffers(1, &m.vbo)
+		gl.DeleteBuffers(1, &m.ebo)
+		*m = meshBuffers{}
+	}
 }
 
 // setMesh uploads the mesh of a world. It returns whether the map size
@@ -233,16 +279,7 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 		indices = append(indices, uint32(t[0]), uint32(t[1]), uint32(t[2]))
 	}
 
-	gl.BindVertexArray(v.vao)
-	gl.BindBuffer(gl.ARRAY_BUFFER, v.vbo)
-	if len(vertices) > 0 {
-		gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*int(unsafe.Sizeof(terrainVertex{})), gl.Ptr(vertices), gl.STATIC_DRAW)
-	}
-	if len(indices) > 0 {
-		gl.BufferData(gl.ELEMENT_ARRAY_BUFFER, len(indices)*4, gl.Ptr(indices), gl.STATIC_DRAW)
-	}
-	gl.BindVertexArray(0)
-	v.count = int32(len(indices))
+	v.mesh.upload(vertices, indices)
 
 	width, height := float64(w.Width), float64(w.Height)
 	changed := width != v.width || height != v.height
@@ -296,7 +333,7 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 	gl.ClearColor(float32(srgbEncode(skyColor[0])), float32(srgbEncode(skyColor[1])), float32(srgbEncode(skyColor[2])), 1)
 	gl.Clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
-	if v.count == 0 {
+	if v.mesh.count == 0 {
 		return
 	}
 
@@ -344,9 +381,24 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 		v.paint.bind(1)
 	}
 
-	gl.BindVertexArray(v.vao)
-	gl.DrawElementsWithOffset(gl.TRIANGLES, v.count, gl.UNSIGNED_INT, 0)
-	gl.BindVertexArray(0)
+	// At eye level, finer ground around the eye: each layer drawn in a hole
+	// of the coarser one, which it meets at its edges
+	holes := make([][4]float64, len(v.details))
+	for i := range v.details {
+		holes[i] = v.details[i].bounds
+	}
+	hole := func(i int) {
+		p.setInt("hasHole", boolInt(i < len(holes)))
+		if i < len(holes) {
+			gl.Uniform4f(p.location("hole"), float32(holes[i][0]), float32(holes[i][1]), float32(holes[i][2]), float32(holes[i][3]))
+		}
+	}
+	hole(0)
+	v.mesh.draw()
+	for i := range v.details {
+		hole(i + 1)
+		v.details[i].mesh.draw()
+	}
 
 	gl.PolygonMode(gl.FRONT_AND_BACK, gl.FILL)
 	gl.Disable(gl.CULL_FACE)

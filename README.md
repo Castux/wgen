@@ -121,9 +121,21 @@ see the scenery from there. `W` `A` `S` `D` (by their place on the
 keyboard) or the arrows walk, following the relief, `Shift` ten times
 faster; a drag looks around; the wheel sets the speed (50 m/s at first, the
 map is big). Back in 3D, the view is centered where you went. Distant
-terrain fades in a haze. The mesh is about a kilometer between points, so
-the ground nearby is made of flat facets: the view is for the landscape
-around, mountains on the horizon, rather than the ground at your feet.
+terrain fades in a haze.
+
+The mesh is about a kilometer between points: up close, flat facets. View,
+Eye level ground chooses what is drawn around you instead:
+
+- Smooth (the default): finer ground, every 4 m within 500 m, every 32 m
+  within 4 km, smoothly interpolated between the heights of the map, with
+  small details, more on steep slopes. It is made up: an idea of what the
+  ground could look like, consistent with the landscape.
+- Blocks: 1 m blocks within 128 m, their heights rounded from the smooth
+  ground, water flat at its level, then the smooth ground: a sense of
+  scale.
+- Facets: the mesh as it is.
+
+The finer ground follows you, rebuilt in the background as you walk.
 
 ### Painting
 

@@ -53,6 +53,7 @@ type app struct {
 	editor   editor
 	inspect  inspector
 	eyeWalk  eyeWalk
+	ground   groundDetail
 	dialogs  dialogs
 	autosave autosaver
 
@@ -274,6 +275,7 @@ func (a *app) frame() {
 	a.updateInspector()
 	a.handleInput()
 	a.walk()
+	a.updateGround()
 	a.drawMenu(state)
 	a.drawPanel()
 	a.drawStatus(state)
