@@ -34,12 +34,14 @@ func (a *app) drawProfile() {
 		return
 	}
 
+	// At first, above the cues at the bottom (they tell how to measure)
 	display := imgui.CurrentIO().DisplaySize()
-	viewWidth, _, _ := a.viewSize()
-	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), display.Y-12), imgui.CondFirstUseEver, imgui.NewVec2(0.5, 1))
-	imgui.SetNextWindowSizeV(imgui.NewVec2(float32(viewWidth*0.8), 260*a.uiScale), imgui.CondFirstUseEver)
+	viewWidth, viewHeight, _ := a.viewSize()
+	cues := max(a.cueHeight, 2*imgui.FrameHeightWithSpacing())
+	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), float32(viewHeight)-cues-16*a.uiScale), imgui.CondFirstUseEver, imgui.NewVec2(0.5, 1))
+	imgui.SetNextWindowSizeV(imgui.NewVec2(float32(viewWidth*0.8), 240*a.uiScale), imgui.CondFirstUseEver)
 	open := true
-	if imgui.BeginV("Altitude profile", &open, imgui.WindowFlagsNoFocusOnAppearing) {
+	if imgui.BeginV("Altitude profile###profile", &open, imgui.WindowFlagsNoFocusOnAppearing) {
 		keepInside(display)
 		imgui.TextUnformatted(fmt.Sprintf("Length %s   Lowest %s   Highest %s   Climb %s   Descent %s",
 			formatDistance(profile.Length), formatMeters(profile.Lowest), formatMeters(profile.Highest),

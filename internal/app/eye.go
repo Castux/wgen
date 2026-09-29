@@ -1,7 +1,6 @@
 package app
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -141,19 +140,4 @@ func (a *app) eyeSpeed() float64 {
 		a.eyeWalk.speed = eyeDefaultSpeed
 	}
 	return a.eyeWalk.speed
-}
-
-// drawEyeHelp tells how to move, at the bottom of the eye level view.
-func (a *app) drawEyeHelp() {
-	if a.settings.View != viewEye || a.world == nil {
-		return
-	}
-	viewWidth, viewHeight, _ := a.viewSize()
-	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), float32(viewHeight)-8), imgui.CondAlways, imgui.NewVec2(0.5, 1))
-	imgui.SetNextWindowBgAlpha(0.6)
-	if imgui.BeginV("##eye", nil, overlayWindowFlags) {
-		imgui.TextUnformatted(fmt.Sprintf("WASD or arrows: move, Shift: faster  ·  drag: look around  ·  wheel: speed, %s/s",
-			formatDistance(a.eyeSpeed())))
-	}
-	imgui.End()
 }

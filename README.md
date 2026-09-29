@@ -115,7 +115,8 @@ View, Rivers colored by basin (`B`) draws the rivers of each drainage basin
 instead of blue, to tell the river systems apart.
 
 Rulers measure distances and show altitude profiles. Press `M` (or View,
-Measure with rulers), then click to add points, in the map or in 3D; double
+Measure with rulers: a line at the bottom of the view tells what the clicks
+do while measuring), then click to add points, in the map or in 3D; double
 click or press `Enter` to finish. Drags still move the view. The length
 shows at the end of each ruler. Click a ruler to select it: the Altitude
 profile window shows the ground along it in the height colors, water in

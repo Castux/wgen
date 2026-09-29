@@ -58,6 +58,7 @@ type app struct {
 	autosave autosaver
 
 	menuHeight    float32
+	cueHeight     float32 // of the cues at the bottom of the view, 0 if none
 	title         string
 	suggestedPath string    // where to save a new project, by default
 	fitMap        bool      // fit the map view to the next world
@@ -281,7 +282,7 @@ func (a *app) frame() {
 	a.drawStatus(state)
 	a.drawLegend()
 	a.drawHover()
-	a.drawEyeHelp()
+	a.drawCues()
 	a.drawProfile()
 	a.drawRulers()
 	a.drawScaleBar()

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"fmt"
+
 	"github.com/AllenDang/cimgui-go/imgui"
 
 	"github.com/Castux/wgen/internal/engine"
@@ -79,3 +81,36 @@ func (a *app) drawStatus(state engine.State) {
 // focused or clicked
 const overlayWindowFlags = imgui.WindowFlagsNoDecoration | imgui.WindowFlagsAlwaysAutoResize | imgui.WindowFlagsNoSavedSettings |
 	imgui.WindowFlagsNoFocusOnAppearing | imgui.WindowFlagsNoNav | imgui.WindowFlagsNoInputs
+
+// drawCues tells what the input does in the current mode, at the bottom
+// of the view: at eye level, while measuring. cueHeight keeps its height,
+// for windows not to hide it.
+func (a *app) drawCues() {
+	var lines []string
+	if a.settings.View == viewEye && a.world != nil {
+		lines = append(lines, fmt.Sprintf("Eye level: WASD or arrows move, Shift faster  ·  drag: look around  ·  wheel: speed, %s/s",
+			formatDistance(a.eyeSpeed())))
+	}
+	if a.settings.Measuring {
+		if a.inspect.drawing {
+			lines = append(lines, "Drawing a ruler: click to add points  ·  double click or Enter: finish  ·  Escape: stop")
+		} else {
+			lines = append(lines, "Measuring (M to stop): click to start a ruler  ·  click a ruler: its profile  ·  Delete: remove it")
+		}
+	}
+	a.cueHeight = 0
+	if len(lines) == 0 {
+		return
+	}
+
+	viewWidth, viewHeight, _ := a.viewSize()
+	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), float32(viewHeight)-8), imgui.CondAlways, imgui.NewVec2(0.5, 1))
+	imgui.SetNextWindowBgAlpha(0.6)
+	if imgui.BeginV("##cues", nil, overlayWindowFlags) {
+		for _, line := range lines {
+			imgui.TextUnformatted(line)
+		}
+		a.cueHeight = imgui.WindowHeight()
+	}
+	imgui.End()
+}
