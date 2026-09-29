@@ -87,11 +87,35 @@ func (a *app) drawParams(conf *config.Config) {
 		if !ok {
 			continue
 		}
-		value, changed := a.number("param."+key, p.Label, v, p.Min, p.Max, p.Step, p.Type == "int", false, p.Tooltip)
-		if changed && value != v {
-			a.patch(p.Path, value)
+
+		// The resolution is in map pixels in the project, in meters here
+		label, tooltip, scale := p.Label, p.Tooltip, 1.0
+		if key == "resolution" {
+			if metersPerPixel := a.metersPerPixel(conf); metersPerPixel > 0 {
+				label, scale = "Resolution (m)", metersPerPixel
+				tooltip = "Mesh spacing of the finest level, in meters: finer is slower"
+			}
+		}
+		value, changed := a.number("param."+key, label, v*scale, p.Min*scale, p.Max*scale, p.Step*scale, p.Type == "int", false, tooltip)
+		if changed && value != v*scale {
+			a.patch(p.Path, value/scale)
 		}
 	}
+}
+
+// metersPerPixel is the scale of the project's map, 0 without a map.
+func (a *app) metersPerPixel(conf *config.Config) float64 {
+	width := 0
+	switch {
+	case a.editor.canvas != nil:
+		width = a.editor.canvas.width
+	case a.world != nil:
+		width = a.world.Width
+	}
+	if width == 0 {
+		return 0
+	}
+	return conf.MetersPerPixel(width)
 }
 
 // replay runs the simulation again, watching it.

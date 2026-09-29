@@ -153,7 +153,8 @@ smoothly.
 
 ### Painting
 
-Press `E` (or check "Paint the map" in the Painting section of the panel):
+Press `E` (or check "Paint the map" in the Painting section of the panel;
+a line at the bottom of the view tells the terrain painted and the keys):
 the painted terrains show over the generated landscape, and the left button
 paints the terrain selected in the panel, in the map view or on the terrain
 in 3D, where the brush follows the relief. In the map view, the other
@@ -217,8 +218,9 @@ The Map section of the panel:
 
 - Map width (km): the real width of the map, which sets the scale of
   everything.
-- Resolution (px): the mesh spacing of the finest detail level, in pixels
-  of the map. Lower is finer, and slower.
+- Resolution (m): the mesh spacing of the finest detail level. Lower is
+  finer, and slower. (The project file has it in pixels of the map, so
+  that it stays the same fraction of it when the map width changes.)
 - Refinement levels: the coarse mesh is 2^levels coarser than the finest.
 - Seed: the randomness of the mesh and of the rock hardness.
 

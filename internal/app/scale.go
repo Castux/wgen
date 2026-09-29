@@ -61,6 +61,9 @@ func (a *app) drawMapScaleBar() {
 	width, height, _ := a.viewSize()
 	margin := 16 * a.uiScale
 	right, y := float32(width)-margin, float32(height)-margin
+	if a.cueHeight > 0 {
+		y -= a.cueHeight + 8*a.uiScale // above the cues
+	}
 	drawBar([]imgui.Vec2{{X: right - pixels, Y: y}, {X: right, Y: y}}, formatDistance(length), a.uiScale)
 }
 
