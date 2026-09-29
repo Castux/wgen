@@ -77,14 +77,14 @@ func TestRender(t *testing.T) {
 		t.Errorf("height colors: land %v not gray", land)
 	}
 
-	// Overlay: white, with some river pixels
+	// Overlay: transparent, with some opaque river pixels
 	overlay := Render(w, Options{Scale: 2, Base: BaseNone, RiverPower: 0.5, RiverWidth: 4})
-	if overlay.RGBAAt(2, 2) != (color.RGBA{255, 255, 255, 255}) {
+	if overlay.RGBAAt(2, 2) != (color.RGBA{}) {
 		t.Errorf("overlay background %v", overlay.RGBAAt(2, 2))
 	}
 	rivers := 0
 	for i := 0; i < len(overlay.Pix); i += 4 {
-		if overlay.Pix[i] < 128 {
+		if overlay.Pix[i+3] == 255 {
 			rivers++
 		}
 	}
@@ -92,10 +92,10 @@ func TestRender(t *testing.T) {
 		t.Errorf("no rivers drawn")
 	}
 
-	// Contours and grid darken some pixels
+	// Contours and grid: dark lines, partly transparent, over an overlay
 	lines := Render(w, Options{Scale: 1, Base: BaseNone, Contours: 5, Grid: 10})
-	if lines.RGBAAt(0, 0) == (color.RGBA{255, 255, 255, 255}) {
-		t.Errorf("no grid line at the origin")
+	if c := lines.RGBAAt(0, 0); c.A == 0 || c.A == 255 || c.R > c.A/2 {
+		t.Errorf("grid line at the origin: %v", c)
 	}
 
 	height := Render(w, Options{Scale: 1, Base: BaseHeight})
@@ -169,9 +169,10 @@ func TestBasinColors(t *testing.T) {
 		img := Render(w, o)
 		found := map[[3]uint8]bool{}
 		for i := 0; i < len(img.Pix); i += 4 {
-			// Fully covered river pixels, not the white background nor edges
-			if c := [3]uint8{img.Pix[i], img.Pix[i+1], img.Pix[i+2]}; c != [3]uint8{255, 255, 255} {
-				found[c] = true
+			// Fully covered river pixels, not the transparent background
+			// nor edges
+			if img.Pix[i+3] == 255 {
+				found[[3]uint8{img.Pix[i], img.Pix[i+1], img.Pix[i+2]}] = true
 			}
 		}
 		return found

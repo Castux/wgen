@@ -12,7 +12,8 @@ import (
 )
 
 // terrainView draws the mesh in 3D: terrain colors or elevation per vertex,
-// flat shading, and the overlay (rivers, contour lines, grid) as a texture.
+// flat shading, and the overlay (rivers, contour lines, grid) as a texture
+// drawn over, unlit.
 //
 // Lighting and colors are those of three.js: lit is its Lambert material
 // with an ambient light of intensity 1 and a directional light of intensity
@@ -154,13 +155,19 @@ void main() {
 	vec3 color = vColor;
 	if (hasPaint)
 		color = mix(color, srgbToLinear(texture(paint, vUV).rgb), paintOpacity);
-	if (hasOverlay)
-		color *= texture(overlay, vUV).rgb;
 
 	if (lit) {
 		vec3 normal = normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition)));
 		float diffuse = max(dot(normal, lightDirection), 0.0);
 		color *= (1.0 + 3.0 * diffuse) / PI;
+	}
+
+	// The overlay over it, unlit: rivers at full brightness, whatever the
+	// terrain. Premultiplied sRGB colors, decoded once divided by alpha.
+	if (hasOverlay) {
+		vec4 overlayColor = texture(overlay, vUV);
+		if (overlayColor.a > 0.0)
+			color = mix(color, srgbToLinear(overlayColor.rgb / overlayColor.a), overlayColor.a);
 	}
 
 	// Distance, at eye level
@@ -183,7 +190,7 @@ func newTerrainView() (*terrainView, error) {
 		return nil, err
 	}
 
-	v := &terrainView{program: p, overlay: texture{srgb: true}}
+	v := &terrainView{program: p} // the overlay is decoded in the shader
 
 	gl.GenVertexArrays(1, &v.vao)
 	gl.GenBuffers(1, &v.vbo)

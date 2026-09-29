@@ -8,7 +8,6 @@ package render
 import (
 	"image"
 	"image/color"
-	"image/draw"
 	"maps"
 	"math"
 	"runtime"
@@ -25,7 +24,7 @@ import (
 type Base string
 
 const (
-	BaseNone    Base = "none" // white, for overlay textures
+	BaseNone    Base = "none" // transparent, for overlay textures
 	BaseTerrain Base = "terrain"
 	BaseHeight  Base = "height"
 )
@@ -53,7 +52,7 @@ type Options struct {
 const MaxSize = 8192
 
 var (
-	riverColor   = color.NRGBA{66, 66, 125, 255}
+	riverColor   = color.NRGBA{30, 120, 255, 255} // bright: rivers show over every base
 	contourColor = [3]float64{0.25, 0.18, 0.1}
 	contourAlpha = 0.5
 	gridColor    = [3]float64{0, 0, 0}
@@ -88,9 +87,8 @@ func Render(w *gen.World, options Options) *image.RGBA {
 		drawTerrainColors(w, img, scale)
 	case BaseHeight:
 		drawHeightColors(w, img, scale, options.HeightScale)
-	default:
-		draw.Draw(img, img.Bounds(), image.White, image.Point{}, draw.Src)
 	}
+	// BaseNone: transparent, the layers drawn over it (premultiplied alpha)
 
 	if options.Shading && options.Base != BaseNone {
 		shade(w, img, scale)
@@ -256,7 +254,17 @@ func shade(w *gen.World, img *image.RGBA, scale float64) {
 func drawLines(w *gen.World, img *image.RGBA, options Options) {
 	lineWidth := math.Max(1, math.Round(options.Scale)) / options.Scale
 
+	// Darkening a base, toward its color times the line's; over a
+	// transparent overlay, the line's color with its alpha, which darkens
+	// the same way what the overlay is drawn over
 	blend := func(i int, c [3]float64, alpha float64) {
+		if options.Base == BaseNone {
+			for k := range 3 {
+				img.Pix[i+k] = uint8(math.Round(c[k]*255*alpha + float64(img.Pix[i+k])*(1-alpha)))
+			}
+			img.Pix[i+3] = uint8(math.Round(255*alpha + float64(img.Pix[i+3])*(1-alpha)))
+			return
+		}
 		for k := range 3 {
 			v := float64(img.Pix[i+k])
 			img.Pix[i+k] = uint8(math.Round(v*(1-alpha) + c[k]*v*alpha))
@@ -373,16 +381,16 @@ func drawRivers(w *gen.World, img *image.RGBA, options Options) {
 }
 
 // BasinColor is the color of the rivers of a basin, given by its outlet:
-// a hue from a hash of it, so that neighbouring basins likely differ, dark
-// and saturated enough to show over the terrain.
+// a hue from a hash of it, so that neighbouring basins likely differ,
+// saturated and bright, to show over the terrain.
 func BasinColor(outlet int32) color.NRGBA {
 	h := uint64(outlet) + 0x9e3779b97f4a7c15
 	h = (h ^ h>>30) * 0xbf58476d1ce4e5b9
 	h = (h ^ h>>27) * 0x94d049bb133111eb
 	h ^= h >> 31
 	hue := float64(h>>11) / (1 << 53)
-	value := 0.65 + 0.25*float64(h&0xff)/255
-	c := hsv(hue, 0.85, value)
+	saturation := 0.7 + 0.3*float64(h&0xff)/255
+	c := hsv(hue, saturation, 1)
 	return color.NRGBA{uint8(math.Round(c[0] * 255)), uint8(math.Round(c[1] * 255)), uint8(math.Round(c[2] * 255)), 255}
 }
 
