@@ -292,3 +292,33 @@ func nanSlice(n int) []float64 {
 	}
 	return s
 }
+
+// Outlets is, for every vertex, where its water ends: downhill until there
+// is no further (the sea, the edge of the map). Vertices of the same outlet
+// are its drainage basin.
+func (w *World) Outlets() []int32 {
+	const unknown = -1
+	outlets := make([]int32, len(w.Downhill))
+	for v := range outlets {
+		outlets[v] = unknown
+	}
+	var path []int32
+	for v := range outlets {
+		// Down to a vertex of known outlet, or to the end
+		u := int32(v)
+		path = path[:0]
+		for outlets[u] == unknown && w.Downhill[u] >= 0 && len(path) <= len(outlets) {
+			path = append(path, u)
+			u = w.Downhill[u]
+		}
+		outlet := outlets[u]
+		if outlet == unknown {
+			outlet = u
+			outlets[u] = u
+		}
+		for _, p := range path {
+			outlets[p] = outlet
+		}
+	}
+	return outlets
+}

@@ -162,3 +162,36 @@ func TestColorScales(t *testing.T) {
 		t.Errorf("water %v not blue", w)
 	}
 }
+
+func TestBasinColors(t *testing.T) {
+	w := island(t)
+	colors := func(o Options) map[[3]uint8]bool {
+		img := Render(w, o)
+		found := map[[3]uint8]bool{}
+		for i := 0; i < len(img.Pix); i += 4 {
+			// Fully covered river pixels, not the white background nor edges
+			if c := [3]uint8{img.Pix[i], img.Pix[i+1], img.Pix[i+2]}; c != [3]uint8{255, 255, 255} {
+				found[c] = true
+			}
+		}
+		return found
+	}
+
+	options := Options{Scale: 2, Base: BaseNone, RiverPower: 0.5, RiverWidth: 4}
+	blue := colors(options)
+	if !blue[[3]uint8{riverColor.R, riverColor.G, riverColor.B}] {
+		t.Error("no river in the river color")
+	}
+	options.BasinColors = true
+	basins := colors(options)
+	if basins[[3]uint8{riverColor.R, riverColor.G, riverColor.B}] {
+		t.Error("rivers in blue with basin colors")
+	}
+	if len(basins) <= len(blue) {
+		t.Errorf("%d colors by basin, %d in blue: not more", len(basins), len(blue))
+	}
+
+	if BasinColor(3) == BasinColor(4) || BasinColor(3) != BasinColor(3) {
+		t.Error("basin colors not distinct, or not stable")
+	}
+}

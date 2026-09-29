@@ -152,14 +152,14 @@ func (a *app) drawViewMenu() {
 		"Width of the largest river, in map pixels (0: no rivers)")
 	number("view.riverPower", "River width growth", &settings.RiverPower, 0, 1, 0.01,
 		"How much wider big rivers are than small ones")
+	toggle("Rivers colored by basin", "B", &settings.BasinColors)
+	imgui.SetItemTooltip("A color per drainage basin (the rivers flowing to the same place in the sea), instead of blue")
 	number("view.contours", "Contour interval (m)", &settings.Contours, 0, 10000, 1, "0: no contour lines")
 	number("view.grid", "Grid size (px)", &settings.Grid, 0, 10000, 10, "0: no grid")
 
 	imgui.SeparatorText("Inspect")
 	toggle("Information under the cursor", "", &settings.HoverInfo)
 	imgui.SetItemTooltip("Position, terrain, elevation or water depth, drainage, at the top of the window")
-	toggle("Highlight the drainage basin", "B", &settings.HighlightBasin)
-	imgui.SetItemTooltip("Of the river under the cursor: everything flowing to where it reaches the sea")
 	if measuring := settings.Measuring; imgui.MenuItemBoolPtrV("Measure with rulers", "M", &measuring, true) {
 		settings.setMeasuring(measuring)
 		changed = true

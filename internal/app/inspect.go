@@ -25,12 +25,6 @@ type inspector struct {
 
 	hover *gen.Point // under the cursor, nil if nothing
 
-	// The drainage basin of the river under the cursor, highlighted
-	basin        gen.Basin
-	basinOf      *gen.World
-	basinMask    texture // alpha: in the basin
-	basinVisible bool
-
 	rulers   []*ruler
 	selected int  // index in rulers, -1 if none
 	drawing  bool // the selected ruler is being drawn
@@ -104,45 +98,6 @@ func (a *app) updateInspector() {
 		point := inspect.probe.At(position)
 		inspect.hover = &point
 	}
-	a.updateBasin(float64(mouse.X), float64(mouse.Y))
-}
-
-// Rivers are picked within this distance of the cursor, in window units
-const riverPickRadius = 8
-
-// updateBasin finds the basin of the river under the cursor, and makes its
-// mask when it changed.
-func (a *app) updateBasin(mouseX, mouseY float64) {
-	inspect := &a.inspect
-	inspect.basinVisible = false
-	hover := inspect.hover
-	if !a.settings.HighlightBasin || hover == nil {
-		return
-	}
-
-	// The pick radius in map units: the map position a few window units away
-	radius := 2 * a.world.Config.Resolution
-	if beside, ok := a.mapPosition(mouseX+riverPickRadius, mouseY); ok {
-		radius = math.Max(beside.Dist(hover.Position), 1)
-	}
-	river := inspect.probe.RiverAt(hover.Position, radius)
-	if river < 0 {
-		return
-	}
-	inspect.basinVisible = true
-	if inspect.basinOf == a.world && inspect.basin.Outlet == inspect.probe.Outlet(river) {
-		return
-	}
-
-	inspect.basin, inspect.basinOf = inspect.probe.Basin(river), a.world
-	width := min(a.world.Width, 1024)
-	height := max(1, a.world.Height*width/a.world.Width)
-	mask := inspect.probe.BasinMask(inspect.basin, width, height)
-	pixels := make([]byte, 4*len(mask))
-	for i, m := range mask {
-		pixels[4*i], pixels[4*i+1], pixels[4*i+2], pixels[4*i+3] = 255, 255, 255, m
-	}
-	inspect.basinMask.uploadPixels(width, height, pixels)
 }
 
 // measureInput handles the left button in measuring mode: clicks, not
@@ -404,9 +359,6 @@ func (a *app) describe(point *gen.Point) string {
 		if point.Drainage > 0 {
 			parts = append(parts, "drainage "+formatArea(point.Drainage))
 		}
-	}
-	if a.inspect.basinVisible {
-		parts = append(parts, "basin "+formatArea(a.inspect.basin.Area))
 	}
 	return strings.Join(parts, "  ·  ")
 }

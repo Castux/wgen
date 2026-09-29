@@ -22,15 +22,15 @@ type Settings struct {
 	Wireframe   bool    `json:"wireframe"`
 	RiverPower  float64 `json:"riverPower"`
 	RiverWidth  float64 `json:"riverWidth"`
+	BasinColors bool    `json:"basinColors"` // rivers in a color per drainage basin
 	Contours    float64 `json:"contours"`
 	Grid        float64 `json:"grid"`
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D view
 
 	// Inspecting: what is under the cursor, measuring with rulers
-	HoverInfo      bool `json:"hoverInfo"`
-	HighlightBasin bool `json:"highlightBasin"` // of the river under the cursor
-	Measuring      bool `json:"measuring"`
+	HoverInfo bool `json:"hoverInfo"`
+	Measuring bool `json:"measuring"`
 
 	// Watching the simulation
 	Watch      bool    `json:"watch"`
@@ -176,6 +176,7 @@ func (s *Settings) overlayOptions() render.Options {
 	return render.Options{
 		RiverPower:  s.RiverPower,
 		RiverWidth:  s.RiverWidth,
+		BasinColors: s.BasinColors,
 		Contours:    s.Contours,
 		Grid:        s.Grid,
 		HeightScale: s.HeightScale,

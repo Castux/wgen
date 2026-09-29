@@ -134,11 +134,10 @@ every `WatchSteps` time steps.
 
 `Probe` (`probe.go`) reads a world: what is at a position (terrain, ground
 from the heightmap, water surface and depth, drainage of the closest
-vertex, found on a grid of the vertices), altitude profiles along paths, and
-drainage basins: the biggest river near a position, its outlet (downhill to
-the end), everything upstream of it (the donors of each vertex, indexed),
-and a mask of it, rasterized. The app shows the mask as a texture over both
-views, remade only when the basin changes.
+vertex, found on a grid of the vertices), and altitude profiles along paths.
+`World.Outlets` gives the drainage basins: where the water of each vertex
+ends, downhill; `render` colors the rivers by it, a hue hashed from the
+outlet, each basin rasterized over its own bounds.
 Shore triangles, partly land, have no water level in the water map: their
 water points take the level of the closest vertex.
 

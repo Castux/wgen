@@ -94,42 +94,27 @@ func TestProfileShores(t *testing.T) {
 	}
 }
 
-func TestBasin(t *testing.T) {
+func TestOutlets(t *testing.T) {
 	w := generate(t, setup(t))
-	probe := NewProbe(w)
-
-	// The biggest river near the mountain, and its basin
-	river := probe.RiverAt(geom.Vec2{X: 120, Y: 120}, 10)
-	if river < 0 || w.IsSea(river) {
-		t.Fatalf("river vertex %d", river)
-	}
-	basin := probe.Basin(river)
-	if !basin.Vertices[river] || !basin.Vertices[basin.Outlet] || w.Downhill[basin.Outlet] >= 0 {
-		t.Fatalf("basin of %d: outlet %d", river, basin.Outlet)
-	}
-	if basin.Area <= probe.At(w.Mesh.Points[river]).Drainage {
-		t.Errorf("basin area %g, not more than the drainage at the river, %g", basin.Area, probe.At(w.Mesh.Points[river]).Drainage)
-	}
-
-	// Every vertex of the basin flows to its outlet; the others don't
-	for v, in := range basin.Vertices {
-		if flowsTo := probe.Outlet(int32(v)) == basin.Outlet; flowsTo != in {
-			t.Fatalf("vertex %d: in the basin %v, flows to its outlet %v", v, in, flowsTo)
+	outlets := w.Outlets()
+	basins := map[int32]bool{}
+	for v, outlet := range outlets {
+		// Downhill from every vertex, to its outlet, where it ends
+		u := int32(v)
+		for steps := 0; w.Downhill[u] >= 0; steps++ {
+			if steps > len(outlets) {
+				t.Fatalf("vertex %d: no end downhill", v)
+			}
+			u = w.Downhill[u]
+		}
+		if u != outlet {
+			t.Fatalf("vertex %d: outlet %d, flows to %d", v, outlet, u)
+		}
+		if w.IsLand(int32(v)) {
+			basins[outlet] = true
 		}
 	}
-
-	mask := probe.BasinMask(basin, 100, 100)
-	count := 0
-	for _, m := range mask {
-		if m > 0 {
-			count++
-		}
-	}
-	if count == 0 || count == len(mask) {
-		t.Errorf("mask covers %d of %d pixels", count, len(mask))
-	}
-
-	if sea := probe.RiverAt(geom.Vec2{X: 3, Y: 3}, 2); sea >= 0 {
-		t.Errorf("river in the open sea: %d", sea)
+	if len(basins) < 2 {
+		t.Errorf("%d basins", len(basins))
 	}
 }

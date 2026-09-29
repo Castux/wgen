@@ -9,8 +9,10 @@ import (
 	"image"
 	"image/color"
 	"image/draw"
+	"maps"
 	"math"
 	"runtime"
+	"slices"
 	"sync"
 
 	"golang.org/x/image/vector"
@@ -37,6 +39,9 @@ type Options struct {
 	// RiverWidth
 	RiverPower float64
 	RiverWidth float64
+
+	// Rivers in a color per drainage basin, instead of all in blue
+	BasinColors bool
 
 	Contours float64 // elevation interval, 0 for none
 	Grid     float64 // grid size in world units, 0 for none
@@ -293,7 +298,8 @@ func MaxDrainage(w *gen.World) float64 {
 }
 
 // drawRivers draws every downhill link as an antialiased segment with round
-// caps, its width growing with the drainage area.
+// caps, its width growing with the drainage area: in blue, or in a color per
+// drainage basin.
 func drawRivers(w *gen.World, img *image.RGBA, options Options) {
 	width, height := img.Rect.Dx(), img.Rect.Dy()
 	maxDrainage := MaxDrainage(w)
@@ -304,26 +310,101 @@ func drawRivers(w *gen.World, img *image.RGBA, options Options) {
 		return geom.Vec2{X: p.X*options.Scale + 0.5, Y: float64(height-1) - p.Y*options.Scale + 0.5}
 	}
 
-	rasterizer := vector.NewRasterizer(width, height)
+	// The visible segments, by basin
+	var outlets []int32
+	if options.BasinColors {
+		outlets = w.Outlets()
+	}
+	type segment struct {
+		a, b   geom.Vec2
+		radius float64
+	}
+	byBasin := map[int32][]segment{}
 	visible := geom.Vec2{X: float64(width), Y: float64(height)}
-
 	for v, d := range w.Downhill {
 		if d < 0 {
 			continue
 		}
-
 		radius := math.Pow(w.Drainage[v]/maxDrainage, options.RiverPower) * options.RiverWidth * options.Scale / 2
 		a, b := toImage(m.Points[v]), toImage(m.Points[d])
-
 		if math.Max(a.X, b.X) < -radius || math.Min(a.X, b.X) > visible.X+radius ||
 			math.Max(a.Y, b.Y) < -radius || math.Min(a.Y, b.Y) > visible.Y+radius {
 			continue
 		}
-
-		capsule(rasterizer, a, b, radius)
+		basin := int32(-1)
+		if outlets != nil {
+			basin = outlets[v]
+		}
+		byBasin[basin] = append(byBasin[basin], segment{a, b, radius})
 	}
 
-	rasterizer.Draw(img, img.Bounds(), image.NewUniform(riverColor), image.Point{})
+	// Each basin rasterized over its bounds only: a rasterizer has a buffer
+	// of its size
+	// In a stable order, for overlaps
+	rasterizer := vector.NewRasterizer(1, 1)
+	for _, basin := range slices.Sorted(maps.Keys(byBasin)) {
+		segments := byBasin[basin]
+		bounds := image.Rectangle{}
+		for i, s := range segments {
+			r := image.Rect(int(math.Floor(math.Min(s.a.X, s.b.X)-s.radius)), int(math.Floor(math.Min(s.a.Y, s.b.Y)-s.radius)),
+				int(math.Ceil(math.Max(s.a.X, s.b.X)+s.radius))+1, int(math.Ceil(math.Max(s.a.Y, s.b.Y)+s.radius))+1)
+			if i == 0 {
+				bounds = r
+			} else {
+				bounds = bounds.Union(r)
+			}
+		}
+		bounds = bounds.Intersect(img.Rect)
+		if bounds.Empty() {
+			continue
+		}
+
+		rasterizer.Reset(bounds.Dx(), bounds.Dy())
+		offset := geom.Vec2{X: float64(bounds.Min.X), Y: float64(bounds.Min.Y)}
+		for _, s := range segments {
+			capsule(rasterizer, s.a.Sub(offset), s.b.Sub(offset), s.radius)
+		}
+		fill := riverColor
+		if basin >= 0 {
+			fill = BasinColor(basin)
+		}
+		rasterizer.Draw(img, bounds, image.NewUniform(fill), image.Point{})
+	}
+}
+
+// BasinColor is the color of the rivers of a basin, given by its outlet:
+// a hue from a hash of it, so that neighbouring basins likely differ, dark
+// and saturated enough to show over the terrain.
+func BasinColor(outlet int32) color.NRGBA {
+	h := uint64(outlet) + 0x9e3779b97f4a7c15
+	h = (h ^ h>>30) * 0xbf58476d1ce4e5b9
+	h = (h ^ h>>27) * 0x94d049bb133111eb
+	h ^= h >> 31
+	hue := float64(h>>11) / (1 << 53)
+	value := 0.65 + 0.25*float64(h&0xff)/255
+	c := hsv(hue, 0.85, value)
+	return color.NRGBA{uint8(math.Round(c[0] * 255)), uint8(math.Round(c[1] * 255)), uint8(math.Round(c[2] * 255)), 255}
+}
+
+// hsv converts a color, hue in 0..1, to RGB 0..1.
+func hsv(hue, saturation, value float64) [3]float64 {
+	sector := hue * 6
+	i := math.Floor(sector)
+	f := sector - i
+	p, q, t := value*(1-saturation), value*(1-saturation*f), value*(1-saturation*(1-f))
+	switch int(i) % 6 {
+	case 0:
+		return [3]float64{value, t, p}
+	case 1:
+		return [3]float64{q, value, p}
+	case 2:
+		return [3]float64{p, value, t}
+	case 3:
+		return [3]float64{p, q, value}
+	case 4:
+		return [3]float64{t, p, value}
+	}
+	return [3]float64{value, p, q}
 }
 
 // capsule adds a segment with round caps to the rasterizer. All capsules have

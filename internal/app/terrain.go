@@ -34,8 +34,6 @@ type terrainView struct {
 	paint        *texture
 	paintOpacity float64
 
-	highlight *texture // a mask (alpha) of what to highlight, nil if nothing
-
 	orbit orbitCamera
 }
 
@@ -127,13 +125,8 @@ uniform sampler2D overlay;
 uniform bool hasPaint;
 uniform sampler2D paint; // top row first, as the overlay
 uniform float paintOpacity;
-uniform bool hasHighlight;
-uniform sampler2D highlight; // top row first, as the overlay
 
 out vec4 fragColor;
-
-// Highlighted: tinted, the rest dimmed (sRGB)
-const vec3 highlightTint = vec3(1.0, 0.85, 0.3);
 
 const float PI = 3.141592653589793;
 
@@ -153,8 +146,6 @@ void main() {
 	vec3 color = vColor;
 	if (hasPaint)
 		color = mix(color, srgbToLinear(texture(paint, vUV).rgb), paintOpacity);
-	if (hasHighlight)
-		color = mix(color * 0.25, mix(color, srgbToLinear(highlightTint), 0.3), texture(highlight, vUV).a);
 	if (hasOverlay)
 		color *= texture(overlay, vUV).rgb;
 
@@ -303,12 +294,6 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 	p.setFloat("paintOpacity", v.paintOpacity)
 	if hasPaint {
 		v.paint.bind(1)
-	}
-	hasHighlight := v.highlight != nil && v.highlight.id != 0
-	p.setInt("hasHighlight", boolInt(hasHighlight))
-	p.setInt("highlight", 2)
-	if hasHighlight {
-		v.highlight.bind(2)
 	}
 
 	gl.BindVertexArray(v.vao)

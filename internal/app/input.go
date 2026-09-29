@@ -257,7 +257,7 @@ func (a *app) applyShortcuts() {
 		case shortcutMeasure:
 			change(func(settings *Settings) { settings.setMeasuring(!settings.Measuring) })
 		case shortcutBasin:
-			change(func(settings *Settings) { settings.HighlightBasin = !settings.HighlightBasin })
+			change(func(settings *Settings) { settings.BasinColors = !settings.BasinColors })
 		case shortcutFinishRuler:
 			a.finishRuler()
 		case shortcutDeleteRuler:
