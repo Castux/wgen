@@ -179,10 +179,30 @@ each:
 - Target height: the summits of each region of this terrain reach about
   this height, in meters. Most of a region is lower, and its valleys much
   lower: the heights come from the simulation, the target sets how fast the
-  land rises.
-- Erodibility factor: how easily it erodes, compared to the others.
-- Detail levels: how many times the mesh is refined on it. More detail is
-  slower, and gives finer valleys.
+  land rises. The other settings don't change the summits: they change the
+  character of the landform.
+- Character: the kind of landform, which sets the three settings below:
+
+  | Character | Slopes | Rounding | Erosion | |
+  |---|---|---|---|---|
+  | Young mountains | 40° | 0 | ×1.5 | sharp ridges and peaks, deep valleys (the Alps) |
+  | Old mountains | 30° | 0.8 | ×1 | rounded ridges, broad valleys (the Appalachians) |
+  | Hills | 22° | 0.6 | ×1 | rolling, rounded |
+  | Plateau and mesas | 55° | 1 | ×0.3 | broad flat highlands with steep edges |
+  | Badlands | 38° | 0 | ×5 | soft rock, deeply cut by many small valleys |
+  | Plains | 12° | 0.8 | ×0.5 | gentle, softly undulating |
+
+  or the project's (its Landscape settings). New projects start with
+  plains, hills and young mountains.
+- Slopes (°): the steepest slopes: hillslopes steeper than this collapse.
+- Rounding (0 to 1): how rounded the tops are: soil creeping downhill
+  smooths them, as on old mountains.
+- Erosion (×): how deep rivers cut, times the project's river erosion.
+
+  Until a terrain sets its own, these show the project's values, grayed
+  out; "reset" takes the project's again.
+- Mesh: how fine the mesh is on it, a spacing: automatic is the finest on
+  land, the coarsest on water. Finer gives finer valleys, and is slower.
 
 ### Importing an image
 
@@ -214,18 +234,23 @@ File, Export writes, next to the project by default:
 
 ### Parameters
 
-The Map section of the panel:
+The project's parameters, in the panel (hover them for help):
 
-- Map width (km): the real width of the map, which sets the scale of
-  everything.
-- Resolution (m): the mesh spacing of the finest detail level. Lower is
-  finer, and slower. (The project file has it in pixels of the map, so
-  that it stays the same fraction of it when the map width changes.)
-- Refinement levels: the coarse mesh is 2^levels coarser than the finest.
-- Seed: the randomness of the mesh and of the rock hardness.
-
-The Simulation section has the parameters of the erosion model (hover them
-for help). The Simulation menu has "Watch the simulation", which shows the
+- Map: the map width, in km, which sets the scale of everything, and the
+  seed, the randomness of the mesh and of the rock hardness (another seed,
+  another landscape of the same map).
+- Quality: Draft (quick, to try things), Normal or Fine (for the final
+  landscape), with an estimate of the time from the last generation, and
+  what they set: the resolution (the finest mesh spacing, in meters; the
+  project file has it in pixels of the map, so that it stays the same
+  fraction of it when the map width changes), refinement levels, and time
+  steps.
+- Landscape: the project's slopes, rounding and river erosion (×1 is the
+  usual), which the terrains take unless they set their own, and the slope
+  of the sea floor.
+- Advanced: the uplift ramp (how gradually ranges rise from the lower land
+  around them), the time step, the river size exponent (of the stream
+  power law), the variation of the rock hardness and its scale. The Simulation menu has "Watch the simulation", which shows the
 landscape as it is simulated: the land rising from the sea, rivers cutting
 in, the heights being calibrated, then each finer mesh. "Replay the
 simulation" runs it again, to watch it.
@@ -275,11 +300,12 @@ macOS, `~/.config/wgen` on Linux), with its settings.
 		// terrain (default: one on water, all on land)
 		"sea": { "color": "#42427d" },
 		"lake": { "color": "#6d94c2", "detail": 1 },
-		// land: height, the target summit height in meters; erodibility, a
-		// factor (default 1)
+		// land: height, the target summit height in meters; optionally,
+		// overriding the project's: criticalSlope (degrees), rounding (0 to
+		// 1), erodibility (a factor of the project's, default 1)
 		"plains": { "color": "#87a851", "height": 400, "detail": 1 },
-		"hills": { "color": "#d1b886", "height": 1500, "detail": 2 },
-		"mountains": { "color": "#65481f", "height": 4500 }
+		"hills": { "color": "#d1b886", "height": 1500, "detail": 2, "rounding": 0.6 },
+		"mountains": { "color": "#65481f", "height": 4500, "criticalSlope": 40 }
 	},
 
 	// Optional, these are the defaults
@@ -293,7 +319,8 @@ macOS, `~/.config/wgen` on Linux), with its settings.
 		"refineSteps": 60,            // time steps on each finer mesh
 		"erodibilityNoise": 0.3,      // 0..1: variation of the rock hardness
 		"noiseScale": 30,             // km, of that variation
-		"floorSlope": 0.01            // of the sea and lake floors, meters per meter
+		"floorSlope": 0.01,           // of the sea and lake floors, meters per meter
+		"rounding": 0                 // 0..1: hillslope diffusion, rounding the tops
 	}
 }
 ```

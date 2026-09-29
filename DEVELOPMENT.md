@@ -169,7 +169,10 @@ water points take the level of the closest vertex.
   from the base level up, drainage areas accumulated in reverse, then the
   implicit stream power update of Braun and Willett (2013), for n = 1: in
   order, h = (h + U dt + F h_receiver) / (1 + F), F = K dt A^m / distance.
-  Then slopes steeper than the critical slope collapse. Every 10 steps,
+  Then slopes steeper than the critical slope collapse (each vertex's
+  terrain's), and the land diffuses (hillslope diffusion: each vertex
+  toward its neighbours' mean, at 4 m²/yr times its terrain's rounding,
+  explicit, in the substeps stability needs, in parallel). Every 10 steps,
   depressions are filled (priority flood with a small slope), so that every
   vertex drains to the sea.
 - The first level starts nearly flat and runs `steps`; each next level

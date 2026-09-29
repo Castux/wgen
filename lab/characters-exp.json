@@ -1,0 +1,74 @@
+{
+	"config": "../assets/example/chasers.json",
+	"region": "mountains",
+	"channelArea": 200,
+	"contours": 250,
+	"crops": {
+		"sw": [
+			60,
+			1360,
+			420,
+			1860
+		]
+	},
+	"cases": {
+		"map": {}
+	},
+	"variants": {
+		"0-project": {},
+		"1-young": {
+			"terrains": {
+				"mountains": {
+					"criticalSlope": 40,
+					"rounding": 0,
+					"erodibility": 1.5
+				}
+			}
+		},
+		"2-old": {
+			"terrains": {
+				"mountains": {
+					"criticalSlope": 30,
+					"rounding": 0.8,
+					"erodibility": 1
+				}
+			}
+		},
+		"3-hills": {
+			"terrains": {
+				"mountains": {
+					"criticalSlope": 22,
+					"rounding": 0.6,
+					"erodibility": 1
+				}
+			}
+		},
+		"4-plateau": {
+			"terrains": {
+				"mountains": {
+					"criticalSlope": 55,
+					"rounding": 1,
+					"erodibility": 0.3
+				}
+			}
+		},
+		"5-badlands": {
+			"terrains": {
+				"mountains": {
+					"criticalSlope": 38,
+					"rounding": 0,
+					"erodibility": 5
+				}
+			}
+		},
+		"6-plains": {
+			"terrains": {
+				"mountains": {
+					"criticalSlope": 12,
+					"rounding": 0.8,
+					"erodibility": 0.5
+				}
+			}
+		}
+	}
+}

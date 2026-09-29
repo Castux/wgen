@@ -87,14 +87,16 @@ type Character struct {
 	Erodibility   float64 // multiplier of the project's
 }
 
-// Characters, for the terrains
+// Characters, for the terrains, tuned on the example map (see
+// lab/characters-exp.json): a plateau is flat highlands with steep edges,
+// from strong rounding and little erosion
 var Characters = []Character{
 	{"Young mountains", "Sharp ridges and peaks, deep valleys (the Alps)", 40, 0, 1.5},
 	{"Old mountains", "Rounded ridges, broad valleys (the Appalachians)", 30, 0.8, 1},
-	{"Hills", "Rolling, rounded", 25, 0.5, 1},
-	{"Plateau and mesas", "Hard rock: steep edges, little cut by rivers", 50, 0, 0.4},
-	{"Badlands", "Soft rock, deeply cut by many small valleys", 45, 0, 3},
-	{"Plains", "Gentle, softly undulating", 15, 0.5, 0.7},
+	{"Hills", "Rolling, rounded", 22, 0.6, 1},
+	{"Plateau and mesas", "Broad flat highlands with steep edges, little cut by rivers (hard rock)", 55, 1, 0.3},
+	{"Badlands", "Soft rock, deeply cut by many small valleys", 38, 0, 5},
+	{"Plains", "Gentle, softly undulating", 12, 0.8, 0.5},
 }
 
 // CharacterOf is the character a terrain has, "" if none of them.
