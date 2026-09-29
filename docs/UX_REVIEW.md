@@ -371,12 +371,12 @@ codebase (S: hours, M: a few days, L: weeks).
 | 8 | Engine export targets (sizes, RAW, EXR), terrain masks, normal map | 5 | High | M |
 | 9 | Autosave and recovery (done) | 7 | High | M |
 | 10 | Painting in the 3D view (done) | 2 | High | M |
-| 11 | Simulation presets and plain controls | 4 | High | M |
+| 11 | Simulation presets and plain controls (done: terrain characters with slopes and rounding, quality choices, Landscape and Advanced groups) | 4 | High | M |
 | 12 | One undo history for painting, terrains and parameters | 2 | Medium | M |
 | 13 | Map styles and cartographic layers (hillshade, smoothed rivers, contours) | 6 | Medium | M |
 | 14 | Timeline of the simulation, GIF/MP4 export | 8 | Medium | M |
 | 15 | Draft mode, cost estimates, progress bar | 2, 9 | Medium | M |
-| 16 | Achieved height per terrain, compare snapshots | 4 | Medium | M |
+| 16 | Achieved height per terrain, compare snapshots (done) | 4 | Medium | M |
 | 17 | Native file dialogs, macOS notarization and document opening | cross | Medium | M |
 | 18 | glTF export, simplified or tiled meshes | 5 | Medium | M |
 | 19 | River and lake design inputs | new | High | L |
