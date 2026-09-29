@@ -32,6 +32,7 @@ type simulation struct {
 	baseLevel   []bool    // sea: fixed elevation, where rivers end
 	uplift      []float64 // meters per year
 	erodibility []float64
+	maxSlope    []float64 // tangent of the critical slope
 	cellArea    []float64 // square meters
 
 	metersPerPixel float64
@@ -135,7 +136,7 @@ func (r *simulator) run(sim *simulation, steps int, phase string) {
 	}
 
 	start := time.Now()
-	sim.run(steps, r.params.TimeStep*1000, math.Tan(r.params.CriticalSlope*math.Pi/180))
+	sim.run(steps, r.params.TimeStep*1000)
 	sim.onStep = nil
 	slog.Debug("simulated", "phase", phase, "vertices", len(sim.mesh.Points), "steps", steps,
 		"took", time.Since(start).Round(time.Millisecond))
@@ -209,6 +210,7 @@ func (w *World) newSimulation(levelMesh *mesh.Mesh, upliftAt, erodibilityNoise f
 		baseLevel:        make([]bool, n),
 		uplift:           make([]float64, n),
 		erodibility:      make([]float64, n),
+		maxSlope:         make([]float64, n),
 		cellArea:         CellAreas(levelMesh),
 		receiver:         make([]int32, n),
 		receiverDistance: make([]float64, n),
@@ -224,6 +226,9 @@ func (w *World) newSimulation(levelMesh *mesh.Mesh, upliftAt, erodibilityNoise f
 			continue
 		}
 		terrain := terrains[w.pixel(p)]
+		if terrain != nil {
+			s.maxSlope[v] = math.Tan(terrain.Slope(params) * math.Pi / 180)
+		}
 		switch {
 		case terrain == nil:
 		case terrain.Kind == config.Sea:
@@ -332,7 +337,7 @@ func (s *simulation) interpolate(coarse *simulation, seed uint64) []float64 {
 
 // run simulates a number of time steps of timeStep years. Depressions are
 // filled every few steps (and at the end), so that rivers reach the sea.
-func (s *simulation) run(steps int, timeStep, criticalSlope float64) {
+func (s *simulation) run(steps int, timeStep float64) {
 	const fillEvery = 10
 	for step := range steps {
 		if s.canceled != nil && s.canceled() {
@@ -343,7 +348,7 @@ func (s *simulation) run(steps int, timeStep, criticalSlope float64) {
 		}
 		s.route()
 		s.erode(timeStep)
-		s.collapse(criticalSlope)
+		s.collapse()
 		if s.onStep != nil {
 			s.onStep(step)
 		}
@@ -484,13 +489,13 @@ func (s *simulation) erode(dt float64) {
 }
 
 // collapse limits slopes to the critical slope: steeper hillslopes slide.
-func (s *simulation) collapse(criticalSlope float64) {
+func (s *simulation) collapse() {
 	for _, v := range s.order {
 		r := s.receiver[v]
 		if !s.active[v] || r == v {
 			continue
 		}
-		if limit := s.elevation[r] + criticalSlope*s.receiverDistance[v]; s.elevation[v] > limit {
+		if limit := s.elevation[r] + s.maxSlope[v]*s.receiverDistance[v]; s.elevation[v] > limit {
 			s.elevation[v] = limit
 		}
 	}

@@ -164,3 +164,37 @@ func TestColors(t *testing.T) {
 		}
 	}
 }
+
+func TestTerrainSlope(t *testing.T) {
+	conf, _, err := Parse([]byte(`{
+		"image": "map.png",
+		"terrains": {
+			"plains": { "color": "#87a851", "height": 400 },
+			"cliffs": { "color": "#940a00", "height": 2000, "criticalSlope": 60 }
+		},
+		"simulation": { "criticalSlope": 25 }
+	}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := conf.Terrain("plains").Slope(conf.Simulation); got != 25 {
+		t.Errorf("plains: the project's slope, 25, got %g", got)
+	}
+	if got := conf.Terrain("cliffs").Slope(conf.Simulation); got != 60 {
+		t.Errorf("cliffs: its own slope, 60, got %g", got)
+	}
+
+	// Written only when set
+	again, _, err := Parse(conf.Marshal())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Terrain("plains").CriticalSlope != Inherit || again.Terrain("cliffs").CriticalSlope != 60 {
+		t.Errorf("round trip: %+v, %+v", again.Terrain("plains"), again.Terrain("cliffs"))
+	}
+
+	conf.Terrain("cliffs").CriticalSlope = 95
+	if conf.Validate() == nil {
+		t.Error("a slope of 95 degrees is valid")
+	}
+}

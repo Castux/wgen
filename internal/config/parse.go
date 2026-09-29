@@ -99,10 +99,11 @@ func setField(c *Config, key string, value json.RawMessage) error {
 
 // rawTerrain is a terrain in the project file: absent values are nil.
 type rawTerrain struct {
-	Color       *Color   `json:"color"`
-	Height      *float64 `json:"height"`
-	Erodibility *float64 `json:"erodibility"`
-	Detail      *int     `json:"detail"`
+	Color         *Color   `json:"color"`
+	Height        *float64 `json:"height"`
+	Erodibility   *float64 `json:"erodibility"`
+	CriticalSlope *float64 `json:"criticalSlope"`
+	Detail        *int     `json:"detail"`
 }
 
 // applyTerrains sets the terrains of a project JSON, in file order. A full
@@ -126,7 +127,7 @@ func (c *Config) applyTerrains(data json.RawMessage, full bool) error {
 			if raw.Color == nil {
 				return fmt.Errorf("%s: color is required", name)
 			}
-			t = &Terrain{Name: name, Kind: kindOf(name), Erodibility: 1, Detail: DetailAuto}
+			t = NewTerrain(name, *raw.Color)
 			c.Terrains = append(c.Terrains, t)
 		}
 
@@ -138,6 +139,9 @@ func (c *Config) applyTerrains(data json.RawMessage, full bool) error {
 		}
 		if raw.Erodibility != nil {
 			t.Erodibility = *raw.Erodibility
+		}
+		if raw.CriticalSlope != nil {
+			t.CriticalSlope = *raw.CriticalSlope
 		}
 		if raw.Detail != nil {
 			t.Detail = *raw.Detail

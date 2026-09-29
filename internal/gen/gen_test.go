@@ -528,3 +528,24 @@ func TestMarginFilled(t *testing.T) {
 		}
 	}
 }
+
+// A terrain's critical slope limits its slopes, down its rivers
+func TestTerrainCriticalSlope(t *testing.T) {
+	conf := patch(t, setup(t), `{"terrains": {"mountains": {"criticalSlope": 10}}}`)
+	w := generate(t, conf)
+	limit := math.Tan(10 * math.Pi / 180)
+	steepest := 0.0
+	for v, d := range w.Downhill {
+		if d < 0 || w.Terrain[v] == nil || w.Terrain[v].Name != "mountains" {
+			continue
+		}
+		distance := w.Mesh.Points[v].Dist(w.Mesh.Points[d]) * w.MetersPerPixel
+		steepest = math.Max(steepest, (w.Elevation[v]-w.Elevation[d])/distance)
+	}
+	if steepest > limit*1.001 {
+		t.Errorf("mountains at 10°: steepest %.1f°", math.Atan(steepest)*180/math.Pi)
+	}
+	if steepest < limit*0.5 {
+		t.Errorf("mountains barely steep: %.1f°", math.Atan(steepest)*180/math.Pi)
+	}
+}

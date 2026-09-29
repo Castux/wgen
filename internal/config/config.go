@@ -148,6 +148,9 @@ func (c *Config) Validate() error {
 		if t.Height < 0 || t.Erodibility < 0 {
 			add("terrain %s: height and erodibility must be positive", t.Name)
 		}
+		if slope := t.CriticalSlope; slope != Inherit && (slope <= 0 || slope >= 90) {
+			add("terrain %s: criticalSlope must be between 0 and 90 degrees (or -1, the project's)", t.Name)
+		}
 		if t.Detail < DetailAuto {
 			add("terrain %s: detail must be positive (or -1, automatic)", t.Name)
 		}
@@ -225,6 +228,9 @@ func marshalTerrain(t *Terrain) string {
 	}
 	if t.Erodibility != 1 {
 		fmt.Fprintf(&buf, ", \"erodibility\": %s", formatNumber(t.Erodibility))
+	}
+	if t.CriticalSlope != Inherit {
+		fmt.Fprintf(&buf, ", \"criticalSlope\": %s", formatNumber(t.CriticalSlope))
 	}
 	if t.Detail != DetailAuto {
 		fmt.Fprintf(&buf, ", \"detail\": %d", t.Detail)

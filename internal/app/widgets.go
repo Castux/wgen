@@ -179,3 +179,41 @@ func tooltipEvenDisabled(text string) {
 		imgui.SetTooltip(noFormat(text))
 	}
 }
+
+// Results of an overridable field
+type override int
+
+const (
+	overrideNone  override = iota
+	overrideSet            // a value of its own
+	overrideReset          // back to the project's
+)
+
+// overridable edits a setting a terrain can take from the project, or have
+// its own: while it takes the project's, the field shows it grayed out,
+// with "(project)"; once set, a button resets it.
+func (a *app) overridable(key, label string, own, project float64, set bool, lo, hi, step float64, tooltip string) (float64, override) {
+	shown := project
+	if set {
+		shown = own
+	} else {
+		label += " (project)"
+		imgui.PushStyleColorVec4(imgui.ColText, imgui.CurrentStyle().Colors()[imgui.ColTextDisabled])
+	}
+	value, done := a.number(key, label, shown, lo, hi, step, false, false, tooltip)
+	if !set {
+		imgui.PopStyleColor()
+	}
+
+	switch {
+	case done && value != shown:
+		return value, overrideSet
+	case set:
+		imgui.SameLine()
+		if imgui.SmallButton("reset##" + key) {
+			return project, overrideReset
+		}
+		imgui.SetItemTooltip("Take the project's value again")
+	}
+	return shown, overrideNone
+}

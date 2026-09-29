@@ -83,6 +83,17 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Height = v })
 		}
 	}
+	if t.Kind == config.Land {
+		slope, action := a.overridable(key+"slope", "Steepest slopes (°)", t.CriticalSlope, conf.Simulation.CriticalSlope,
+			t.CriticalSlope != config.Inherit, 1, 89, 1,
+			"Hillslopes steeper than this collapse: high for sharp young mountains and cliffs, low for gentle hills")
+		switch action {
+		case overrideSet:
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.CriticalSlope = slope })
+		case overrideReset:
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.CriticalSlope = config.Inherit })
+		}
+	}
 	if v, done := a.number(key+"erodibility", "Erodibility factor", t.Erodibility, 0, 100, 0.1, false, false,
 		"How easily rivers erode this terrain, relative to the simulation's erodibility: lower is harder rock, steeper valleys"); done && v != t.Erodibility {
 		a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Erodibility = v })
@@ -165,7 +176,9 @@ func (a *app) addTerrain(conf *config.Config) {
 	n := len(conf.Terrains)
 	color := conf.FreeColor(config.Color{uint8(40 + 53*n%200), uint8(90 + 97*n%150), uint8(60 + 31*n%180)})
 	if a.editConfig(conf, func(c *config.Config) {
-		c.Terrains = append(c.Terrains, &config.Terrain{Name: name, Color: color, Height: 1000, Erodibility: 1, Detail: config.DetailAuto})
+		t := config.NewTerrain(name, color)
+		t.Height = 1000
+		c.Terrains = append(c.Terrains, t)
 	}) {
 		a.editor.brush = name
 	}
