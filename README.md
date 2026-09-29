@@ -53,6 +53,12 @@ again. From the File menu:
 The app reopens the last project at startup. The window title shows a star
 when there are unsaved changes, and the app asks before losing them.
 
+While there are unsaved changes, a copy of the project is saved every
+minute, next to the app's settings. If wgen closes without saving them (a
+crash, the computer turned off), the next start offers to recover them: the
+map opens as it was, and saving it suggests its file. Saving the project,
+or quitting, removes the copy.
+
 ### Views and controls
 
 | Control | |

@@ -47,11 +47,12 @@ type app struct {
 	recentPath   string
 	recent       []string // projects, most recent first
 
-	terrain *terrainView
-	mapView *mapView
-	editor  editor
-	inspect inspector
-	dialogs dialogs
+	terrain  *terrainView
+	mapView  *mapView
+	editor   editor
+	inspect  inspector
+	dialogs  dialogs
+	autosave autosaver
 
 	menuHeight    float32
 	title         string
@@ -137,6 +138,7 @@ func Run(session *engine.Session, path string) error {
 
 	a.applyWatch()
 	a.startup(path)
+	a.initAutosave(dir)
 	a.devDialog()
 
 	if a.terrain, err = newTerrainView(); err != nil {
@@ -155,6 +157,11 @@ func Run(session *engine.Session, path string) error {
 	}()
 
 	a.loop()
+
+	// Quitting was confirmed: the recovery copy is no longer needed
+	if a.autosave.written.Load() {
+		a.removeRecovery()
+	}
 	return nil
 }
 
@@ -276,6 +283,7 @@ func (a *app) frame() {
 	}
 	imgui.Render()
 	a.updateTitle()
+	a.autosaveTick()
 
 	framebufferWidth, framebufferHeight := a.window.GetFramebufferSize()
 	gl.Viewport(0, 0, int32(framebufferWidth), int32(framebufferHeight))

@@ -26,6 +26,7 @@ import (
 //   - WGEN_SCREENSHOT_AT=seconds: take it at that time instead
 //   - WGEN_CAMERA=x,y,distance,tilt,turn: place the orbit camera
 //   - WGEN_DIALOG=new|open|export|help|welcome: open that dialog at startup
+//   - WGEN_AUTOSAVE=seconds: the interval of autosaves, instead of a minute
 //   - WGEN_CLICK=x,y;x,y...: click there (window coordinates) once the
 //     world is ready, one click every 10 frames (the same point twice is a
 //     double click), to open a menu or draw a ruler; the screenshot waits
@@ -34,6 +35,8 @@ import (
 type devHooks struct {
 	screenshot   string        // save a screenshot there once ready, and quit
 	screenshotAt time.Duration // or at that time
+
+	autosaveSeconds float64
 
 	clicks      []imgui.Vec2 // where to click, in turn
 	clicksStart time.Time    // once the world is ready
@@ -45,6 +48,7 @@ func loadDevHooks() devHooks {
 	if at, err := strconv.ParseFloat(os.Getenv("WGEN_SCREENSHOT_AT"), 64); err == nil {
 		d.screenshotAt = time.Duration(at * float64(time.Second))
 	}
+	d.autosaveSeconds, _ = strconv.ParseFloat(os.Getenv("WGEN_AUTOSAVE"), 64)
 	for _, spec := range strings.Split(os.Getenv("WGEN_CLICK"), ";") {
 		var x, y float32
 		if _, err := fmt.Sscanf(spec, "%g,%g", &x, &y); err == nil {

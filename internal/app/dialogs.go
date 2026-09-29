@@ -18,13 +18,14 @@ import (
 // dialogs holds the state of the dialogs. Opening one sets it up; it is
 // drawn every frame while open.
 type dialogs struct {
-	file    fileDialog
-	newMap  newMapDialog
-	export  exportDialog
-	imports importDialog
-	confirm confirmDialog
-	help    bool
-	welcome bool
+	file     fileDialog
+	newMap   newMapDialog
+	export   exportDialog
+	imports  importDialog
+	confirm  confirmDialog
+	help     bool
+	welcome  bool
+	recovery bool
 }
 
 func (a *app) drawDialogs() {
@@ -35,6 +36,7 @@ func (a *app) drawDialogs() {
 	a.drawConfirm()
 	a.drawHelp()
 	a.drawWelcome()
+	a.drawRecovery()
 }
 
 // modal opens a modal popup (once, when asked) and begins it, centered.

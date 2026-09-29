@@ -249,6 +249,11 @@ Files:
 - `project.go`: projects: startup (the given file, else the last project,
   else a new map), new, open (a project, or an image to import), save,
   save as, export, quit, all asking about unsaved changes first.
+- `recovery.go`: autosave and recovery: while there are unsaved changes, a
+  copy every minute in `recovery/` next to the settings (written in the
+  background, skipped if unchanged, its `info.json` last so that a partial
+  copy isn't one), removed once saved or when quitting; at startup, a copy
+  left behind is offered for recovery. An app only removes a copy it wrote.
 - `welcome.go`: the welcome card. `recent.go`: the recent projects, in
   `recent.json` next to the settings (a slice would make `Settings`, compared
   by value, incomparable).
@@ -319,6 +324,7 @@ Environment variables, for development:
   ups: target in image pixels (top left origin), distance in pixels, tilt
   from vertical and turn in degrees.
 - `WGEN_DIALOG=new|open|export|help`: open that dialog at startup.
+- `WGEN_AUTOSAVE=seconds`: autosave at that interval instead of a minute.
 - `WGEN_CLICK=x,y;x,y...`: click there (window coordinates) after a
   second, one click every 10 frames (the same point twice is a double
   click): to open a menu, or draw a ruler.

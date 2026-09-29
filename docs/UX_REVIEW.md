@@ -369,7 +369,7 @@ codebase (S: hours, M: a few days, L: weeks).
 | 6 | Seed dice, simulation section as Advanced, label pass | 4, cross | Medium | S |
 | 7 | "Ignore" color at import (fill from surroundings), speck cleanup | 3 | High | M |
 | 8 | Engine export targets (sizes, RAW, EXR), terrain masks, normal map | 5 | High | M |
-| 9 | Autosave and recovery | 7 | High | M |
+| 9 | Autosave and recovery (done) | 7 | High | M |
 | 10 | Painting in the 3D view (done) | 2 | High | M |
 | 11 | Simulation presets and plain controls | 4 | High | M |
 | 12 | One undo history for painting, terrains and parameters | 2 | Medium | M |
