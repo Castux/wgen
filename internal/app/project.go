@@ -36,23 +36,11 @@ func withExt(path, ext string) string { return strings.TrimSuffix(path, filepath
 
 func isProject(path string) bool { return strings.ToLower(filepath.Ext(path)) == projectExt }
 
-// startup opens the file the app was given, else the last project, else a
-// new map.
+// startup opens the file the app was given, if any. Without a project, the
+// welcome card shows.
 func (a *app) startup(path string) {
-	switch {
-	case path != "" && !isProject(path) && !isFile(withExt(path, projectExt)):
-		// An image to import: over a new map, if canceled
-		a.newDefaultProject()
+	if path != "" {
 		a.open(path)
-	case path != "":
-		a.open(path)
-	case a.settings.LastProject != "" && isFile(a.settings.LastProject):
-		a.open(a.settings.LastProject)
-	default:
-		a.newDefaultProject()
-	}
-	if path == "" && a.settings.ShowWelcome {
-		a.openWelcome()
 	}
 }
 
@@ -61,20 +49,15 @@ func (a *app) unsaved() bool {
 	return a.editor.dirty || a.session.Engine.State().Dirty
 }
 
+// hasProject tells whether a project is open.
+func (a *app) hasProject() bool { return a.session.Engine.Config() != nil }
+
 // projectName is the name of the project, for the window title.
 func (a *app) projectName() string {
 	if path := a.session.ProjectPath(); path != "" {
 		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	}
 	return "Untitled"
-}
-
-// newDefaultProject starts a new map, of the default size, with an island.
-// Nothing is lost if it isn't saved: it doesn't count as unsaved changes.
-func (a *app) newDefaultProject() {
-	a.newProject(defaultMapSize, defaultMapSize, defaultMapWidth, true, false)
-	a.editor.dirty = false
-	a.session.Engine.MarkClean()
 }
 
 // openExample starts a new project from the example, untitled so that
@@ -211,6 +194,9 @@ func (a *app) rememberProject(path string) {
 // saveProject saves the project, then does then (if not nil). A new
 // project is saved as.
 func (a *app) saveProject(then func()) {
+	if !a.hasProject() {
+		return
+	}
 	if a.session.ProjectPath() == "" {
 		a.saveProjectAs(then)
 		return
@@ -228,6 +214,9 @@ func (a *app) saveProject(then func()) {
 
 // saveProjectAs asks where to save the project, and saves it there.
 func (a *app) saveProjectAs(then func()) {
+	if !a.hasProject() {
+		return
+	}
 	dir, name := "", "map"+projectExt
 	switch path := a.session.ProjectPath(); {
 	case path != "":

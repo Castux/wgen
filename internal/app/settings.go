@@ -44,7 +44,6 @@ type Settings struct {
 
 	// Projects
 	LastProject string         `json:"lastProject"`
-	ShowWelcome bool           `json:"showWelcome"` // the welcome card, at startup
 	Export      export.Options `json:"export"`
 }
 
@@ -96,8 +95,6 @@ var defaultSettings = Settings{
 	VerticalScale: 1,
 
 	HoverInfo: true,
-
-	ShowWelcome: true,
 
 	WatchSteps: 10,
 

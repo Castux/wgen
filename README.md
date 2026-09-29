@@ -30,19 +30,19 @@ example project, in `example/`.
 
 The menus have the commands and how the landscape is shown: File, Edit
 (undo and redo), View (every display setting), Simulation (watching it),
-Help. The panel on the right is the project: its terrains, painting, and
-the map and simulation parameters.
+Help. The panel on the right, from the top of the window to the bottom, is
+the project: its terrains, painting, and the map and simulation parameters.
 
-At first, wgen starts a new map with a random island, and shows the
-welcome card: what it does, buttons to paint this map, open the example,
-import an image, start a new map or open a project, and the recent
-projects. Uncheck "Show this at startup" to skip it; Help, Welcome shows it
+At first, wgen shows the welcome card: what it does, buttons to start a new
+map, open a project or an image, or open the example, and the recent
+projects. It shows whenever no project is open; Help, Welcome shows it
 again. From the File menu:
 
 - New map: an empty sea or a random island, of a chosen size in pixels
   (powers of two, 256 to 16384) and a real width in kilometers.
-- Open: a project (`.json`), or an image to import as a map (`.png`,
-  `.jpg`). Files can also be dropped on the window.
+- Open: a project (`.json`), or an image (`.png`, `.jpg`): with a project
+  of the same name next to it, that project; else it becomes a new one (see
+  Importing an image). Files can also be dropped on the window.
 - Open recent: the last 10 projects opened or saved.
 - Open the example: a finished map, as a new untitled project (saving it
   asks where, so the example stays as it is).
@@ -50,8 +50,8 @@ again. From the File menu:
   next to it with the same name.
 - Export: see below.
 
-The app reopens the last project at startup. The window title shows a star
-when there are unsaved changes, and the app asks before losing them.
+The window title shows a star when there are unsaved changes, and the app
+asks before losing them.
 
 While there are unsaved changes, a copy of the project is saved every
 minute, next to the app's settings. If wgen closes without saving them (a

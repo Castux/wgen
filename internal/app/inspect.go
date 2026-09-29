@@ -329,8 +329,8 @@ func (a *app) drawHover() {
 	if !a.settings.HoverInfo || point == nil {
 		return
 	}
-	display := imgui.CurrentIO().DisplaySize()
-	imgui.SetNextWindowPosV(imgui.NewVec2(display.X/2, a.menuHeight+8), imgui.CondAlways, imgui.NewVec2(0.5, 0))
+	viewWidth, _, _ := a.viewSize()
+	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), a.menuHeight+8), imgui.CondAlways, imgui.NewVec2(0.5, 0))
 	imgui.SetNextWindowBgAlpha(0.7)
 	if imgui.BeginV("##hover", nil, overlayWindowFlags) {
 		imgui.TextUnformatted(a.describe(point))

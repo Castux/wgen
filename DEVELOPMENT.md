@@ -246,9 +246,10 @@ Files:
 - `input.go`: keyboard and mouse: the window callbacks, shortcuts (lookup
   tables of keys), camera drags and zoom.
 - `status.go`: the status in the bottom left corner.
-- `project.go`: projects: startup (the given file, else the last project,
-  else a new map), new, open (a project, or an image to import), save,
-  save as, export, quit, all asking about unsaved changes first.
+- `project.go`: projects: startup (the given file, if any: without a
+  project, the welcome card shows), new, open (a project, or an image to
+  import), save, save as, export, quit, all asking about unsaved changes
+  first.
 - `recovery.go`: autosave and recovery: while there are unsaved changes, a
   copy every minute in `recovery/` next to the settings (written in the
   background, skipped if unchanged, its `info.json` last so that a partial
@@ -270,12 +271,12 @@ Files:
   picked color. No GL: unit tested.
 - `terrains.go`: the terrain list of the panel, which is the brush palette,
   and editing terrains (rename, recolor, add, remove).
-- `panel.go`: the panel: terrains, painting, map and simulation
-  parameters. The parameters come from
-  `config.Schema`, their values from `config.Value`; edits are sent to the
-  session as partial configs, unless the value is unchanged. The height
-  legend. The panel is kept inside the window, as its saved position may be
-  off screen in a smaller window.
+- `panel.go`: the panel, docked on the right, full height: terrains,
+  painting, map and simulation parameters. The views are the rest of the
+  window (`viewSize`, the GL viewport), all of it without a project. The
+  parameters come from `config.Schema`, their values from `config.Value`;
+  edits are sent to the session as partial configs, unless the value is
+  unchanged. The height legend.
 - `widgets.go`: number fields (a slider only for the brush size), which
   commit when done (`Enter` or leaving the field; `Escape` cancels), not on
   every change.

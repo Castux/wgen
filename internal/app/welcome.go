@@ -4,8 +4,8 @@ import (
 	"github.com/AllenDang/cimgui-go/imgui"
 )
 
-// The welcome card, at startup (unless turned off) and from the Help menu:
-// what wgen does, how to start, and the recent projects.
+// The welcome card, whenever there is no project (at startup) and from the
+// Help menu: what wgen does, how to start, and the recent projects.
 
 // Recent projects on the welcome card
 const welcomeRecent = 5
@@ -32,24 +32,15 @@ func (a *app) drawWelcome() {
 		}
 		return clicked
 	}
-	if button("Paint this map", "Paint terrains on the map shown, with the brush of the panel (E)") {
-		settings := a.settings
-		settings.setEditing(true)
-		a.setSettings(settings)
-	}
-	if button("Open the example", "A finished map: two continents, mountain ranges, islands") {
-		a.openExample()
-	}
-	if button("Import an image...", "A map painted elsewhere: pick the colors of the sea and of the terrains") {
-		a.unsavedThen("import an image", func() {
-			a.openFile("Import an image", "", "", false, imageExts, a.open)
-		})
-	}
 	if button("New map...", "An empty sea or a random island, of a size to choose") {
 		a.newDialog()
 	}
-	if button("Open a project...", "A project saved before, or an image") {
+	if button("Open...", "A project, or an image: without a project next to it, it becomes a new one, "+
+		"picking the colors of the sea and of the terrains") {
 		a.openDialog()
+	}
+	if button("Open the example", "A finished map: two continents, mountain ranges, islands") {
+		a.openExample()
 	}
 
 	if len(a.recent) > 0 {
@@ -65,14 +56,22 @@ func (a *app) drawWelcome() {
 		}
 	}
 
-	imgui.Separator()
-	settings := a.settings
-	if imgui.Checkbox("Show this at startup", &settings.ShowWelcome) {
-		a.setSettings(settings)
-	}
-	imgui.SameLineV(imgui.ContentRegionAvail().X+imgui.CursorPosX()-imgui.CalcTextSize("Close").X-2*imgui.CurrentStyle().FramePadding().X, 0)
-	if imgui.Button("Close") {
-		imgui.CloseCurrentPopup()
+	// Closing it leaves the project open, if any
+	if a.session.Engine.Config() != nil {
+		imgui.Separator()
+		if imgui.Button("Close") {
+			imgui.CloseCurrentPopup()
+		}
 	}
 	imgui.EndPopup()
+}
+
+// welcomeWithoutProject shows the welcome card when there is no project,
+// and no dialog open (such as one opened from the card, then canceled).
+func (a *app) welcomeWithoutProject() {
+	if a.session.Engine.Config() != nil || a.dialogs.opening() ||
+		imgui.IsPopupOpenStrV("", imgui.PopupFlagsAnyPopupId|imgui.PopupFlagsAnyPopupLevel) {
+		return
+	}
+	a.openWelcome()
 }

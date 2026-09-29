@@ -28,6 +28,12 @@ type dialogs struct {
 	recovery bool
 }
 
+// opening tells whether a dialog is about to open.
+func (d *dialogs) opening() bool {
+	return d.file.opening || d.newMap.opening || d.export.opening || d.imports.opening || d.confirm.opening ||
+		d.help || d.welcome || d.recovery
+}
+
 func (a *app) drawDialogs() {
 	a.drawFileDialog()
 	a.drawNewMap()
@@ -37,6 +43,7 @@ func (a *app) drawDialogs() {
 	a.drawHelp()
 	a.drawWelcome()
 	a.drawRecovery()
+	a.welcomeWithoutProject()
 }
 
 // modal opens a modal popup (once, when asked) and begins it, centered.

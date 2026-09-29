@@ -100,7 +100,7 @@ func (a *app) devClick() {
 
 // devClicksDone tells whether the clicks of WGEN_CLICK are done, and shown.
 func (a *app) devClicksDone() bool {
-	return a.dev.clickFrame >= framesPerClick*(len(a.dev.clicks)+1)
+	return len(a.dev.clicks) == 0 || a.dev.clickFrame >= framesPerClick*(len(a.dev.clicks)+1)
 }
 
 // devDialog opens the dialog given by WGEN_DIALOG, for screenshots.

@@ -74,10 +74,10 @@ func (a *app) drawFileMenu() {
 		a.openExample()
 	}
 	imgui.Separator()
-	if imgui.MenuItemBoolV("Save", "Ctrl+S", false, true) {
+	if imgui.MenuItemBoolV("Save", "Ctrl+S", false, a.hasProject()) {
 		a.saveProject(nil)
 	}
-	if imgui.MenuItemBoolV("Save as...", "Ctrl+Shift+S", false, true) {
+	if imgui.MenuItemBoolV("Save as...", "Ctrl+Shift+S", false, a.hasProject()) {
 		a.saveProjectAs(nil)
 	}
 	imgui.Separator()

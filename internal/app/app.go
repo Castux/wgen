@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -250,13 +251,15 @@ func (a *app) wakeUp() {
 	glfw.PostEmptyEvent()
 }
 
-// viewSize is the size of the window, in window coordinates (those of the
-// mouse), and the number of framebuffer pixels per window unit.
+// viewSize is the size of the view, the window left of the panel, in
+// window coordinates (those of the mouse), and the number of framebuffer
+// pixels per window unit.
 func (a *app) viewSize() (width, height, pixelRatio float64) {
 	windowWidth, windowHeight := a.window.GetSize()
 	framebufferWidth, _ := a.window.GetFramebufferSize()
-	width, height = float64(max(windowWidth, 1)), float64(max(windowHeight, 1))
-	return width, height, float64(max(framebufferWidth, 1)) / width
+	pixelRatio = float64(max(framebufferWidth, 1)) / float64(max(windowWidth, 1))
+	width = math.Max(float64(windowWidth)-float64(a.panelWidth()), 1)
+	return width, float64(max(windowHeight, 1)), pixelRatio
 }
 
 func (a *app) frame() {
@@ -286,8 +289,8 @@ func (a *app) frame() {
 	a.autosaveTick()
 
 	framebufferWidth, framebufferHeight := a.window.GetFramebufferSize()
-	gl.Viewport(0, 0, int32(framebufferWidth), int32(framebufferHeight))
 	width, height, ratio := a.viewSize()
+	gl.Viewport(0, 0, int32(math.Round(width*ratio)), int32(framebufferHeight))
 	a.updatePaintTexture()
 	if a.settings.View == viewMap {
 		a.mapView.draw(width, height, ratio)
@@ -366,7 +369,10 @@ func (a *app) loading() bool { return a.overlay.busy() || a.mapImage.busy() }
 // updateTitle shows the project in the window title, with a star if it has
 // unsaved changes.
 func (a *app) updateTitle() {
-	title := a.projectName() + " - wgen"
+	title := "wgen"
+	if a.hasProject() {
+		title = a.projectName() + " - wgen"
+	}
 	if a.unsaved() {
 		title = "*" + title
 	}

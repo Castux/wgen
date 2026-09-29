@@ -35,8 +35,9 @@ func (a *app) drawProfile() {
 	}
 
 	display := imgui.CurrentIO().DisplaySize()
-	imgui.SetNextWindowPosV(imgui.NewVec2(display.X*0.35, display.Y-12), imgui.CondFirstUseEver, imgui.NewVec2(0.5, 1))
-	imgui.SetNextWindowSizeV(imgui.NewVec2(display.X*0.55, 260*a.uiScale), imgui.CondFirstUseEver)
+	viewWidth, _, _ := a.viewSize()
+	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), display.Y-12), imgui.CondFirstUseEver, imgui.NewVec2(0.5, 1))
+	imgui.SetNextWindowSizeV(imgui.NewVec2(float32(viewWidth*0.8), 260*a.uiScale), imgui.CondFirstUseEver)
 	open := true
 	if imgui.BeginV("Altitude profile", &open, imgui.WindowFlagsNoFocusOnAppearing) {
 		keepInside(display)

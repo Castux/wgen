@@ -35,24 +35,35 @@ func (a *app) panelParams(conf *config.Config) []param {
 	return a.params
 }
 
-// drawPanel is the side panel: the project (terrains, map and simulation
-// parameters) and painting. How it is shown is in the View menu.
-func (a *app) drawPanel() {
-	display := imgui.CurrentIO().DisplaySize()
-	top := a.menuHeight
-	width := 380 * a.uiScale
-	imgui.SetNextWindowPosV(imgui.NewVec2(display.X-width-8, top+8), imgui.CondFirstUseEver, imgui.NewVec2(0, 0))
-	imgui.SetNextWindowSizeV(imgui.NewVec2(width, display.Y-top-16), imgui.CondFirstUseEver)
+// panelWidth is the width of the panel, docked on the right of the window
+// (0 without a project, when there is none).
+func (a *app) panelWidth() float32 {
+	if a.session.Engine.Config() == nil {
+		return 0
+	}
+	return 380 * a.uiScale
+}
 
-	if imgui.BeginV("Project", nil, imgui.WindowFlagsNone) {
-		keepInside(display)
+// drawPanel is the side panel, docked on the right, from the menu bar down:
+// the project (terrains, map and simulation parameters) and painting. How
+// it is shown is in the View menu.
+func (a *app) drawPanel() {
+	conf := a.session.Engine.Config()
+	if conf == nil {
+		return
+	}
+	display := imgui.CurrentIO().DisplaySize()
+	width := a.panelWidth()
+	imgui.SetNextWindowPosV(imgui.NewVec2(display.X-width, a.menuHeight), imgui.CondAlways, imgui.NewVec2(0, 0))
+	imgui.SetNextWindowSizeV(imgui.NewVec2(width, display.Y-a.menuHeight), imgui.CondAlways)
+
+	flags := imgui.WindowFlagsNoTitleBar | imgui.WindowFlagsNoMove | imgui.WindowFlagsNoResize | imgui.WindowFlagsNoCollapse |
+		imgui.WindowFlagsNoSavedSettings | imgui.WindowFlagsNoBringToFrontOnFocus
+	if imgui.BeginV("##panel", nil, flags) {
 		imgui.PushItemWidth(-170 * a.uiScale)
-		conf := a.session.Engine.Config()
-		if conf != nil {
-			a.drawTerrains(conf)
-			a.drawPainting()
-			a.drawParams(conf)
-		}
+		a.drawTerrains(conf)
+		a.drawPainting()
+		a.drawParams(conf)
 		imgui.PopItemWidth()
 	}
 	imgui.End()
