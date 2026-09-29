@@ -332,12 +332,13 @@ func (a *app) drawHover() {
 	var lines []string
 	if a.settings.View == viewEye && a.world != nil && a.inspect.probe != nil {
 		v := a.terrain
-		here := a.inspect.probe.At(geom.Vec2{X: v.eye.position.X() + v.width/2, Y: v.eye.position.Y() + v.height/2})
+		here := a.localPoint(geom.Vec2{X: v.eye.position.X() + v.width/2, Y: v.eye.position.Y() + v.height/2})
 		if here.Inside {
 			lines = append(lines, "Here:    "+a.describe(&here))
 		}
 		if point != nil {
-			lines = append(lines, "Cursor:  "+a.describe(point)+"  ·  "+formatDistance(a.distanceTo(point.Position, point.Ground))+" away")
+			cursor := a.localPoint(point.Position)
+			lines = append(lines, "Cursor:  "+a.describe(&cursor)+"  ·  "+formatDistance(a.distanceTo(cursor.Position, cursor.Ground))+" away")
 		}
 	} else if point != nil {
 		lines = append(lines, a.describe(point))
@@ -355,6 +356,23 @@ func (a *app) drawHover() {
 		}
 	}
 	imgui.End()
+}
+
+// localPoint is what is at a position at eye level: with the ground as
+// drawn there, the finer ground around the eye.
+func (a *app) localPoint(position geom.Vec2) gen.Point {
+	point := a.inspect.probe.At(position)
+	z := a.groundHeight(position)
+	switch {
+	case !point.Inside || math.IsNaN(z):
+	case point.Water && z >= point.Surface:
+		// Blocks of water: their tops are the surface, the bed is below
+	case point.Water:
+		point.Ground, point.Depth = z, point.Surface-z
+	default:
+		point.Ground = z
+	}
+	return point
 }
 
 // describe is a line about a point: position from the top left corner,

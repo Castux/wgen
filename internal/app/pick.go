@@ -13,6 +13,10 @@ import (
 // pixels, y up (as the world's); the 3D view centers the map on the origin,
 // elevations scaled by zScale.
 
+// The finer ground's details reach beyond the mesh's heights by up to this,
+// meters
+const detailMargin = 100
+
 // zScale converts elevations (meters) to 3D units (map pixels), with the
 // vertical exaggeration.
 func (a *app) zScale() float64 {
@@ -41,12 +45,21 @@ func (a *app) mapPosition(x, y float64) (geom.Vec2, bool) {
 		if !ok {
 			return geom.Vec2{}, false
 		}
+		// On the ground as drawn: at eye level, the finer ground around the
+		// eye (which can be below the mesh, where the eye stands), with its
+		// details beyond the mesh's range
 		v := a.terrain
 		zScale := a.zScale()
-		surface := func(x, y float64) float64 {
-			return a.inspect.probe.Ground(geom.Vec2{X: x + v.width/2, Y: y + v.height/2}) * zScale
+		ground := a.inspect.probe.Ground
+		lowest, highest := v.lowest, math.Max(v.highest, 0)
+		if a.settings.View == viewEye {
+			ground = a.groundHeight
+			lowest, highest = lowest-detailMargin, highest+detailMargin
 		}
-		hit, ok := marchRay(near, far, v.lowest*zScale, math.Max(v.highest, 0)*zScale, surface)
+		surface := func(x, y float64) float64 {
+			return ground(geom.Vec2{X: x + v.width/2, Y: y + v.height/2}) * zScale
+		}
+		hit, ok := marchRay(near, far, lowest*zScale, highest*zScale, surface)
 		if !ok {
 			return geom.Vec2{}, false
 		}
