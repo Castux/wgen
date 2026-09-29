@@ -356,14 +356,14 @@ func (a *app) showWorld(world *gen.World, version int, width, height float64) {
 
 // requestImages asks for the rendered images the current settings need.
 func (a *app) requestImages(pixelRatio float64) {
-	options := a.settings.overlayOptions()
+	options := a.settings.overlayOptions(a.world.MetersPerPixel)
 	options.Base = render.BaseNone
 	options.Scale = a.terrain.overlayScale()
 	a.overlay.request(a.world, a.version, options)
 
 	// Only when visible, since it depends on the zoom
 	if a.settings.View == viewMap {
-		options := a.settings.overlayOptions()
+		options := a.settings.overlayOptions(a.world.MetersPerPixel)
 		options.Base = render.Base(a.settings.Color)
 		options.Shading = a.settings.Shading == shadingLit
 		options.Scale = a.mapView.camera.imageScale(pixelRatio)

@@ -173,7 +173,7 @@ func (a *app) drawViewMenu() {
 	toggle("Rivers colored by basin", "B", &settings.BasinColors)
 	imgui.SetItemTooltip("A color per drainage basin (the rivers flowing to the same place in the sea), instead of blue")
 	number("view.contours", "Contour interval (m)", &settings.Contours, 0, 10000, 1, "0: no contour lines")
-	number("view.grid", "Grid size (px)", &settings.Grid, 0, 10000, 10, "0: no grid")
+	number("view.grid", "Grid size (km)", &settings.GridKm, 0, 100000, 10, "0: no grid")
 
 	imgui.SeparatorText("Inspect")
 	toggle("Scale bar", "", &settings.ScaleBar)

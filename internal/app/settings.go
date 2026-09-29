@@ -26,7 +26,7 @@ type Settings struct {
 	RiverWidth  float64      `json:"riverWidth"`
 	BasinColors bool         `json:"basinColors"` // rivers in a color per drainage basin
 	Contours    float64      `json:"contours"`
-	Grid        float64      `json:"grid"`
+	GridKm      float64      `json:"gridKm"` // 0 for none
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D view
 	EyeGround     string  `json:"eyeGround"`     // at eye level: facets, smooth, blocks
@@ -181,14 +181,15 @@ func cycle(values []string, value string) string {
 	return values[(i+1)%len(values)]
 }
 
-// overlayOptions are the render options for rivers, contour lines and grid.
-func (s *Settings) overlayOptions() render.Options {
+// overlayOptions are the render options for rivers, contour lines and grid,
+// on a map of the given scale.
+func (s *Settings) overlayOptions(metersPerPixel float64) render.Options {
 	return render.Options{
 		RiverPower:  s.RiverPower,
 		RiverWidth:  s.RiverWidth,
 		BasinColors: s.BasinColors,
 		Contours:    s.Contours,
-		Grid:        s.Grid,
+		Grid:        s.GridKm * 1000 / metersPerPixel,
 		HeightScale: s.HeightScale,
 		LandColor:   s.LandColor,
 	}

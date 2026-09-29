@@ -35,8 +35,8 @@ func TestSettings(t *testing.T) {
 	}
 
 	// Invalid values get their default, the others are kept
-	os.WriteFile(path, []byte(`{"view": "sideways", "grid": 50}`), 0o644)
-	if loaded := loadSettings(path); loaded.View != "orbit" || loaded.Grid != 50 {
+	os.WriteFile(path, []byte(`{"view": "sideways", "gridKm": 50}`), 0o644)
+	if loaded := loadSettings(path); loaded.View != "orbit" || loaded.GridKm != 50 {
 		t.Errorf("loaded %+v", loaded)
 	}
 
