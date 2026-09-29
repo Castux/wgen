@@ -126,16 +126,19 @@ terrain fades in a haze.
 The mesh is about a kilometer between points: up close, flat facets. View,
 Eye level ground chooses what is drawn around you instead:
 
-- Smooth (the default): finer ground, every 4 m within 500 m, every 32 m
-  within 4 km, smoothly interpolated between the heights of the map, with
-  small details, more on steep slopes. It is made up: an idea of what the
+- Smooth (the default): finer ground, coarser with distance: every 4 m
+  within 500 m, 16 m within 2 km, 64 m within 8 km, 256 m within 30 km,
+  smoothly interpolated between the heights of the map, with small
+  details, more on steep slopes. It is made up: an idea of what the
   ground could look like, consistent with the landscape.
 - Blocks: 1 m blocks within 128 m, their heights rounded from the smooth
   ground, water flat at its level, then the smooth ground: a sense of
   scale.
 - Facets: the mesh as it is.
 
-The finer ground follows you, rebuilt in the background as you walk.
+The finer ground follows you, rebuilt in the background as you walk. Your
+height eases up and down with the ground, so that blocks are climbed
+smoothly.
 
 ### Painting
 

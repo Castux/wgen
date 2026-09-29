@@ -82,24 +82,58 @@ func (a *app) walk() {
 			a.activity() // keep moving while held
 		}
 	}
-	a.placeEye()
+	a.followGround(dt)
 }
 
-// placeEye keeps the eye in the map, at eye level above the ground (or the
-// water).
+// Rising and falling with the ground, the eye's height eases toward eye
+// level (exponentially, in about this time, seconds), without going more
+// than eyeMaxDip meters below
+const (
+	eyeEasing = 0.15
+	eyeMaxDip = 0.5
+)
+
+// followGround keeps the eye in the map, easing toward eye level above the
+// ground (or the water): steps, such as those of blocks, are climbed
+// smoothly.
+func (a *app) followGround(dt float64) {
+	target, ok := a.eyeLevel()
+	if !ok {
+		return
+	}
+	eye := &a.terrain.eye
+	z := eye.position.Z()
+	z += (target - z) * (1 - math.Exp(-dt/eyeEasing))
+	z = math.Max(z, target-eyeMaxDip/a.terrain.metersPerPixel)
+	if math.Abs(target-z) > 1e-6/a.terrain.metersPerPixel {
+		a.activity() // until settled
+	}
+	eye.position[2] = z
+}
+
+// placeEye puts the eye at eye level at once, in the map.
 func (a *app) placeEye() {
+	if target, ok := a.eyeLevel(); ok {
+		a.terrain.eye.position[2] = target
+	}
+}
+
+// eyeLevel clamps the eye in the map, and is the height of eye level there,
+// in 3D units.
+func (a *app) eyeLevel() (float64, bool) {
 	v := a.terrain
 	if a.inspect.probe == nil || v.width == 0 {
-		return
+		return 0, false
 	}
 	eye := &v.eye
 	x := geom.Clamp(eye.position.X(), -v.width/2, v.width/2)
 	y := geom.Clamp(eye.position.Y(), -v.height/2, v.height/2)
-	z := eye.position.Z()
-	if surface := a.groundHeight(geom.Vec2{X: x + v.width/2, Y: y + v.height/2}); !math.IsNaN(surface) {
-		z = surface*a.zScale() + eyeHeight/v.metersPerPixel
+	eye.position = mgl64.Vec3{x, y, eye.position.Z()}
+	surface := a.groundHeight(geom.Vec2{X: x + v.width/2, Y: y + v.height/2})
+	if math.IsNaN(surface) {
+		return 0, false
 	}
-	eye.position = mgl64.Vec3{x, y, z}
+	return surface*a.zScale() + eyeHeight/v.metersPerPixel, true
 }
 
 func (a *app) eyeSpeed() float64 {

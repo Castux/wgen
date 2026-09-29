@@ -297,7 +297,8 @@ Files:
   depth there (`gl_FragDepth`): the eye is millimeters above the ground in
   map units, the horizon hundreds of kilometers away, too much range for a
   depth buffer; and a haze toward the sky color.
-- `ground.go`: finer ground at eye level: grids (4 m, 32 m) of
+- `ground.go`: finer ground at eye level: grids (4, 16, 64, 256 m, each
+  four times as wide as the next) of
   `Probe.DetailedGround` (Catmull-Rom through the heightmap, fractal details
   scaled by the slope), or 1 m blocks rounded from the finest grid. Each
   layer is drawn in a hole of the coarser one (a rectangle the terrain

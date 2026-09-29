@@ -13,7 +13,7 @@ func TestGroundLayers(t *testing.T) {
 	probe := gen.NewProbe(w)
 	center := geom.Vec2{X: float64(w.Width) / 2, Y: float64(w.Height) / 2}
 
-	outer := buildGrid(probe, w, center, outerStep, 2*outerStep, probe.Surface)
+	outer := buildGrid(probe, w, center, 32, 64, probe.Surface)
 	// The grid, and its skirt: 4 vertices and 12 indices per edge segment
 	edges := 4 * (gridSize - 1)
 	if len(outer.indices) != 6*(gridSize-1)*(gridSize-1)+12*edges || len(outer.vertices) != gridSize*gridSize+4*edges {
@@ -33,7 +33,7 @@ func TestGroundLayers(t *testing.T) {
 		}
 	}
 
-	inner := buildGrid(probe, w, center, innerStep, 2*innerStep, func(p geom.Vec2) float64 {
+	inner := buildGrid(probe, w, center, 4, 8, func(p geom.Vec2) float64 {
 		z, _ := outer.heightAt(p)
 		return z
 	})

@@ -129,7 +129,7 @@ func (a *app) drawViewMenu() {
 		choice("Facets", "", &settings.EyeGround, groundFacets)
 		imgui.SetItemTooltip("The mesh as it is: flat facets, about a kilometer wide")
 		choice("Smooth", "", &settings.EyeGround, groundSmooth)
-		imgui.SetItemTooltip("Finer ground around you (4 m, then 32 m), smoothly interpolated, with small details")
+		imgui.SetItemTooltip("Finer ground around you, coarser with distance (4 m to 256 m, out to 30 km), smoothly interpolated, with small details")
 		choice("Blocks", "", &settings.EyeGround, groundBlocks)
 		imgui.SetItemTooltip("1 m blocks around you, rounded from the smooth ground, then the smooth ground")
 		imgui.EndMenu()

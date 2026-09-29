@@ -12,8 +12,9 @@ import (
 // Finer ground around the eye, at eye level: the mesh is about a kilometer
 // between points, flat facets up close. Two modes:
 //
-//   - smooth: grids of finer steps near the eye (4 m, then 32 m), their
-//     heights smoothly interpolated in the heightmap, with fractal details
+//   - smooth: grids of finer steps near the eye (4 m, 16 m, 64 m, 256 m,
+//     each four times as wide as the next), their heights smoothly
+//     interpolated in the heightmap, with fractal details
 //   - blocks: 1 m cubes near the eye, their tops rounded from the smooth
 //     ground, then the smooth grids
 //
@@ -35,8 +36,6 @@ const (
 	gridSize      = 257 // vertices on a side of a smooth grid
 	gridBlend     = 6   // cells at the edges blending into the coarser ground
 	holeMargin    = 2   // cells at the edges also covered by the coarser ground
-	outerStep     = 32  // meters
-	innerStep     = 4
 	blocksSize    = 256 // blocks on a side
 	blockMeters   = 1
 	rebuildFactor = 0.2 // of a layer's size: the eye going that far from its center rebuilds it
@@ -320,12 +319,16 @@ type groundLayer struct {
 	bounds [4]float64
 }
 
+// Steps of the smooth grids, meters, from the coarsest: each covers four
+// times the one after
+var gridSteps = []float64{256, 64, 16, 4}
+
 // groundDetail builds the finer ground around the eye, in the background.
 type groundDetail struct {
 	mode  string
 	world *gen.World
 
-	// Built, from the coarsest: the outer grid, the inner one, blocks
+	// Built, from the coarsest: the grids, then blocks
 	patches []*groundPatch
 	meshes  []meshBuffers
 
@@ -374,9 +377,9 @@ func (a *app) updateGround() {
 	// from the first that isn't (they depend on it)
 	v := a.terrain
 	eye := geom.Vec2{X: v.eye.position.X() + v.width/2, Y: v.eye.position.Y() + v.height/2}
-	layers := 2
+	layers := len(gridSteps)
 	if mode == groundBlocks {
-		layers = 3
+		layers++
 	}
 	kept := 0
 	if g.world == a.world && g.mode == mode {
@@ -394,18 +397,22 @@ func (a *app) updateGround() {
 	go func() {
 		defer a.wakeUp()
 		for len(patches) < layers {
-			switch len(patches) {
-			case 0:
-				patches = append(patches, buildGrid(probe, world, eye, outerStep, 2*outerStep, probe.Surface))
-			case 1:
-				outer := patches[0]
-				patches = append(patches, buildGrid(probe, world, eye, innerStep, 2*innerStep, func(p geom.Vec2) float64 {
-					z, _ := outer.heightAt(p)
-					return z
-				}))
-			case 2:
-				patches = append(patches, buildBlocks(probe, world, eye, patches[1]))
+			k := len(patches)
+			if k == len(gridSteps) {
+				patches = append(patches, buildBlocks(probe, world, eye, patches[k-1]))
+				continue
 			}
+
+			// Each grid meets the coarser ground at its edges
+			parent := probe.Surface
+			if k > 0 {
+				coarser := patches[k-1]
+				parent = func(p geom.Vec2) float64 {
+					z, _ := coarser.heightAt(p)
+					return z
+				}
+			}
+			patches = append(patches, buildGrid(probe, world, eye, gridSteps[k], 2*gridSteps[k], parent))
 		}
 		g.results <- groundBuild{mode: mode, world: world, patches: patches, kept: kept}
 	}()
