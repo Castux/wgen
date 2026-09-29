@@ -218,7 +218,12 @@ func (w *World) run(conf *config.Config, from Stage, opts Options) (*World, erro
 		{StageMesh, "building meshes", next.generateMeshes},
 		{StageSimulation, "assigning terrains", next.assignTerrains},
 		{StageSimulation, "simulating", next.simulate},
-		{StageSimulation, "computing water depth", func() error { next.computeWaterDepth(); next.computeElevationRange(); return nil }},
+		{StageSimulation, "computing water depth", func() error {
+			next.computeWaterDepth()
+			next.fillMargin()
+			next.computeElevationRange()
+			return nil
+		}},
 		{StageRaster, "rasterizing", func() error { next.rasterize(); return nil }},
 	}
 

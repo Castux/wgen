@@ -67,62 +67,68 @@ func (a *app) drawMapScaleBar() {
 	drawBar([]imgui.Vec2{{X: right - pixels, Y: y}, {X: right, Y: y}}, formatDistance(length), a.uiScale)
 }
 
-// drawGroundScaleBar is a bar on the ground, in perspective.
+// drawGroundScaleBar is a bar on the ground, in perspective: at the first
+// place for it that is on the map, whole.
 func (a *app) drawGroundScaleBar() {
 	width, height, _ := a.viewSize()
-	var center geom.Vec2
-	found := false
 	for _, at := range groundScaleAt {
-		if center, found = a.mapPosition(width*at[0], height*at[1]); found {
-			break
+		if line, label, ok := a.groundScaleBar(width*at[0], height*at[1]); ok {
+			drawBar(line, label, a.uiScale)
+			return
 		}
 	}
-	if !found {
-		return
+}
+
+// groundScaleBar is the scale bar on the ground under a window position:
+// the line along it, and its length.
+func (a *app) groundScaleBar(x, y float64) ([]imgui.Vec2, string, bool) {
+	center, ok := a.mapPosition(x, y)
+	if !ok {
+		return nil, "", false
 	}
 
 	// Level, along the screen's horizontal
+	width, height, _ := a.viewSize()
 	view, _, _ := a.terrain.camera(a.settings.View, width/height)
 	right := geom.Vec2{X: view.At(0, 0), Y: view.At(0, 1)}
-	if length := math.Hypot(right.X, right.Y); length > 1e-9 {
-		right = right.Scale(1 / length)
-	} else {
-		return
+	length := math.Hypot(right.X, right.Y)
+	if length < 1e-9 {
+		return nil, "", false
 	}
+	right = right.Scale(1 / length)
 
 	// Its length on screen, measured around the point
 	probe := a.inspect.probe
 	project := func(p geom.Vec2) (imgui.Vec2, bool) {
+		if !probe.Inside(p) {
+			return imgui.Vec2{}, false // no ground there
+		}
 		x, y, ok := a.screenPosition(p, probe.Ground(p))
 		return imgui.Vec2{X: float32(x), Y: float32(y)}, ok
 	}
-	unit := 1.0 // map unit
-	a0, okA := project(center.Sub(right.Scale(unit / 2)))
-	b0, okB := project(center.Add(right.Scale(unit / 2)))
-	if !okA || !okB {
-		return
+	left, okLeft := project(center.Sub(right.Scale(0.5)))
+	rightEnd, okRight := project(center.Add(right.Scale(0.5)))
+	if !okLeft || !okRight {
+		return nil, "", false
 	}
-	pixelsPerUnit := math.Hypot(float64(b0.X-a0.X), float64(b0.Y-a0.Y)) / unit
+	pixelsPerUnit := math.Hypot(float64(rightEnd.X-left.X), float64(rightEnd.Y-left.Y))
 	if !(pixelsPerUnit > 0) {
-		return
+		return nil, "", false
 	}
-	metersPerPixel := a.world.MetersPerPixel / pixelsPerUnit
-	length := niceLength(scaleBarMax * float64(a.uiScale) * metersPerPixel)
-	half := length / a.world.MetersPerPixel / 2
+	meters := niceLength(scaleBarMax * float64(a.uiScale) * a.world.MetersPerPixel / pixelsPerUnit)
+	half := meters / a.world.MetersPerPixel / 2
 
-	// Following the relief
+	// Following the relief, all of it on the map
 	const steps = 32
 	var line []imgui.Vec2
 	for k := 0; k <= steps; k++ {
-		t := -half + 2*half*float64(k)/steps
-		if s, ok := project(center.Add(right.Scale(t))); ok {
-			line = append(line, s)
+		s, ok := project(center.Add(right.Scale(-half + 2*half*float64(k)/steps)))
+		if !ok {
+			return nil, "", false
 		}
+		line = append(line, s)
 	}
-	if len(line) < 2 {
-		return
-	}
-	drawBar(line, formatDistance(length), a.uiScale)
+	return line, formatDistance(meters), true
 }
 
 // drawBar draws a scale bar along a line of window positions, with ticks at

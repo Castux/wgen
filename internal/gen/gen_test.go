@@ -512,3 +512,19 @@ func TestGolden(t *testing.T) {
 		}
 	}
 }
+
+// Every vertex has a terrain and an elevation, those of the margin around
+// the map included: triangles across the edge join them
+func TestMarginFilled(t *testing.T) {
+	w := generate(t, setup(t))
+	for v := range w.Mesh.Points {
+		if w.Terrain[v] == nil || math.IsNaN(w.Elevation[v]) {
+			t.Fatalf("vertex %d at %v: terrain %v, elevation %g", v, w.Mesh.Points[v], w.Terrain[v], w.Elevation[v])
+		}
+	}
+	for i, z := range w.Heightmap {
+		if math.IsNaN(z) {
+			t.Fatalf("heightmap pixel %d, %d: NaN", i%w.Width, i/w.Width)
+		}
+	}
+}

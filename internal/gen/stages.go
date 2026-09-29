@@ -107,6 +107,42 @@ func (w *World) computeWaterDepth() {
 	w.WaterLevel = level
 }
 
+// fillMargin gives the vertices of the margin around the map that have no
+// terrain (not simulated) the values of their neighbours, filled from the
+// map outward: the terrain and water level of the first, the mean
+// elevation. Triangles across the map's edge join them: they would pull
+// the ground in the map to nothing at its edges (pits in the heightmap,
+// bumps in 3D). They stay out of the rivers.
+func (w *World) fillMargin() {
+	m := w.Mesh
+	filled := make([]bool, len(m.Points))
+	var queue []int32
+	for v := range m.Points {
+		if w.Terrain[v] != nil && !math.IsNaN(w.Elevation[v]) {
+			filled[v] = true
+			queue = append(queue, int32(v))
+		}
+	}
+	for i := 0; i < len(queue); i++ {
+		for _, n := range m.Neighbours[queue[i]] {
+			if filled[n] {
+				continue
+			}
+			sum, count := 0.0, 0
+			for _, around := range m.Neighbours[n] {
+				if filled[around] {
+					sum += w.Elevation[around]
+					count++
+				}
+			}
+			w.Terrain[n], w.WaterLevel[n] = w.Terrain[queue[i]], w.WaterLevel[queue[i]]
+			w.Elevation[n] = sum / float64(count)
+			filled[n] = true
+			queue = append(queue, n)
+		}
+	}
+}
+
 // waterLevels returns the level of the water at each vertex, NaN on land.
 func (w *World) waterLevels() []float64 {
 	m := w.Mesh
