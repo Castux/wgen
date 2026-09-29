@@ -77,14 +77,67 @@ func (t *Terrain) IsWater() bool { return t.Kind != Land }
 // height.
 func (t *Terrain) Calibrated() bool { return t.Kind == Land && t.Height > 0 }
 
+// Character is a kind of landform, a choice of a terrain's slopes,
+// rounding and erosion.
+type Character struct {
+	Name          string
+	Description   string
+	CriticalSlope float64 // degrees
+	Rounding      float64 // 0..1
+	Erodibility   float64 // multiplier of the project's
+}
+
+// Characters, for the terrains
+var Characters = []Character{
+	{"Young mountains", "Sharp ridges and peaks, deep valleys (the Alps)", 40, 0, 1.5},
+	{"Old mountains", "Rounded ridges, broad valleys (the Appalachians)", 30, 0.8, 1},
+	{"Hills", "Rolling, rounded", 25, 0.5, 1},
+	{"Plateau and mesas", "Hard rock: steep edges, little cut by rivers", 50, 0, 0.4},
+	{"Badlands", "Soft rock, deeply cut by many small valleys", 45, 0, 3},
+	{"Plains", "Gentle, softly undulating", 15, 0.5, 0.7},
+}
+
+// CharacterOf is the character a terrain has, "" if none of them.
+func (t *Terrain) CharacterOf() string {
+	for _, c := range Characters {
+		if t.CriticalSlope == c.CriticalSlope && t.Rounding == c.Rounding && t.Erodibility == c.Erodibility {
+			return c.Name
+		}
+	}
+	return ""
+}
+
+// SetCharacter gives a terrain the settings of a character.
+func (t *Terrain) SetCharacter(c Character) {
+	t.CriticalSlope, t.Rounding, t.Erodibility = c.CriticalSlope, c.Rounding, c.Erodibility
+}
+
+// characterNamed is a character by its name.
+func characterNamed(name string) Character {
+	for _, c := range Characters {
+		if c.Name == name {
+			return c
+		}
+	}
+	panic("no character " + name)
+}
+
+// landTerrain is a default land terrain, of a character.
+func landTerrain(name string, color Color, height float64, detail int, character string) Terrain {
+	t := *NewTerrain(name, color)
+	t.Height, t.Detail = height, detail
+	t.SetCharacter(characterNamed(character))
+	return t
+}
+
 // Default terrains of new projects
 var (
 	DefaultSea  = Terrain{Name: SeaName, Color: Color{66, 66, 125}, Kind: Sea, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
 	DefaultLake = Terrain{Name: LakeName, Color: Color{109, 148, 194}, Kind: Lake, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
 	DefaultLand = []Terrain{
-		{Name: "plains", Color: Color{135, 168, 81}, Height: 400, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: 1},
-		{Name: "hills", Color: Color{209, 184, 134}, Height: 1500, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: 2},
-		{Name: "mountains", Color: Color{101, 72, 31}, Height: 4500, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto},
+		landTerrain("plains", Color{135, 168, 81}, 400, 1, "Plains"),
+		landTerrain("hills", Color{209, 184, 134}, 1500, 2, "Hills"),
+		landTerrain("mountains", Color{101, 72, 31}, 4500, DetailAuto, "Young mountains"),
 	}
 )
 

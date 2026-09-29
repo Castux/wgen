@@ -59,6 +59,7 @@ type app struct {
 
 	menuHeight    float32
 	cueHeight     float32 // of the cues at the bottom of the view, 0 if none
+	lastRun       lastRun // the last full generation, for estimates
 	title         string
 	suggestedPath string    // where to save a new project, by default
 	fitMap        bool      // fit the map view to the next world
@@ -342,6 +343,11 @@ func (a *app) update() {
 func (a *app) showWorld(world *gen.World, version int, width, height float64) {
 	a.world, a.version = world, version
 	a.message = nil
+	if world.From <= gen.StageSimulation && world.Took > 0 && !a.session.Engine.State().Preview {
+		conf := world.Config
+		a.lastRun = lastRun{vertices: len(world.Mesh.Points), took: world.Took, resolution: conf.Resolution,
+			steps: conf.Simulation.Steps, refineSteps: conf.Simulation.RefineSteps, levels: conf.Levels}
+	}
 	a.syncCanvas(world)
 	if a.terrain.setMesh(world) || a.fitMap {
 		a.terrain.resetCamera()

@@ -71,6 +71,10 @@ type World struct {
 	Heightmap []float64
 	WaterMap  []float64
 
+	// The last generation: its first stage, and how long it took
+	From Stage
+	Took time.Duration
+
 	opts Options // of the generation in progress
 }
 
@@ -243,6 +247,7 @@ func (w *World) run(conf *config.Config, from Stage, opts Options) (*World, erro
 		slog.Debug(step.name, "took", time.Since(stepStart).Round(time.Millisecond))
 	}
 
+	next.From, next.Took = from, time.Since(start)
 	if from < StageNone {
 		slog.Info("generated",
 			"from", from.String(),

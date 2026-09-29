@@ -2,7 +2,10 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 
@@ -60,7 +63,7 @@ func (a *app) drawPanel() {
 	flags := imgui.WindowFlagsNoTitleBar | imgui.WindowFlagsNoMove | imgui.WindowFlagsNoResize | imgui.WindowFlagsNoCollapse |
 		imgui.WindowFlagsNoSavedSettings | imgui.WindowFlagsNoBringToFrontOnFocus
 	if imgui.BeginV("##panel", nil, flags) {
-		imgui.PushItemWidth(-170 * a.uiScale)
+		imgui.PushItemWidth(-190 * a.uiScale)
 		a.drawTerrains(conf)
 		a.drawPainting()
 		a.drawParams(conf)
@@ -70,13 +73,16 @@ func (a *app) drawPanel() {
 }
 
 // drawParams are the parameters of the project, from the config schema, by
-// group.
+// group: Map, Quality (with its choices), Landscape, Advanced.
 func (a *app) drawParams(conf *config.Config) {
 	group, open := "", false
 	for _, p := range a.panelParams(conf) {
 		if p.Group != group {
 			group = p.Group
 			open = imgui.CollapsingHeaderTreeNodeFlagsV(group, imgui.TreeNodeFlagsNone)
+			if open && group == config.GroupQuality {
+				a.drawQuality(conf)
+			}
 		}
 		if !open {
 			continue
@@ -87,20 +93,101 @@ func (a *app) drawParams(conf *config.Config) {
 		if !ok {
 			continue
 		}
-
-		// The resolution is in map pixels in the project, in meters here
-		label, tooltip, scale := p.Label, p.Tooltip, 1.0
-		if key == "resolution" {
-			if metersPerPixel := a.metersPerPixel(conf); metersPerPixel > 0 {
-				label, scale = "Resolution (m)", metersPerPixel
-				tooltip = "Mesh spacing of the finest level, in meters: finer is slower"
-			}
-		}
+		label, tooltip, scale := a.displayUnit(conf, key, p.Label, p.Tooltip)
 		value, changed := a.number("param."+key, label, v*scale, p.Min*scale, p.Max*scale, p.Step*scale, p.Type == "int", false, tooltip)
 		if changed && value != v*scale {
 			a.patch(p.Path, value/scale)
 		}
 	}
+}
+
+// displayUnit is how a parameter is shown, when not in the project's unit:
+// its label, tooltip, and the factor from the project's unit.
+func (a *app) displayUnit(conf *config.Config, key, label, tooltip string) (string, string, float64) {
+	switch key {
+	case "resolution":
+		// Map pixels in the project, so that it stays the same fraction of
+		// the map when its width changes
+		if metersPerPixel := a.metersPerPixel(conf); metersPerPixel > 0 {
+			return "Resolution (m)", tooltip, metersPerPixel
+		}
+		return "Resolution (px)", tooltip, 1
+	case "simulation.erodibility":
+		return "River erosion (×)", tooltip + " (1: the usual)", 1 / config.DefaultSimulation.Erodibility
+	case "simulation.floorSlope":
+		return "Sea floor slope (m per km)", tooltip, 1000
+	}
+	return label, tooltip, 1
+}
+
+// drawQuality chooses a quality, with an estimate of its cost from the last
+// generation.
+func (a *app) drawQuality(conf *config.Config) {
+	current := conf.QualityOf()
+	shown := current
+	if shown == "" {
+		shown = "Custom"
+	}
+	if imgui.BeginCombo("Quality", shown) {
+		for _, q := range config.Qualities {
+			label := q.Name
+			if estimate := a.estimate(conf, q); estimate != "" {
+				label += "  (" + estimate + ")"
+			}
+			if imgui.SelectableBoolV(label, q.Name == current, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && q.Name != current {
+				a.editConfig(conf, func(c *config.Config) { c.SetQuality(q) })
+			}
+		}
+		imgui.EndCombo()
+	}
+	imgui.SetItemTooltip("Draft to try things quickly, Fine for the final landscape")
+	if run := a.lastRun; run.took > 0 {
+		imgui.TextDisabled(fmt.Sprintf("Last: %s vertices, %s", formatCount(run.vertices), formatDuration(run.took)))
+	}
+}
+
+// lastRun is the last full generation: to estimate others.
+type lastRun struct {
+	vertices           int
+	took               time.Duration
+	resolution         float64
+	steps, refineSteps int
+	levels             int
+}
+
+// estimate is roughly what a quality would take, from the last generation:
+// the vertices grow as the resolution's inverse square, the time with them
+// and the time steps.
+func (a *app) estimate(conf *config.Config, q config.Quality) string {
+	run := a.lastRun
+	if run.took == 0 || run.vertices == 0 {
+		return ""
+	}
+	vertices := float64(run.vertices) * (run.resolution / q.Resolution) * (run.resolution / q.Resolution)
+	work := func(steps, refineSteps, levels int) float64 { return float64(steps + refineSteps*levels) }
+	took := run.took.Seconds() * vertices / float64(run.vertices) *
+		work(q.Steps, q.RefineSteps, q.Levels) / math.Max(1, work(run.steps, run.refineSteps, run.levels))
+	return fmt.Sprintf("about %s", formatDuration(time.Duration(took*float64(time.Second))))
+}
+
+func formatCount(n int) string {
+	switch {
+	case n >= 1e6:
+		return fmt.Sprintf("%.1fM", float64(n)/1e6)
+	case n >= 1e3:
+		return fmt.Sprintf("%.0fk", float64(n)/1e3)
+	}
+	return fmt.Sprint(n)
+}
+
+func formatDuration(d time.Duration) string {
+	switch {
+	case d >= time.Minute:
+		return fmt.Sprintf("%.0f min", d.Minutes())
+	case d >= 10*time.Second:
+		return fmt.Sprintf("%.0f s", d.Seconds())
+	}
+	return fmt.Sprintf("%.1f s", d.Seconds())
 }
 
 // metersPerPixel is the scale of the project's map, 0 without a map.

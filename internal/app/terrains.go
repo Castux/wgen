@@ -82,35 +82,9 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 			"Height the summits of each region of this terrain reach: most of it is lower, valleys much lower. 0: flat"); done && v != t.Height {
 			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Height = v })
 		}
+		a.drawCharacter(conf, t)
 	}
-	if t.Kind == config.Land {
-		slope, action := a.overridable(key+"slope", "Steepest slopes (°)", t.CriticalSlope, conf.Simulation.CriticalSlope,
-			t.CriticalSlope != config.Inherit, 1, 89, 1,
-			"Hillslopes steeper than this collapse: high for sharp young mountains and cliffs, low for gentle hills")
-		switch action {
-		case overrideSet:
-			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.CriticalSlope = slope })
-		case overrideReset:
-			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.CriticalSlope = config.Inherit })
-		}
-		rounding, action := a.overridable(key+"rounding", "Rounding (0-1)", t.Rounding, conf.Simulation.Rounding,
-			t.Rounding != config.Inherit, 0, 1, 0.05,
-			"How rounded the tops are: soil creeping downhill smooths them, as on old mountains. 0: crisp")
-		switch action {
-		case overrideSet:
-			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Rounding = rounding })
-		case overrideReset:
-			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Rounding = config.Inherit })
-		}
-	}
-	if v, done := a.number(key+"erodibility", "Erodibility factor", t.Erodibility, 0, 100, 0.1, false, false,
-		"How easily rivers erode this terrain, relative to the simulation's erodibility: lower is harder rock, steeper valleys"); done && v != t.Erodibility {
-		a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Erodibility = v })
-	}
-	if v, done := a.number(key+"detail", "Detail levels (-1: auto)", float64(t.Detail), -1, 6, 1, true, false,
-		"How many times the mesh is refined in this terrain: more for mountains, less for plains and water. Auto: all on land, none on water"); done && int(v) != t.Detail {
-		a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Detail = int(v) })
-	}
+	a.drawDetail(conf, t)
 
 	if t.Kind == config.Land {
 		land := conf.Land()
@@ -121,6 +95,108 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 		imgui.EndDisabled()
 		imgui.SetItemTooltip("Its pixels become the first other land terrain. Can't be undone")
 	}
+}
+
+// drawCharacter is the kind of landform of a land terrain: a choice of
+// characters, which set its slopes, rounding and river erosion, and those,
+// which it can take from the project.
+func (a *app) drawCharacter(conf *config.Config, t *config.Terrain) {
+	key := "terrain." + t.Name + "."
+	const fromProject = "The project's"
+	inherits := t.CriticalSlope == config.Inherit && t.Rounding == config.Inherit && t.Erodibility == 1
+	current := t.CharacterOf()
+	shown := current
+	switch {
+	case inherits:
+		shown = fromProject
+	case shown == "":
+		shown = "Custom"
+	}
+	if imgui.BeginCombo("Character", shown) {
+		if imgui.SelectableBoolV(fromProject, inherits, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && !inherits {
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) {
+				t.CriticalSlope, t.Rounding, t.Erodibility = config.Inherit, config.Inherit, 1
+			})
+		}
+		imgui.SetItemTooltip("The slopes, rounding and river erosion of the project's Landscape")
+		for _, c := range config.Characters {
+			if imgui.SelectableBoolV(c.Name, c.Name == current, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && c.Name != current {
+				a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.SetCharacter(c) })
+			}
+			imgui.SetItemTooltip(c.Description)
+		}
+		imgui.EndCombo()
+	}
+	imgui.SetItemTooltip("The kind of landform: sets the slopes, rounding and river erosion below")
+
+	edit := func(label, field string, own, project float64, set bool, low, high, step float64, tooltip string, apply func(*config.Terrain, float64)) {
+		value, action := a.overridable(key+field, label, own, project, set, low, high, step, tooltip)
+		switch action {
+		case overrideSet:
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) { apply(t, value) })
+		case overrideReset:
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) { apply(t, config.Inherit) })
+		}
+	}
+	project := conf.Simulation
+	edit("Slopes (°)", "slope", t.CriticalSlope, project.CriticalSlope, t.CriticalSlope != config.Inherit, 1, 89, 1,
+		"The steepest slopes: hillslopes steeper than this collapse. High for sharp young mountains and cliffs, low for gentle hills",
+		func(t *config.Terrain, v float64) { t.CriticalSlope = v })
+	edit("Rounding", "rounding", t.Rounding, project.Rounding, t.Rounding != config.Inherit, 0, 1, 0.05,
+		"How rounded the tops are, 0 to 1: soil creeping downhill smooths them, as on old mountains. 0: crisp",
+		func(t *config.Terrain, v float64) { t.Rounding = v })
+	// A multiplier of the project's: 1 is the project's
+	edit("Erosion (×)", "erosion", t.Erodibility, 1, t.Erodibility != 1, 0, 100, 0.1,
+		"How deep rivers cut, times the project's river erosion: more for soft rock and gorges, less for hard rock",
+		func(t *config.Terrain, v float64) {
+			if v == config.Inherit {
+				v = 1
+			}
+			t.Erodibility = v
+		})
+}
+
+// drawDetail is how fine the mesh is on a terrain: a choice of spacings, one
+// per refinement level, or automatic (the finest on land, the coarsest on
+// water).
+func (a *app) drawDetail(conf *config.Config, t *config.Terrain) {
+	metersPerPixel := a.metersPerPixel(conf)
+	spacing := func(level int) string {
+		meters := conf.Resolution * math.Pow(2, float64(conf.Levels-level)) * metersPerPixel
+		if metersPerPixel == 0 {
+			return fmt.Sprintf("%g px", conf.Resolution*math.Pow(2, float64(conf.Levels-level)))
+		}
+		return formatDistance(meters)
+	}
+	automatic := conf.Levels
+	if t.IsWater() {
+		automatic = 0
+	}
+	label := func(detail int) string {
+		if detail == config.DetailAuto {
+			return "Automatic, every " + spacing(automatic)
+		}
+		return "Every " + spacing(min(detail, conf.Levels))
+	}
+
+	if imgui.BeginCombo("Mesh", label(t.Detail)) {
+		for _, detail := range append([]int{config.DetailAuto}, levelsFrom(conf.Levels)...) {
+			if imgui.SelectableBoolV(label(detail), detail == t.Detail, imgui.SelectableFlagsNone, imgui.NewVec2(0, 0)) && detail != t.Detail {
+				a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Detail = detail })
+			}
+		}
+		imgui.EndCombo()
+	}
+	imgui.SetItemTooltip("How fine the mesh is on this terrain: finer gives finer valleys, and is slower. The finest is the Quality's resolution")
+}
+
+// levelsFrom are the refinement levels, from the coarsest: 0 to levels.
+func levelsFrom(levels int) []int {
+	all := make([]int, levels+1)
+	for i := range all {
+		all[i] = i
+	}
+	return all
 }
 
 func formatMeters(z float64) string { return fmt.Sprintf("%.0f m", math.Round(z)) }
