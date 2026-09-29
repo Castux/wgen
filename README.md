@@ -98,11 +98,18 @@ rivers, contour lines and a grid.
 
 ### Inspecting
 
+A scale bar tells distances: in the map view, in the bottom right corner;
+in perspective (3D and eye level), where lengths change across the view, it
+lies on the ground toward the bottom right, follows the relief, and is true
+there: it slides and changes length as the view moves. View, Scale bar
+turns it off.
+
 The line at the top of the window tells what is under the cursor, in both
 views: the position (km from the top left corner), the terrain, the
 elevation (or the water depth, and a lake's surface), and the drainage area
-there, which is the size of the river. View, Information under the cursor
-turns it off.
+there, which is the size of the river, and in perspective, how far away
+the point is (without the vertical exaggeration). View, Information under
+the cursor turns it off.
 
 View, Rivers colored by basin (`B`) draws the rivers of each drainage basin
 (all those flowing to the same place in the sea) in a color of their own,

@@ -33,6 +33,7 @@ type Settings struct {
 
 	// Inspecting: what is under the cursor, measuring with rulers
 	HoverInfo bool `json:"hoverInfo"`
+	ScaleBar  bool `json:"scaleBar"`
 	Measuring bool `json:"measuring"`
 
 	// Watching the simulation
@@ -103,6 +104,7 @@ var defaultSettings = Settings{
 	EyeGround:     groundSmooth,
 
 	HoverInfo: true,
+	ScaleBar:  true,
 
 	WatchSteps: 10,
 

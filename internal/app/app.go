@@ -284,6 +284,7 @@ func (a *app) frame() {
 	a.drawEyeHelp()
 	a.drawProfile()
 	a.drawRulers()
+	a.drawScaleBar()
 	a.drawDialogs()
 	if !imgui.IsAnyItemActive() {
 		// An edit left without committing, as a closed menu's

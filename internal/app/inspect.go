@@ -360,6 +360,9 @@ func (a *app) describe(point *gen.Point) string {
 			parts = append(parts, "drainage "+formatArea(point.Drainage))
 		}
 	}
+	if a.settings.View != viewMap {
+		parts = append(parts, formatDistance(a.distanceTo(point.Position, point.Ground))+" away")
+	}
 	return strings.Join(parts, "  ·  ")
 }
 

@@ -84,3 +84,11 @@ func TestNoNegativeZero(t *testing.T) {
 		}
 	}
 }
+
+func TestNiceLength(t *testing.T) {
+	for limit, want := range map[float64]float64{1: 1, 1.9: 1, 2: 2, 4.99: 2, 7: 5, 150: 100, 260: 200, 999: 500, 0: 0} {
+		if got := niceLength(limit); got != want {
+			t.Errorf("niceLength(%g) = %g, want %g", limit, got, want)
+		}
+	}
+}
