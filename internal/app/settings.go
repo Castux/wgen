@@ -27,6 +27,10 @@ type Settings struct {
 
 	VerticalScale float64 `json:"verticalScale"` // of the 3D view
 
+	// Inspecting: what is under the cursor, measuring with rulers
+	HoverInfo bool `json:"hoverInfo"`
+	Measuring bool `json:"measuring"`
+
 	// Watching the simulation
 	Watch      bool    `json:"watch"`
 	WatchSteps float64 `json:"watchSteps"` // time steps per frame
@@ -89,6 +93,8 @@ var defaultSettings = Settings{
 	RiverWidth:  10,
 
 	VerticalScale: 1,
+
+	HoverInfo: true,
 
 	WatchSteps: 10,
 
@@ -180,19 +186,32 @@ func (s *Settings) overlayOptions() render.Options {
 func (s *Settings) painting() bool { return s.Editing && s.View == viewMap }
 
 // keepConsistent turns painting off out of the map view, where it can't
-// happen, so that the painting checkbox tells the truth.
+// happen, so that the painting checkbox tells the truth. Painting and
+// measuring both take the left button: painting wins.
 func (s *Settings) keepConsistent() {
 	if s.View != viewMap {
 		s.Editing = false
 	}
+	if s.Editing {
+		s.Measuring = false
+	}
 }
 
 // setEditing turns painting on or off. Painting shows the map, where it
-// happens.
+// happens, and stops measuring.
 func (s *Settings) setEditing(editing bool) {
 	s.Editing = editing
 	if editing {
 		s.View = viewMap
+		s.Measuring = false
+	}
+}
+
+// setMeasuring turns measuring on or off. Measuring stops painting.
+func (s *Settings) setMeasuring(measuring bool) {
+	s.Measuring = measuring
+	if measuring {
+		s.Editing = false
 	}
 }
 

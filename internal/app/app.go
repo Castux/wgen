@@ -48,6 +48,7 @@ type app struct {
 	terrain *terrainView
 	mapView *mapView
 	editor  editor
+	inspect inspector
 	dialogs dialogs
 
 	menuHeight    float32
@@ -112,6 +113,7 @@ func Run(session *engine.Session, path string) error {
 		start:   time.Now(),
 		version: -1,
 		results: make(chan message, 1),
+		inspect: inspector{selected: -1},
 		redraw:  settleFrames,
 		dev:     loadDevHooks(),
 	}
@@ -256,11 +258,15 @@ func (a *app) frame() {
 
 	state := a.session.Engine.State()
 	a.update()
+	a.updateInspector()
 	a.handleInput()
 	a.drawMenu(state)
 	a.drawPanel()
 	a.drawStatus(state)
 	a.drawLegend()
+	a.drawHover()
+	a.drawProfile()
+	a.drawRulers()
 	a.drawDialogs()
 	if !imgui.IsAnyItemActive() {
 		// An edit left without committing, as a closed menu's

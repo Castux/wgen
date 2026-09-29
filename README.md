@@ -61,6 +61,8 @@ when there are unsaved changes, and the app asks before losing them.
 | `E` | Paint the map |
 | `[`, `]` | Smaller, larger brush |
 | `L` | Lock the shoreline |
+| `M` | Measure with rulers |
+| `Enter`, `Escape`, `Delete` | Finish the ruler, deselect it, delete it |
 | `Ctrl+Z`, `Ctrl+Y` | Undo, redo painting |
 | `Ctrl+N`, `O`, `S`, `Shift+S`, `E`, `Q` | New, open, save, save as, export, quit |
 
@@ -74,6 +76,23 @@ heights.
 The View menu also has the vertical exaggeration of the 3D view (mountains
 are small on a continent: 10 km high on 1000 km wide), and the overlay:
 rivers, contour lines and a grid.
+
+### Inspecting
+
+The line at the top of the window tells what is under the cursor, in both
+views: the position (km from the top left corner), the terrain, the
+elevation (or the water depth, and a lake's surface), and the drainage area
+there, which is the size of the river. View, Information under the cursor
+turns it off.
+
+Rulers measure distances and show altitude profiles. Press `M` (or View,
+Measure with rulers), then click to add points, in the map or in 3D; double
+click or press `Enter` to finish. Drags still move the view. The length
+shows at the end of each ruler. Click a ruler to select it: the Altitude
+profile window shows the ground along it in the height colors, water in
+blue, with its length, lowest and highest points, and the total climb and
+descent; hovering the graph marks the point on the map. `Delete` removes the
+selected ruler, `Escape` deselects it. Rulers aren't saved with the project.
 
 ### Painting
 

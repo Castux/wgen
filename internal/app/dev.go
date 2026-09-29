@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
@@ -25,15 +26,18 @@ import (
 //   - WGEN_SCREENSHOT_AT=seconds: take it at that time instead
 //   - WGEN_CAMERA=x,y,distance,tilt,turn: place the orbit camera
 //   - WGEN_DIALOG=new|open|export|help: open that dialog at startup
-//   - WGEN_CLICK=x,y: click there (window coordinates) after a second, to
-//     open a menu
+//   - WGEN_CLICK=x,y;x,y...: click there (window coordinates) once the
+//     world is ready, one click every 10 frames (the same point twice is a
+//     double click), to open a menu or draw a ruler; the screenshot waits
+//     for them
 
 type devHooks struct {
 	screenshot   string        // save a screenshot there once ready, and quit
 	screenshotAt time.Duration // or at that time
 
-	click      *imgui.Vec2 // where to click, if anywhere
-	clickFrame int         // frames since the click started
+	clicks      []imgui.Vec2 // where to click, in turn
+	clicksStart time.Time    // once the world is ready
+	clickFrame  int          // frames since the clicks started
 }
 
 func loadDevHooks() devHooks {
@@ -41,30 +45,58 @@ func loadDevHooks() devHooks {
 	if at, err := strconv.ParseFloat(os.Getenv("WGEN_SCREENSHOT_AT"), 64); err == nil {
 		d.screenshotAt = time.Duration(at * float64(time.Second))
 	}
-	var x, y float32
-	if _, err := fmt.Sscanf(os.Getenv("WGEN_CLICK"), "%g,%g", &x, &y); err == nil {
-		d.click = &imgui.Vec2{X: x, Y: y}
+	for _, spec := range strings.Split(os.Getenv("WGEN_CLICK"), ";") {
+		var x, y float32
+		if _, err := fmt.Sscanf(spec, "%g,%g", &x, &y); err == nil {
+			d.clicks = append(d.clicks, imgui.Vec2{X: x, Y: y})
+		}
 	}
 	return d
 }
 
-// devClick clicks where WGEN_CLICK says, a second after the start: the
-// button down one frame, up the next, the mouse staying there. Called
-// before ImGui's frame starts.
+// Frames between the clicks of WGEN_CLICK
+const framesPerClick = 10
+
+// devClick clicks where WGEN_CLICK says, once the world is ready: for each
+// point, the mouse moves there, the button goes down the next frame and up
+// the one after, then the mouse stays there. Called before ImGui's frame starts.
 func (a *app) devClick() {
-	if a.dev.click == nil || time.Since(a.start) < time.Second {
+	if len(a.dev.clicks) == 0 {
 		return
 	}
+	if a.devClicksDone() {
+		last := a.dev.clicks[len(a.dev.clicks)-1]
+		imgui.CurrentIO().AddMousePosEvent(last.X, last.Y)
+		return
+	}
+	a.activity()
+	if a.dev.clicksStart.IsZero() {
+		if a.world != nil && !a.session.Engine.State().Busy {
+			a.dev.clicksStart = time.Now()
+		}
+		return
+	}
+	if time.Since(a.dev.clicksStart) < time.Second/2 {
+		return
+	}
+	click := min(a.dev.clickFrame/framesPerClick, len(a.dev.clicks)-1)
 	io := imgui.CurrentIO()
-	io.AddMousePosEvent(a.dev.click.X, a.dev.click.Y)
-	switch a.dev.clickFrame {
-	case 0:
-		io.AddMouseButtonEvent(int32(imgui.MouseButtonLeft), true)
-	case 1:
-		io.AddMouseButtonEvent(int32(imgui.MouseButtonLeft), false)
+	io.AddMousePosEvent(a.dev.clicks[click].X, a.dev.clicks[click].Y)
+	if a.dev.clickFrame < framesPerClick*len(a.dev.clicks) {
+		// The mouse moves first: a move with the button down is a drag
+		switch a.dev.clickFrame % framesPerClick {
+		case 1:
+			io.AddMouseButtonEvent(int32(imgui.MouseButtonLeft), true)
+		case 2:
+			io.AddMouseButtonEvent(int32(imgui.MouseButtonLeft), false)
+		}
 	}
 	a.dev.clickFrame++
-	a.activity()
+}
+
+// devClicksDone tells whether the clicks of WGEN_CLICK are done, and shown.
+func (a *app) devClicksDone() bool {
+	return a.dev.clickFrame >= framesPerClick*(len(a.dev.clicks)+1)
 }
 
 // devDialog opens the dialog given by WGEN_DIALOG, for screenshots.
@@ -103,7 +135,7 @@ func (a *app) devCamera() {
 // devScreenshot saves the screenshot asked by WGEN_SCREENSHOT when it is
 // time: once everything is drawn, or at WGEN_SCREENSHOT_AT.
 func (a *app) devScreenshot(state engine.State, framebufferWidth, framebufferHeight int) {
-	ready := a.world != nil && !state.Busy && !a.loading() && a.redraw == 0
+	ready := a.world != nil && !state.Busy && !a.loading() && a.redraw == 0 && a.devClicksDone()
 	if a.dev.screenshotAt > 0 {
 		ready = time.Since(a.start) > a.dev.screenshotAt
 		a.activity() // keep drawing until then

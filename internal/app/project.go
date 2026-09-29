@@ -107,6 +107,7 @@ func (a *app) startProject(conf *config.Config, c *canvas, suggested string) {
 
 // projectChanged forgets the state of the previous project.
 func (a *app) projectChanged() {
+	a.clearRulers()
 	a.editor.sent = nil
 	a.version = -1
 	a.fitMap = true

@@ -294,12 +294,12 @@ Proposals:
 
 ## Cross-cutting issues
 
-- Information on hover: hovering the map or the terrain should show the
-  position in km, the elevation, the terrain, and the drainage (river size).
-  Today there's no readout at all, which makes the result hard to check
-  against targets.
-- Measuring: a ruler (distance in km, and an elevation profile along it)
-  would help worldbuilders ("how far is the capital from the pass?").
+- Information on hover (done): hovering the map or the terrain shows the
+  position in km, the terrain, the elevation or water depth, and the
+  drainage (river size).
+- Measuring (done): rulers, with their length, and the altitude profile of
+  the selected one ("how far is the capital from the pass, and how high?").
+  Next: saving rulers with the project, and exporting a profile (CSV, SVG).
 - Feedback and errors: errors and results appear in the status text, bottom
   left, and are easy to miss ("no coast: the map needs some sea next to
   land"). Short toasts near the top, and errors that point at the fix
@@ -361,7 +361,7 @@ codebase (S: hours, M: a few days, L: weeks).
 
 | # | Proposal | Journey | Value | Effort |
 |---|---|---|---|---|
-| 1 | Hover readout: position, elevation, terrain, drainage | cross | High | S |
+| 1 | Hover readout: position, elevation, terrain, drainage (done, with rulers and profiles) | cross | High | S |
 | 2 | Welcome card, Open example, Open recent | 1, 7 | High | S |
 | 3 | Map width and target size in the import dialog | 3 | High | S |
 | 4 | Export metadata sidecar, height range in the dialog | 5 | High | S |

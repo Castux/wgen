@@ -44,6 +44,9 @@ const (
 	shortcutExport
 	shortcutQuit
 	shortcutReset
+	shortcutMeasure
+	shortcutFinishRuler // Escape, Enter
+	shortcutDeleteRuler // Delete, Backspace
 )
 
 // Shortcuts by key name: without modifiers, and the menu commands, with Ctrl
@@ -59,6 +62,15 @@ var (
 		"l": shortcutLockShore,
 		"[": shortcutSmaller,
 		"]": shortcutLarger,
+		"m": shortcutMeasure,
+	}
+	// Keys without names, without modifiers
+	namelessKeys = map[glfw.Key]shortcut{
+		glfw.KeyEscape:    shortcutFinishRuler,
+		glfw.KeyEnter:     shortcutFinishRuler,
+		glfw.KeyKPEnter:   shortcutFinishRuler,
+		glfw.KeyDelete:    shortcutDeleteRuler,
+		glfw.KeyBackspace: shortcutDeleteRuler,
 	}
 	commandKeys = map[string]shortcut{
 		"z": shortcutUndo,
@@ -140,14 +152,14 @@ func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.Mod
 
 	case action == glfw.Press:
 		a.input.shiftTap = false
-		if s, ok := keyShortcut(name, mods); ok {
+		if s, ok := keyShortcut(key, name, mods); ok {
 			a.input.shortcuts = append(a.input.shortcuts, s)
 		}
 	}
 }
 
 // keyShortcut is the shortcut of a key press, if any.
-func keyShortcut(name string, mods glfw.ModifierKey) (shortcut, bool) {
+func keyShortcut(key glfw.Key, name string, mods glfw.ModifierKey) (shortcut, bool) {
 	command := mods&(glfw.ModControl|glfw.ModSuper) != 0
 	switch {
 	case command && mods&glfw.ModAlt == 0:
@@ -160,6 +172,9 @@ func keyShortcut(name string, mods glfw.ModifierKey) (shortcut, bool) {
 		return s, ok
 	case mods&(glfw.ModShift|glfw.ModControl|glfw.ModAlt|glfw.ModSuper) != 0:
 		return 0, false
+	}
+	if s, ok := namelessKeys[key]; ok {
+		return s, true
 	}
 	s, ok := plainKeys[name]
 	return s, ok
@@ -237,6 +252,12 @@ func (a *app) applyShortcuts() {
 			a.quit()
 		case shortcutReset:
 			a.resetView()
+		case shortcutMeasure:
+			change(func(settings *Settings) { settings.setMeasuring(!settings.Measuring) })
+		case shortcutFinishRuler:
+			a.finishRuler()
+		case shortcutDeleteRuler:
+			a.deleteRuler()
 		}
 	}
 }
@@ -245,11 +266,12 @@ func (a *app) applyShortcuts() {
 func (a *app) handleMouse() {
 	io := imgui.CurrentIO()
 
-	// Painting takes the left button
+	// Painting takes the left button; measuring its clicks
 	painting := a.settings.painting()
 	if a.paintInput() {
 		return
 	}
+	a.measureInput()
 
 	drag := &a.input.drag
 	if !drag.active && !io.WantCaptureMouse() {
@@ -279,10 +301,12 @@ func (a *app) handleMouse() {
 		a.wheelView(wheel, width, height)
 	}
 	if a.settings.View == viewMap && !painting {
-		if imgui.IsMouseDoubleClicked(imgui.MouseButtonLeft) {
+		if imgui.IsMouseDoubleClicked(imgui.MouseButtonLeft) && !a.settings.Measuring {
 			a.mapView.camera.fit(width, height)
 		}
-		imgui.SetMouseCursor(imgui.MouseCursorHand)
+		if !a.settings.Measuring {
+			imgui.SetMouseCursor(imgui.MouseCursorHand)
+		}
 	}
 }
 

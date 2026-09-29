@@ -132,6 +132,12 @@ Generations take `gen.Options`: `Canceled` stops them (`ErrCanceled`),
 `Preview` receives the world after the coarse level, and `Watch` a world
 every `WatchSteps` time steps.
 
+`Probe` (`probe.go`) reads a world: what is at a position (terrain, ground
+from the heightmap, water surface and depth, drainage of the closest
+vertex, found on a grid of the vertices) and altitude profiles along paths.
+Shore triangles, partly land, have no water level in the water map: their
+water points take the level of the closest vertex.
+
 ### Simulation
 
 `internal/gen`: `meshes.go` (the meshes of every level), `simulation.go`
@@ -289,6 +295,12 @@ Files:
   (`os.UserConfigDir()/wgen/viewer.json`, with ImGui's `imgui.ini` for the
   panel layout next to it).
 - `gl.go`: shader and texture helpers.
+- `inspect.go`: the information under the cursor, and rulers (drawing,
+  selecting, clicks told from drags).
+- `profile.go`: the altitude profile window of the selected ruler.
+- `pick.go`: between the window and the map: the map position under the
+  cursor (in 3D, the mouse ray marched against the heightmap, then
+  bisected) and where a map position shows.
 - `dev.go`: the development hooks below.
 
 ### Checking the app without looking at it
@@ -304,8 +316,9 @@ Environment variables, for development:
   ups: target in image pixels (top left origin), distance in pixels, tilt
   from vertical and turn in degrees.
 - `WGEN_DIALOG=new|open|export|help`: open that dialog at startup.
-- `WGEN_CLICK=x,y`: click there (window coordinates) after a second, for
-  instance on a menu to open it.
+- `WGEN_CLICK=x,y;x,y...`: click there (window coordinates) after a
+  second, one click every 10 frames (the same point twice is a double
+  click): to open a menu, or draw a ruler.
 
 ```sh
 WGEN_SCREENSHOT=shot.png WGEN_CAMERA=200,1600,150,60,20 bin/wgen lab/chasers.json

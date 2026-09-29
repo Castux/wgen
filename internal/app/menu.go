@@ -81,8 +81,8 @@ func (a *app) drawEditMenu() {
 	}
 }
 
-// drawViewMenu has every display setting: the view, colors, shading, and
-// the overlay.
+// drawViewMenu has every display setting: the view, colors, shading, the
+// overlay, and inspecting (information under the cursor, rulers).
 func (a *app) drawViewMenu() {
 	settings := a.settings
 	changed := false
@@ -135,6 +135,18 @@ func (a *app) drawViewMenu() {
 		"How much wider big rivers are than small ones")
 	number("view.contours", "Contour interval (m)", &settings.Contours, 0, 10000, 1, "0: no contour lines")
 	number("view.grid", "Grid size (px)", &settings.Grid, 0, 10000, 10, "0: no grid")
+
+	imgui.SeparatorText("Inspect")
+	toggle("Information under the cursor", "", &settings.HoverInfo)
+	imgui.SetItemTooltip("Position, terrain, elevation or water depth, drainage, at the top of the window")
+	if measuring := settings.Measuring; imgui.MenuItemBoolPtrV("Measure with rulers", "M", &measuring, true) {
+		settings.setMeasuring(measuring)
+		changed = true
+	}
+	imgui.SetItemTooltip("Click to add points, double click or Enter to finish, click a ruler to see its profile, Delete to remove it")
+	if imgui.MenuItemBoolV("Delete all rulers", "", false, len(a.inspect.rulers) > 0) {
+		a.clearRulers()
+	}
 
 	imgui.Separator()
 	if imgui.MenuItemBoolV("Reset the view", "R", false, true) {
