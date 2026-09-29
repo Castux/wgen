@@ -77,6 +77,7 @@ or quitting, removes the copy.
 | `L` | Lock the shoreline |
 | `M` | Measure with rulers |
 | `B` | Rivers colored by drainage basin, or blue |
+| `C` | Map: compare with the previous result |
 | `Enter`, `Escape`, `Delete` | Finish the ruler, deselect it, delete it |
 | `Ctrl+Z`, `Ctrl+Y` | Undo, redo painting |
 | `Ctrl+N`, `O`, `S`, `Shift+S`, `E`, `Q` | New, open, save, save as, export, quit |
@@ -180,7 +181,8 @@ each:
   this height, in meters. Most of a region is lower, and its valleys much
   lower: the heights come from the simulation, the target sets how fast the
   land rises. The other settings don't change the summits: they change the
-  character of the landform.
+  character of the landform. Under it, the height the terrain reached in
+  the last landscape (its highest 5%).
 - Character: the kind of landform, which sets the three settings below:
 
   | Character | Slopes | Rounding | Erosion | |
@@ -254,6 +256,11 @@ The project's parameters, in the panel (hover them for help):
 landscape as it is simulated: the land rising from the sea, rivers cutting
 in, the heights being calibrated, then each finer mesh. "Replay the
 simulation" runs it again, to watch it.
+
+View, Compare with the previous result (`C`), in the map view, shows the
+landscape before the last change on the left of a line, the current one on
+its right: drag the line to compare. The previous result is the last
+complete one: after a stroke or a changed setting, the landscape before it.
 
 The project file and its map are watched: edit them in another program, and
 the app follows.

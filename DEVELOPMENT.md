@@ -329,6 +329,9 @@ Files:
 - `inspect.go`: the information under the cursor, and rulers (drawing,
   selecting, clicks told from drags).
 - `profile.go`: the altitude profile window of the selected ruler.
+- `compare.go`: comparing with the previous result, in the map: the last
+  complete world before the current, rendered in its own image slot, drawn
+  by the map shader left of the line.
 - `scale.go`: scale bars: a round length, in the corner of the map view;
   on the ground in 3D, measured where it lies. The distance from the eye,
   for the information under the cursor at eye level.
@@ -351,6 +354,7 @@ Environment variables, for development:
   from vertical and turn in degrees.
 - `WGEN_DIALOG=new|open|export|help`: open that dialog at startup.
 - `WGEN_AUTOSAVE=seconds`: autosave at that interval instead of a minute.
+- `WGEN_COMPARE=1`: compare with the previous result at startup.
 - `WGEN_CLICK=x,y;x,y...`: click there (window coordinates) after a
   second, one click every 10 frames (the same point twice is a double
   click): to open a menu, or draw a ruler.

@@ -26,6 +26,7 @@ import (
 //   - WGEN_SCREENSHOT_AT=seconds: take it at that time instead
 //   - WGEN_CAMERA=x,y,distance,tilt,turn: place the orbit camera
 //   - WGEN_DIALOG=new|open|export|help|welcome: open that dialog at startup
+//   - WGEN_COMPARE=1: compare with the previous result, in the map
 //   - WGEN_AUTOSAVE=seconds: the interval of autosaves, instead of a minute
 //   - WGEN_CLICK=x,y;x,y...: click there (window coordinates) once the
 //     world is ready, one click every 10 frames (the same point twice is a
@@ -103,8 +104,12 @@ func (a *app) devClicksDone() bool {
 	return len(a.dev.clicks) == 0 || a.dev.clickFrame >= framesPerClick*(len(a.dev.clicks)+1)
 }
 
-// devDialog opens the dialog given by WGEN_DIALOG, for screenshots.
+// devDialog opens the dialog given by WGEN_DIALOG, for screenshots (and
+// turns the comparison on, with WGEN_COMPARE).
 func (a *app) devDialog() {
+	if os.Getenv("WGEN_COMPARE") != "" {
+		a.toggleCompare()
+	}
 	switch os.Getenv("WGEN_DIALOG") {
 	case "new":
 		a.openNewMap()

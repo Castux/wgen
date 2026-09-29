@@ -66,6 +66,7 @@ type app struct {
 	quitting      bool      // confirmed
 	overlay       imageSlot // rivers, contours and grid, as a texture of the 3D view
 	mapImage      imageSlot // the 2D map
+	compare       comparison
 
 	world   *gen.World // displayed
 	version int
@@ -127,6 +128,7 @@ func Run(session *engine.Session, path string) error {
 	}
 	a.overlay.wake = a.wakeUp
 	a.mapImage.wake = a.wakeUp
+	a.compare.image.wake = a.wakeUp
 
 	dir := settingsDir()
 	a.initSettings(dir)
@@ -287,6 +289,7 @@ func (a *app) frame() {
 	a.drawProfile()
 	a.drawRulers()
 	a.drawScaleBar()
+	a.drawComparison()
 	a.drawDialogs()
 	if !imgui.IsAnyItemActive() {
 		// An edit left without committing, as a closed menu's
@@ -331,6 +334,13 @@ func (a *app) update() {
 	if img := a.mapImage.take(); img != nil {
 		a.mapView.image.upload(img)
 	}
+	if img := a.compare.image.take(); img != nil {
+		a.mapView.previous.upload(img)
+	}
+	a.mapView.split = -1
+	if a.comparing() && a.mapView.previous.id != 0 {
+		a.mapView.split = a.compare.split
+	}
 
 	select {
 	case m := <-a.results:
@@ -343,6 +353,7 @@ func (a *app) update() {
 func (a *app) showWorld(world *gen.World, version int, width, height float64) {
 	a.world, a.version = world, version
 	a.message = nil
+	a.trackResults(world)
 	if world.From <= gen.StageSimulation && world.Took > 0 && !a.session.Engine.State().Preview {
 		conf := world.Config
 		a.lastRun = lastRun{vertices: len(world.Mesh.Points), took: world.Took, resolution: conf.Resolution,
@@ -374,10 +385,15 @@ func (a *app) requestImages(pixelRatio float64) {
 		options.Shading = a.settings.Shading == shadingLit
 		options.Scale = a.mapView.camera.imageScale(pixelRatio)
 		a.mapImage.request(a.world, a.version, options)
+		if a.comparing() {
+			a.compare.image.request(a.compare.previous, a.compare.previousVersion, options)
+		}
 	}
 }
 
-func (a *app) loading() bool { return a.overlay.busy() || a.mapImage.busy() }
+func (a *app) loading() bool {
+	return a.overlay.busy() || a.mapImage.busy() || a.compare.image.busy()
+}
 
 // updateTitle shows the project in the window title, with a star if it has
 // unsaved changes.
