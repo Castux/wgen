@@ -28,8 +28,9 @@ type Settings struct {
 	VerticalScale float64 `json:"verticalScale"` // of the 3D view
 
 	// Inspecting: what is under the cursor, measuring with rulers
-	HoverInfo bool `json:"hoverInfo"`
-	Measuring bool `json:"measuring"`
+	HoverInfo      bool `json:"hoverInfo"`
+	HighlightBasin bool `json:"highlightBasin"` // of the river under the cursor
+	Measuring      bool `json:"measuring"`
 
 	// Watching the simulation
 	Watch      bool    `json:"watch"`

@@ -292,6 +292,10 @@ func (a *app) frame() {
 	width, height, ratio := a.viewSize()
 	gl.Viewport(0, 0, int32(math.Round(width*ratio)), int32(framebufferHeight))
 	a.updatePaintTexture()
+	a.mapView.highlight, a.terrain.highlight = nil, nil
+	if a.inspect.basinVisible {
+		a.mapView.highlight, a.terrain.highlight = &a.inspect.basinMask, &a.inspect.basinMask
+	}
 	if a.settings.View == viewMap {
 		a.mapView.draw(width, height, ratio)
 	} else {

@@ -288,6 +288,7 @@ var controls = [][2]string{
 	{"[ / ]", "Smaller / larger brush"},
 	{"L", "Lock the shoreline"},
 	{"M", "Measure with rulers: click to add points"},
+	{"B", "Highlight the drainage basin under the cursor"},
 	{"Enter / Escape", "Finish the ruler / deselect it"},
 	{"Delete", "Delete the selected ruler"},
 	{"Ctrl+Z / Ctrl+Y", "Undo / redo painting"},

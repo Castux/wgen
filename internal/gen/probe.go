@@ -2,14 +2,16 @@ package gen
 
 import (
 	"math"
+	"slices"
 
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/geom"
 )
 
-// Probe tells what is at points of a world, and along paths: for the
-// information under the cursor, and altitude profiles. It indexes the
-// vertices on a grid, for the drainage of the closest one.
+// Probe tells what is at points of a world, along paths, and the drainage
+// basins: for the information under the cursor, altitude profiles, and
+// highlighting basins. It indexes the vertices on a grid, for the closest
+// one, and the rivers upstream.
 type Probe struct {
 	w        *World
 	terrains map[config.Color]*config.Terrain
@@ -17,6 +19,11 @@ type Probe struct {
 	cellSize      float64
 	columns, rows int
 	cells         [][]int32 // vertices by cell, row by row
+
+	// Vertices flowing into each vertex (downhill to it), compressed: those
+	// of v are donors[donorStart[v]:donorStart[v+1]]
+	donorStart []int32
+	donors     []int32
 }
 
 // Point is what is at a position of the map.
@@ -53,7 +60,126 @@ func NewProbe(w *World) *Probe {
 			p.cells[cell] = append(p.cells[cell], int32(v))
 		}
 	}
+	p.indexDonors()
 	return p
+}
+
+func (p *Probe) indexDonors() {
+	downhill := p.w.Downhill
+	n := len(downhill)
+	p.donorStart = make([]int32, n+1)
+	for _, r := range downhill {
+		if r >= 0 {
+			p.donorStart[r+1]++
+		}
+	}
+	for v := range n {
+		p.donorStart[v+1] += p.donorStart[v]
+	}
+	p.donors = make([]int32, p.donorStart[n])
+	next := slices.Clone(p.donorStart[:n])
+	for v, r := range downhill {
+		if r >= 0 {
+			p.donors[next[r]] = int32(v)
+			next[r]++
+		}
+	}
+}
+
+// Basin is the drainage basin of a river: everything flowing to its outlet,
+// where it reaches the sea (or leaves the map).
+type Basin struct {
+	Outlet   int32   // vertex, -1 if none
+	Vertices []bool  // in the basin, by vertex
+	Area     float64 // square meters
+}
+
+// RiverAt is the vertex of the biggest river (the largest drainage) within
+// radius (map pixels) of a position, on land or lakes: -1 if none.
+func (p *Probe) RiverAt(position geom.Vec2, radius float64) int32 {
+	if p.cells == nil || !p.Inside(position) {
+		return -1
+	}
+	w := p.w
+	best := int32(-1)
+	reach := int(math.Ceil(radius/p.cellSize)) + 1
+	column, row := int(position.X/p.cellSize), int(position.Y/p.cellSize)
+	for r := max(row-reach, 0); r <= min(row+reach, p.rows-1); r++ {
+		for c := max(column-reach, 0); c <= min(column+reach, p.columns-1); c++ {
+			for _, v := range p.cells[r*p.columns+c] {
+				if w.IsSea(v) || w.Terrain[v] == nil || w.Mesh.Points[v].Dist(position) > radius {
+					continue
+				}
+				if best < 0 || w.Drainage[v] > w.Drainage[best] {
+					best = v
+				}
+			}
+		}
+	}
+	if best < 0 {
+		best = p.closest(position)
+		if best >= 0 && (w.IsSea(best) || w.Terrain[best] == nil) {
+			return -1
+		}
+	}
+	return best
+}
+
+// Outlet is where the water from a vertex ends: downhill until there is no
+// further.
+func (p *Probe) Outlet(v int32) int32 {
+	for steps := 0; v >= 0 && steps < len(p.w.Downhill); steps++ {
+		next := p.w.Downhill[v]
+		if next < 0 {
+			return v
+		}
+		v = next
+	}
+	return v
+}
+
+// Basin is the drainage basin of the river through a vertex: everything
+// upstream of its outlet.
+func (p *Probe) Basin(v int32) Basin {
+	basin := Basin{Outlet: -1}
+	if v < 0 || int(v) >= len(p.w.Downhill) {
+		return basin
+	}
+	outlet := p.Outlet(v)
+	basin.Outlet = outlet
+	basin.Vertices = make([]bool, len(p.w.Downhill))
+	basin.Vertices[outlet] = true
+	queue := []int32{outlet}
+	for len(queue) > 0 {
+		u := queue[len(queue)-1]
+		queue = queue[:len(queue)-1]
+		for _, donor := range p.donors[p.donorStart[u]:p.donorStart[u+1]] {
+			if !basin.Vertices[donor] {
+				basin.Vertices[donor] = true
+				queue = append(queue, donor)
+			}
+		}
+	}
+	basin.Area = p.w.Drainage[outlet] * p.w.MetersPerPixel * p.w.MetersPerPixel
+	return basin
+}
+
+// BasinMask rasterizes a basin: 255 where it is, 0 elsewhere, width *
+// height, rows from the top (as textures).
+func (p *Probe) BasinMask(basin Basin, width, height int) []uint8 {
+	mask := make([]uint8, width*height)
+	if basin.Vertices == nil || p.w.Width == 0 {
+		return mask
+	}
+	triangles := p.w.Mesh.Triangles
+	scale := float64(width) / float64(p.w.Width)
+	p.w.RasterizeTriangles(width, height, scale, func(t, x, y int, _, _, _ float64) {
+		triangle := triangles[t]
+		if basin.Vertices[triangle[0]] && basin.Vertices[triangle[1]] && basin.Vertices[triangle[2]] {
+			mask[(height-1-y)*width+x] = 255
+		}
+	})
+	return mask
 }
 
 func (p *Probe) cell(position geom.Vec2) (int, bool) {

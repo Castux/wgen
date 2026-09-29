@@ -75,6 +75,7 @@ or quitting, removes the copy.
 | `[`, `]` | Smaller, larger brush |
 | `L` | Lock the shoreline |
 | `M` | Measure with rulers |
+| `B` | Highlight the drainage basin under the cursor |
 | `Enter`, `Escape`, `Delete` | Finish the ruler, deselect it, delete it |
 | `Ctrl+Z`, `Ctrl+Y` | Undo, redo painting |
 | `Ctrl+N`, `O`, `S`, `Shift+S`, `E`, `Q` | New, open, save, save as, export, quit |
@@ -97,6 +98,11 @@ views: the position (km from the top left corner), the terrain, the
 elevation (or the water depth, and a lake's surface), and the drainage area
 there, which is the size of the river. View, Information under the cursor
 turns it off.
+
+View, Highlight the drainage basin (`B`) shows the basin of the river under
+the cursor: everything flowing to where it reaches the sea, tinted, the rest
+dimmed, and its area in the line at the top. The cursor picks the biggest
+river within a few pixels, so that rivers are easy to point at.
 
 Rulers measure distances and show altitude profiles. Press `M` (or View,
 Measure with rulers), then click to add points, in the map or in 3D; double

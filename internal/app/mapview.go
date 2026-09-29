@@ -14,6 +14,8 @@ type mapView struct {
 
 	paint        texture // the edited map
 	paintOpacity float64 // 0 hides it
+
+	highlight *texture // a mask (alpha) of what to highlight, nil if nothing
 }
 
 // Background around the map
@@ -44,13 +46,20 @@ uniform vec3 background;
 uniform bool hasPaint;
 uniform sampler2D paint;
 uniform float paintOpacity;
+uniform bool hasHighlight;
+uniform sampler2D highlight;
 
 out vec4 fragColor;
+
+// Highlighted: tinted, the rest dimmed
+const vec3 highlightTint = vec3(1.0, 0.85, 0.3);
 
 void main() {
 	vec3 color = hasImage ? texture(image, vUV).rgb : background;
 	if (hasPaint)
 		color = mix(color, texture(paint, vUV).rgb, paintOpacity);
+	if (hasHighlight)
+		color = mix(color * 0.5, mix(color, highlightTint, 0.3), texture(highlight, vUV).a);
 	fragColor = vec4(color, 1.0);
 }
 `
@@ -114,6 +123,12 @@ func (v *mapView) draw(viewWidth, viewHeight, pixelRatio float64) {
 	p.setFloat("paintOpacity", v.paintOpacity)
 	if hasPaint {
 		v.paint.bind(1)
+	}
+	hasHighlight := v.highlight != nil && v.highlight.id != 0
+	p.setInt("hasHighlight", boolInt(hasHighlight))
+	p.setInt("highlight", 2)
+	if hasHighlight {
+		v.highlight.bind(2)
 	}
 
 	gl.BindVertexArray(v.vao)

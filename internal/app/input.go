@@ -45,6 +45,7 @@ const (
 	shortcutQuit
 	shortcutReset
 	shortcutMeasure
+	shortcutBasin
 	shortcutFinishRuler // Escape, Enter
 	shortcutDeleteRuler // Delete, Backspace
 )
@@ -63,6 +64,7 @@ var (
 		"[": shortcutSmaller,
 		"]": shortcutLarger,
 		"m": shortcutMeasure,
+		"b": shortcutBasin,
 	}
 	// Keys without names, without modifiers
 	namelessKeys = map[glfw.Key]shortcut{
@@ -254,6 +256,8 @@ func (a *app) applyShortcuts() {
 			a.resetView()
 		case shortcutMeasure:
 			change(func(settings *Settings) { settings.setMeasuring(!settings.Measuring) })
+		case shortcutBasin:
+			change(func(settings *Settings) { settings.HighlightBasin = !settings.HighlightBasin })
 		case shortcutFinishRuler:
 			a.finishRuler()
 		case shortcutDeleteRuler:

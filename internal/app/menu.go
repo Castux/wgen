@@ -158,6 +158,8 @@ func (a *app) drawViewMenu() {
 	imgui.SeparatorText("Inspect")
 	toggle("Information under the cursor", "", &settings.HoverInfo)
 	imgui.SetItemTooltip("Position, terrain, elevation or water depth, drainage, at the top of the window")
+	toggle("Highlight the drainage basin", "B", &settings.HighlightBasin)
+	imgui.SetItemTooltip("Of the river under the cursor: everything flowing to where it reaches the sea")
 	if measuring := settings.Measuring; imgui.MenuItemBoolPtrV("Measure with rulers", "M", &measuring, true) {
 		settings.setMeasuring(measuring)
 		changed = true
