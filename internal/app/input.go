@@ -5,6 +5,7 @@ import (
 
 	"github.com/AllenDang/cimgui-go/imgui"
 	"github.com/go-gl/glfw/v3.4/glfw"
+	"github.com/go-gl/mathgl/mgl64"
 )
 
 // Keyboard and mouse: shortcuts, and moving the cameras. ImGui gets the
@@ -304,6 +305,9 @@ func (a *app) handleMouse() {
 	if wheel := float64(io.MouseWheel()); wheel != 0 {
 		a.wheelView(wheel, width, height)
 	}
+	if a.settings.View == viewOrbit && !painting && !a.settings.Measuring && imgui.IsMouseDoubleClicked(imgui.MouseButtonLeft) {
+		a.centerOrbit()
+	}
 	if a.settings.View == viewMap && !painting {
 		if imgui.IsMouseDoubleClicked(imgui.MouseButtonLeft) && !a.settings.Measuring {
 			a.mapView.camera.fit(width, height)
@@ -354,6 +358,18 @@ func (a *app) wheelView(wheel, width, height float64) {
 		mouse := imgui.CurrentIO().MousePos()
 		a.mapView.camera.zoomAt(float64(mouse.X), float64(mouse.Y), math.Exp(0.2*wheel), width, height)
 	}
+}
+
+// centerOrbit moves the center of the orbit to the point under the cursor,
+// at sea level, as panning keeps it.
+func (a *app) centerOrbit() {
+	mouse := imgui.CurrentIO().MousePos()
+	position, ok := a.mapPosition(float64(mouse.X), float64(mouse.Y))
+	if !ok {
+		return
+	}
+	v := a.terrain
+	v.orbit.target = mgl64.Vec3{position.X - v.width/2, position.Y - v.height/2, 0}
 }
 
 func (a *app) resetView() {

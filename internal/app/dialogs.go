@@ -279,7 +279,7 @@ var controls = [][2]string{
 	{"Left drag", "3D: rotate. Map: pan. Painting: paint, in both views"},
 	{"Right, middle drag", "Pan (middle: zoom in 3D). Painting in 3D: right rotates"},
 	{"Wheel", "Zoom"},
-	{"Double click", "Map: fit the map in the window. Measuring: finish the ruler"},
+	{"Double click", "3D: center the view there. Map: fit the map in the window. Measuring: finish the ruler"},
 	{"V", "3D or map view"},
 	{"Shift", "Terrain or height colors"},
 	{"Q / W", "Lit or unlit / wireframe"},

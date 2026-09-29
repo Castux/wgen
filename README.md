@@ -66,7 +66,7 @@ or quitting, removes the copy.
 | Left drag | 3D: rotate (pan with `Shift` or `Ctrl`). Map: pan. Painting: paint |
 | Right, middle drag | Pan (middle: zoom, in 3D). Painting in 3D: right rotates |
 | Wheel | Zoom |
-| Double click | Map: fit the map in the window |
+| Double click | 3D: center the view there (at sea level). Map: fit the map in the window |
 | `V` | 3D or map view |
 | `Shift` (alone) | Terrain or height colors |
 | `Q`, `W` | Lit or unlit, wireframe |
