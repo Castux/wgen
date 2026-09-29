@@ -313,7 +313,8 @@ func (a *app) handleMouse() {
 // dragView moves the camera of the current view for a mouse drag.
 //
 //   - orbit: left rotates (pans with shift, ctrl or cmd), right pans, middle
-//     zooms
+//     zooms; while painting, which takes the left button, right rotates
+//     (pans with shift, ctrl or cmd)
 //   - map: every button pans
 func (a *app) dragView(dx, dy, width, height float64, modifier bool) {
 	// Drag zoom: 0.95 per 100 pixels, zooming out when dragging down
@@ -322,10 +323,11 @@ func (a *app) dragView(dx, dy, width, height float64, modifier bool) {
 	switch a.settings.View {
 	case viewOrbit:
 		camera := &a.terrain.orbit
+		button := a.input.drag.button
 		switch {
-		case a.input.drag.button == imgui.MouseButtonMiddle:
+		case button == imgui.MouseButtonMiddle:
 			camera.dolly(zoom)
-		case a.input.drag.button == imgui.MouseButtonRight || modifier:
+		case modifier || (button == imgui.MouseButtonRight && !a.settings.painting()):
 			camera.pan(dx, dy, height)
 		default:
 			camera.rotate(dx, dy, height)

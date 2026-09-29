@@ -215,7 +215,7 @@ func (a *app) drawPainting() {
 		settings.setEditing(editing)
 		changed = true
 	}
-	imgui.SetItemTooltip("In the map view: the left button paints the selected terrain, the others pan")
+	imgui.SetItemTooltip("The left button paints the selected terrain, in the map or on the terrain in 3D. In 3D, the right button rotates")
 
 	for i, shape := range brushes {
 		if i > 0 {

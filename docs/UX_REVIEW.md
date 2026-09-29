@@ -89,7 +89,7 @@ Proposals:
 - A small toolbar in the map view: brushes (natural, round, square, fill),
   eyedropper, the current terrain (click for the palette), size in px and
   km, shoreline lock. Visible while painting only.
-- Paint in 3D: raycast the cursor onto the terrain mesh (already on the
+- Paint in 3D (done): raycast the cursor onto the terrain mesh (already on the
   CPU), and stamp at the hit point. Painting where the mountains are seen.
 - Fill tool (flood fill of a region of one terrain, with the shoreline lock
   respected), eyedropper (`Alt`+click, or `I`), terrain keys `1`..`9`.
@@ -370,7 +370,7 @@ codebase (S: hours, M: a few days, L: weeks).
 | 7 | "Ignore" color at import (fill from surroundings), speck cleanup | 3 | High | M |
 | 8 | Engine export targets (sizes, RAW, EXR), terrain masks, normal map | 5 | High | M |
 | 9 | Autosave and recovery | 7 | High | M |
-| 10 | Painting in the 3D view | 2 | High | M |
+| 10 | Painting in the 3D view (done) | 2 | High | M |
 | 11 | Simulation presets and plain controls | 4 | High | M |
 | 12 | One undo history for painting, terrains and parameters | 2 | Medium | M |
 | 13 | Map styles and cartographic layers (hillshade, smoothed rivers, contours) | 6 | Medium | M |

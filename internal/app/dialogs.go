@@ -265,8 +265,8 @@ func (a *app) drawConfirm() {
 // Help
 
 var controls = [][2]string{
-	{"Left drag", "3D: rotate. Map: pan, or paint when painting"},
-	{"Right, middle drag", "Pan (middle: zoom in 3D)"},
+	{"Left drag", "3D: rotate. Map: pan. Painting: paint, in both views"},
+	{"Right, middle drag", "Pan (middle: zoom in 3D). Painting in 3D: right rotates"},
 	{"Wheel", "Zoom"},
 	{"Double click", "Map: fit the map in the window. Measuring: finish the ruler"},
 	{"V", "3D or map view"},

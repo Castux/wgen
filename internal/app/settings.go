@@ -181,28 +181,22 @@ func (s *Settings) overlayOptions() render.Options {
 	}
 }
 
-// painting tells whether the map is being painted: the left button paints
-// in the map view.
-func (s *Settings) painting() bool { return s.Editing && s.View == viewMap }
+// painting tells whether the map is being painted: the left button paints,
+// in the map or on the terrain in 3D.
+func (s *Settings) painting() bool { return s.Editing }
 
-// keepConsistent turns painting off out of the map view, where it can't
-// happen, so that the painting checkbox tells the truth. Painting and
-// measuring both take the left button: painting wins.
+// keepConsistent keeps one use of the left button: painting and measuring
+// both take it, painting wins.
 func (s *Settings) keepConsistent() {
-	if s.View != viewMap {
-		s.Editing = false
-	}
 	if s.Editing {
 		s.Measuring = false
 	}
 }
 
-// setEditing turns painting on or off. Painting shows the map, where it
-// happens, and stops measuring.
+// setEditing turns painting on or off. Painting stops measuring.
 func (s *Settings) setEditing(editing bool) {
 	s.Editing = editing
 	if editing {
-		s.View = viewMap
 		s.Measuring = false
 	}
 }

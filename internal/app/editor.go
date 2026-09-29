@@ -2,6 +2,7 @@ package app
 
 import (
 	"image"
+	"math"
 	"slices"
 
 	"github.com/AllenDang/cimgui-go/imgui"
@@ -9,10 +10,12 @@ import (
 	"github.com/Castux/wgen/internal/config"
 	"github.com/Castux/wgen/internal/engine"
 	"github.com/Castux/wgen/internal/gen"
+	"github.com/Castux/wgen/internal/geom"
 )
 
-// editor is the map editor: terrains painted in the 2D view. The map is
-// sent to the engine at the end of each stroke, and saved with the project.
+// editor is the map editor: terrains painted in the map view, or on the
+// terrain in 3D. The map is sent to the engine at the end of each stroke,
+// and saved with the project.
 type editor struct {
 	canvas *canvas
 	brush  string // terrain name
@@ -76,15 +79,18 @@ func (a *app) canvasMap() *engine.Map {
 	return &engine.Map{Width: c.width, Height: c.height, Pixels: slices.Clone(c.pixels)}
 }
 
-// updatePaintTexture uploads the edited map to the map view.
+// updatePaintTexture uploads the edited map, shown over the map view and
+// the terrain while painting.
 func (a *app) updatePaintTexture() {
 	ed := &a.editor
-	a.mapView.paintOpacity = 0
+	a.mapView.paintOpacity, a.terrain.paintOpacity = 0, 0
+	a.terrain.paint = &a.mapView.paint
 	if ed.canvas == nil {
 		return
 	}
 	if a.settings.Editing {
 		a.mapView.paintOpacity = a.settings.PaintOpacity
+		a.terrain.paintOpacity = a.settings.PaintOpacity
 	}
 
 	c := ed.canvas
@@ -113,19 +119,39 @@ func (a *app) brushTerrain(conf *config.Config) *config.Terrain {
 	return conf.Terrains[0]
 }
 
-// canvasPosition converts window coordinates to canvas pixels.
-func (a *app) canvasPosition(x, y float64) (float64, float64) {
-	c, cam := a.editor.canvas, &a.mapView.camera
-	scale := float64(c.width) / cam.width
-	return (x - cam.offset.X()) / cam.zoom * scale, (y - cam.offset.Y()) / cam.zoom * scale
+// canvasPosition converts window coordinates to canvas pixels: false in 3D
+// when not on the terrain.
+func (a *app) canvasPosition(x, y float64) (float64, float64, bool) {
+	c := a.editor.canvas
+	if a.settings.View == viewMap {
+		camera := &a.mapView.camera
+		scale := float64(c.width) / camera.width
+		return (x - camera.offset.X()) / camera.zoom * scale, (y - camera.offset.Y()) / camera.zoom * scale, true
+	}
+	position, ok := a.mapPosition(x, y)
+	if !ok {
+		return 0, 0, false
+	}
+	return a.canvasFromMap(position)
 }
 
-// paintInput handles painting with the left button, in the map view. It
-// returns whether the input was used.
+// canvasFromMap converts a map position (y up) to canvas pixels (rows from
+// the top).
+func (a *app) canvasFromMap(position geom.Vec2) (float64, float64, bool) {
+	c, world := a.editor.canvas, a.world
+	if world == nil || world.Width == 0 {
+		return 0, 0, false
+	}
+	scale := float64(c.width) / float64(world.Width)
+	return position.X * scale, (float64(world.Height) - position.Y) * scale, true
+}
+
+// paintInput handles painting with the left button, in the map view or on
+// the terrain in 3D. It returns whether the input was used.
 func (a *app) paintInput() bool {
 	ed := &a.editor
 	conf := a.session.Engine.Config()
-	if !a.settings.painting() || ed.canvas == nil || conf == nil || a.mapView.camera.width == 0 {
+	if !a.settings.painting() || ed.canvas == nil || conf == nil || a.world == nil || a.mapView.camera.width == 0 {
 		return false
 	}
 	brush := a.brushTerrain(conf)
@@ -135,18 +161,23 @@ func (a *app) paintInput() bool {
 
 	io := imgui.CurrentIO()
 	mouse := io.MousePos()
-	x, y := a.canvasPosition(float64(mouse.X), float64(mouse.Y))
+	x, y, onMap := a.canvasPosition(float64(mouse.X), float64(mouse.Y))
 	radius := a.settings.BrushRadius
 	shape := a.settings.Brush
 	next := func() uint64 { ed.seed++; return ed.seed }
 
 	canvas := ed.canvas
 	canvas.protect = a.shoreLock(conf, brush)
+	// In 3D, the stroke skips where the cursor is off the terrain
 	switch {
 	case canvas.stroke == nil && imgui.IsMouseClickedBool(imgui.MouseButtonLeft) && !io.WantCaptureMouse():
-		ed.changed = ed.changed.Union(canvas.beginStroke(x, y, radius, brush.Color, next(), shape))
+		if onMap {
+			ed.changed = ed.changed.Union(canvas.beginStroke(x, y, radius, brush.Color, next(), shape))
+		}
 	case canvas.stroke != nil && imgui.IsMouseDown(imgui.MouseButtonLeft):
-		ed.changed = ed.changed.Union(canvas.continueStroke(x, y, radius, brush.Color, next))
+		if onMap {
+			ed.changed = ed.changed.Union(canvas.continueStroke(x, y, radius, brush.Color, next))
+		}
 	case canvas.stroke != nil:
 		if canvas.endStroke() {
 			ed.dirty = true
@@ -154,11 +185,57 @@ func (a *app) paintInput() bool {
 		}
 	}
 
-	if !io.WantCaptureMouse() || canvas.stroke != nil {
-		screenRadius := float32(radius * a.mapView.camera.zoom * a.mapView.camera.width / float64(canvas.width))
-		drawBrushOutline(mouse, screenRadius, shape, brush.Color)
+	if onMap && (!io.WantCaptureMouse() || canvas.stroke != nil) {
+		if a.settings.View == viewMap {
+			screenRadius := float32(radius * a.mapView.camera.zoom * a.mapView.camera.width / float64(canvas.width))
+			drawBrushOutline(mouse, screenRadius, shape, brush.Color)
+		} else if a.inspect.hover != nil {
+			a.drawBrushOnTerrain(a.inspect.hover.Position, radius*float64(a.world.Width)/float64(canvas.width), shape, brush.Color)
+		}
 	}
 	return canvas.stroke != nil
+}
+
+// drawBrushOnTerrain shows the brush in 3D, following the relief, around a
+// map position, of a radius in map units.
+func (a *app) drawBrushOnTerrain(center geom.Vec2, radius float64, shape string, color config.Color) {
+	// Around the outline, counterclockwise, from the right
+	var outline []geom.Vec2
+	if shape == brushSquare {
+		corners := []geom.Vec2{{X: 1, Y: -1}, {X: 1, Y: 1}, {X: -1, Y: 1}, {X: -1, Y: -1}}
+		for i, corner := range corners {
+			next := corners[(i+1)%len(corners)]
+			for k := range 16 {
+				t := float64(k) / 16
+				outline = append(outline, geom.Vec2{X: center.X + radius*geom.Lerp(corner.X, next.X, t), Y: center.Y + radius*geom.Lerp(corner.Y, next.Y, t)})
+			}
+		}
+	} else {
+		for k := range 64 {
+			angle := 2 * math.Pi * float64(k) / 64
+			outline = append(outline, geom.Vec2{X: center.X + radius*math.Cos(angle), Y: center.Y + radius*math.Sin(angle)})
+		}
+	}
+
+	var points []imgui.Vec2
+	for _, p := range outline {
+		if s, ok := a.pointOnScreen(p); ok {
+			points = append(points, s)
+		}
+	}
+	if len(points) < 2 {
+		return
+	}
+	drawList := imgui.ForegroundDrawListViewportPtr()
+	for _, stroke := range []struct {
+		color     uint32
+		thickness float32
+	}{{0xff000000, 3}, {imgui.ColorConvertFloat4ToU32(colorVec(color)), 1.5}} {
+		for _, p := range points {
+			drawList.PathLineTo(p)
+		}
+		drawList.PathStrokeV(stroke.color, imgui.DrawFlagsClosed, stroke.thickness)
+	}
 }
 
 // drawBrushOutline shows the brush around the mouse, in its color over a

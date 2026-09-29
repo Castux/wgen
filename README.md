@@ -50,8 +50,8 @@ when there are unsaved changes, and the app asks before losing them.
 
 | Control | |
 |---|---|
-| Left drag | 3D: rotate (pan with `Shift` or `Ctrl`). Map: pan, or paint when painting |
-| Right, middle drag | Pan (middle: zoom, in 3D) |
+| Left drag | 3D: rotate (pan with `Shift` or `Ctrl`). Map: pan. Painting: paint |
+| Right, middle drag | Pan (middle: zoom, in 3D). Painting in 3D: right rotates |
 | Wheel | Zoom |
 | Double click | Map: fit the map in the window |
 | `V` | 3D or map view |
@@ -97,9 +97,11 @@ selected ruler, `Escape` deselects it. Rulers aren't saved with the project.
 ### Painting
 
 Press `E` (or check "Paint the map" in the Painting section of the panel):
-the map view shows the painted terrains over the generated landscape. The
-left button paints the terrain selected in the panel, the other buttons pan.
-Painting is only in the map view: switching to 3D stops it.
+the painted terrains show over the generated landscape, and the left button
+paints the terrain selected in the panel, in the map view or on the terrain
+in 3D, where the brush follows the relief. In the map view, the other
+buttons pan; in 3D, the right button rotates (pans with `Shift` or `Ctrl`)
+and the middle one zooms.
 
 - Brushes: natural (irregular edges, different every stamp), hard round,
   hard square. `[` and `]` change the size.

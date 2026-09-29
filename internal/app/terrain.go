@@ -30,6 +30,10 @@ type terrainView struct {
 	overlay    texture
 	hasOverlay bool
 
+	// The painted map over the terrain, while painting (the map view's)
+	paint        *texture
+	paintOpacity float64
+
 	orbit orbitCamera
 }
 
@@ -118,10 +122,17 @@ uniform bool lit;
 uniform vec3 lightDirection; // view space
 uniform bool hasOverlay;
 uniform sampler2D overlay;
+uniform bool hasPaint;
+uniform sampler2D paint; // top row first, as the overlay
+uniform float paintOpacity;
 
 out vec4 fragColor;
 
 const float PI = 3.141592653589793;
+
+vec3 srgbToLinear(vec3 c) {
+	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+}
 
 vec3 linearToSrgb(vec3 c) {
 	return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
@@ -133,6 +144,8 @@ void main() {
 		discard;
 
 	vec3 color = vColor;
+	if (hasPaint)
+		color = mix(color, srgbToLinear(texture(paint, vUV).rgb), paintOpacity);
 	if (hasOverlay)
 		color *= texture(overlay, vUV).rgb;
 
@@ -274,6 +287,13 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 	p.setInt("overlay", 0)
 	if v.hasOverlay {
 		v.overlay.bind(0)
+	}
+	hasPaint := v.paint != nil && v.paint.id != 0 && v.paintOpacity > 0
+	p.setInt("hasPaint", boolInt(hasPaint))
+	p.setInt("paint", 1)
+	p.setFloat("paintOpacity", v.paintOpacity)
+	if hasPaint {
+		v.paint.bind(1)
 	}
 
 	gl.BindVertexArray(v.vao)

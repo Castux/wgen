@@ -286,15 +286,20 @@ func TestImportClassification(t *testing.T) {
 	}
 }
 
-func TestPaintingOnlyInMapView(t *testing.T) {
+func TestPaintingOrMeasuring(t *testing.T) {
 	settings := defaultSettings
+	settings.setMeasuring(true)
 	settings.setEditing(true)
-	if settings.View != viewMap || !settings.painting() {
-		t.Fatalf("painting shows the map: view %q, editing %v", settings.View, settings.Editing)
+	if !settings.painting() || settings.Measuring {
+		t.Fatalf("painting stops measuring: editing %v, measuring %v", settings.Editing, settings.Measuring)
 	}
 	settings.View = viewOrbit
 	settings.keepConsistent()
+	if !settings.painting() {
+		t.Error("painting stopped in the 3D view")
+	}
+	settings.setMeasuring(true)
 	if settings.Editing {
-		t.Error("painting still on in the 3D view")
+		t.Error("measuring doesn't stop painting")
 	}
 }
