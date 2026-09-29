@@ -82,6 +82,12 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 			"Height the summits of each region of this terrain reach: most of it is lower, valleys much lower. 0: flat"); done && v != t.Height {
 			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Height = v })
 		}
+		if a.world != nil && t.Height > 0 {
+			if summit, ok := a.world.Summits[t.Name]; ok {
+				imgui.TextDisabled(noFormat(fmt.Sprintf("Reached %s  (%+.0f%%)", formatMeters(summit), 100*(summit/t.Height-1))))
+				imgui.SetItemTooltip("The height of this terrain's highest 5%%, in the last landscape: about where its summits are")
+			}
+		}
 		a.drawCharacter(conf, t)
 	}
 	a.drawDetail(conf, t)

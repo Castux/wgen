@@ -576,3 +576,17 @@ func TestRounding(t *testing.T) {
 		t.Errorf("roughness %g rounded, %g crisp", r, c)
 	}
 }
+
+func TestSummits(t *testing.T) {
+	w := generate(t, setup(t))
+	for _, name := range []string{"plains", "hills", "mountains"} {
+		summit, ok := w.Summits[name]
+		target := w.Config.Terrain(name).Height
+		if !ok || summit < 0.6*target || summit > 1.4*target {
+			t.Errorf("%s: reached %g, target %g", name, summit, target)
+		}
+	}
+	if _, ok := w.Summits["sea"]; ok {
+		t.Error("the sea has a summit")
+	}
+}

@@ -67,6 +67,10 @@ type World struct {
 
 	Lowest, Highest float64
 
+	// The summit height each land terrain reached, by name: the 95th
+	// percentile of its elevations
+	Summits map[string]float64
+
 	// Rasterized, Width * Height, bottom row first
 	Heightmap []float64
 	WaterMap  []float64

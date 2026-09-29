@@ -249,6 +249,25 @@ func (w *World) computeElevationRange() {
 	if math.IsInf(w.Lowest, 1) {
 		w.Lowest, w.Highest = 0, 0
 	}
+	w.computeSummits()
+}
+
+// computeSummits finds the summit height each land terrain reached: the
+// 95th percentile of its elevations in the map, as the calibration measures
+// its regions.
+func (w *World) computeSummits() {
+	elevations := map[string][]float64{}
+	for v, t := range w.Terrain {
+		if t == nil || t.IsWater() || !w.inBounds(w.Mesh.Points[v]) || math.IsNaN(w.Elevation[v]) {
+			continue
+		}
+		elevations[t.Name] = append(elevations[t.Name], w.Elevation[v])
+	}
+	w.Summits = map[string]float64{}
+	for name, z := range elevations {
+		slices.Sort(z)
+		w.Summits[name] = z[int(0.95*float64(len(z)-1))]
+	}
 }
 
 // vertexQueue is a min priority queue of vertices, keyed on their elevation
