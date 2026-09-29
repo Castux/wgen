@@ -6,6 +6,8 @@ import (
 	"github.com/AllenDang/cimgui-go/imgui"
 	"github.com/go-gl/glfw/v3.4/glfw"
 	"github.com/go-gl/mathgl/mgl64"
+
+	"github.com/Castux/wgen/internal/geom"
 )
 
 // Keyboard and mouse: shortcuts, and moving the cameras. ImGui gets the
@@ -142,6 +144,14 @@ func (a *app) setCallbacks() {
 // to follow the keyboard layout. The menu commands are with Ctrl (or Cmd).
 func (a *app) onKey(key glfw.Key, name string, action glfw.Action, mods glfw.ModifierKey) {
 	shift := key == glfw.KeyLeftShift || key == glfw.KeyRightShift
+
+	// At eye level, the movement keys (and Shift, to go faster) move
+	if a.settings.View == viewEye && mods&(glfw.ModControl|glfw.ModSuper|glfw.ModAlt) == 0 {
+		if _, moves := eyeKeys[key]; moves || shift {
+			a.input.shiftTap = false
+			return
+		}
+	}
 
 	switch {
 	case shift && action == glfw.Press:
@@ -324,6 +334,7 @@ func (a *app) handleMouse() {
 //     zooms; while painting, which takes the left button, right rotates
 //     (pans with shift, ctrl or cmd)
 //   - map: every button pans
+//   - eye level: every button looks around
 func (a *app) dragView(dx, dy, width, height float64, modifier bool) {
 	// Drag zoom: 0.95 per 100 pixels, zooming out when dragging down
 	zoom := math.Pow(0.95, -dy/100)
@@ -345,6 +356,9 @@ func (a *app) dragView(dx, dy, width, height float64, modifier bool) {
 		camera := &a.mapView.camera
 		camera.offset[0] += dx
 		camera.offset[1] += dy
+
+	case viewEye:
+		a.terrain.eye.look(dx, dy, height)
 	}
 }
 
@@ -357,6 +371,8 @@ func (a *app) wheelView(wheel, width, height float64) {
 	case viewMap:
 		mouse := imgui.CurrentIO().MousePos()
 		a.mapView.camera.zoomAt(float64(mouse.X), float64(mouse.Y), math.Exp(0.2*wheel), width, height)
+	case viewEye:
+		a.eyeWalk.speed = geom.Clamp(a.eyeSpeed()*math.Pow(1.25, wheel), eyeMinSpeed, eyeMaxSpeed)
 	}
 }
 
@@ -373,10 +389,14 @@ func (a *app) centerOrbit() {
 }
 
 func (a *app) resetView() {
-	if a.settings.View == viewMap {
+	switch a.settings.View {
+	case viewMap:
 		width, height, _ := a.viewSize()
 		a.mapView.camera.fit(width, height)
-	} else {
+	case viewEye:
+		a.terrain.eye.fromOrbit(&a.terrain.orbit)
+		a.placeEye()
+	default:
 		a.terrain.resetCamera()
 	}
 }

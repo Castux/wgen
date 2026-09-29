@@ -67,7 +67,8 @@ or quitting, removes the copy.
 | Right, middle drag | Pan (middle: zoom, in 3D). Painting in 3D: right rotates |
 | Wheel | Zoom |
 | Double click | 3D: center the view there (at sea level). Map: fit the map in the window |
-| `V` | 3D or map view |
+| `V` | 3D, map or eye level view |
+| `W` `A` `S` `D`, arrows | Eye level: move (`Shift`: faster, wheel: speed) |
 | `Shift` (alone) | Terrain or height colors |
 | `Q`, `W` | Lit or unlit, wireframe |
 | `R` | Reset the view |
@@ -111,6 +112,18 @@ profile window shows the ground along it in the height colors, water in
 blue, with its length, lowest and highest points, and the total climb and
 descent; hovering the graph marks the point on the map. `Delete` removes the
 selected ruler, `Escape` deselects it. Rulers aren't saved with the project.
+
+### Eye level
+
+View, Eye level (or `V`) stands you on the terrain, 1.7 m above the ground
+(or the water), at the center of the 3D view and looking the same way: to
+see the scenery from there. `W` `A` `S` `D` (by their place on the
+keyboard) or the arrows walk, following the relief, `Shift` ten times
+faster; a drag looks around; the wheel sets the speed (50 m/s at first, the
+map is big). Back in 3D, the view is centered where you went. Distant
+terrain fades in a haze. The mesh is about a kilometer between points, so
+the ground nearby is made of flat facets: the view is for the landscape
+around, mountains on the horizon, rather than the ground at your feet.
 
 ### Painting
 

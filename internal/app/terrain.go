@@ -35,6 +35,7 @@ type terrainView struct {
 	paintOpacity float64
 
 	orbit orbitCamera
+	eye   eyeCamera
 }
 
 // Background color, as linear values (as three.js takes them).
@@ -62,6 +63,7 @@ out vec3 vPosition;
 out vec3 vViewPosition;
 out vec3 vColor;
 out vec2 vUV;
+out float vDepth; // distance along the view, for the logarithmic depth
 
 vec3 srgbToLinear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
@@ -106,6 +108,7 @@ void main() {
 	vUV = vec2(position.x / size.x, 1.0 - position.y / size.y);
 
 	gl_Position = projection * viewPosition;
+	vDepth = gl_Position.w;
 }
 `
 
@@ -116,8 +119,13 @@ in vec3 vPosition;
 in vec3 vViewPosition;
 in vec3 vColor;
 in vec2 vUV;
+in float vDepth;
 
 uniform vec2 size;
+uniform bool logDepth;       // at eye level: from millimeters to the horizon
+uniform float logDepthScale; // 1 / log2(far + 1)
+uniform float hazeDistance;  // map units, 0 for none
+uniform vec3 hazeColor;      // linear
 uniform bool lit;
 uniform vec3 lightDirection; // view space
 uniform bool hasOverlay;
@@ -155,7 +163,12 @@ void main() {
 		color *= (1.0 + 3.0 * diffuse) / PI;
 	}
 
+	// Distance, at eye level
+	if (hazeDistance > 0.0)
+		color = mix(hazeColor, color, exp(-length(vViewPosition) / hazeDistance));
+
 	fragColor = vec4(linearToSrgb(clamp(color, 0.0, 1.0)), 1.0);
+	gl_FragDepth = logDepth ? log2(1.0 + vDepth) * logDepthScale : gl_FragCoord.z;
 }
 `
 
@@ -235,12 +248,32 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 	return changed
 }
 
-// resetCamera frames the whole map.
+// resetCamera frames the whole map, and puts the eye at its center.
 func (v *terrainView) resetCamera() {
 	if v.width == 0 {
 		return
 	}
 	v.orbit.reset(v.width, v.height)
+	v.eye.fromOrbit(&v.orbit)
+}
+
+// Eye level: the nearest distance seen, the eye's height above the ground,
+// in meters, and the haze
+const (
+	eyeNear     = 0.2
+	eyeHeight   = 1.7
+	hazeMeters  = 150e3
+	eyeFarRatio = 3 // of the map's extent
+)
+
+// camera is the view and projection of a 3D view, orbit or eye level, and
+// the far distance of the eye's logarithmic depth (0 for the orbit).
+func (v *terrainView) camera(view string, aspect float64) (mgl64.Mat4, mgl64.Mat4, float64) {
+	if view == viewEye {
+		far := eyeFarRatio * math.Max(v.width, v.height)
+		return v.eye.view(), v.eye.projection(aspect, eyeNear/v.metersPerPixel, far), far
+	}
+	return v.orbit.view(), v.orbit.projection(aspect), 0
 }
 
 // overlayScale is the overlay resolution, relative to the map image:
@@ -260,7 +293,7 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 		return
 	}
 
-	view, projection := v.orbit.view(), v.orbit.projection(aspect)
+	view, projection, far := v.camera(settings.View, aspect)
 
 	gl.Enable(gl.DEPTH_TEST)
 	gl.DepthFunc(gl.LEQUAL)
@@ -281,6 +314,14 @@ func (v *terrainView) draw(settings *Settings, aspect float64) {
 	p.setInt("rainbow", boolInt(settings.HeightScale == render.ScaleRainbow))
 	p.setFloat("highest", v.highest)
 	p.setFloat("zScale", settings.VerticalScale/v.metersPerPixel)
+	p.setInt("logDepth", boolInt(far > 0))
+	p.setFloat("logDepthScale", 1/math.Log2(max(far, 1)+1))
+	haze := 0.0
+	if settings.View == viewEye {
+		haze = hazeMeters / v.metersPerPixel
+	}
+	p.setFloat("hazeDistance", haze)
+	p.setVec3("hazeColor", mgl64.Vec3(skyColor))
 	p.setInt("lit", boolInt(settings.Shading == shadingLit))
 	p.setVec3("lightDirection", view.Mat3().Mul3x1(lightDirection).Normalize())
 	p.setInt("hasOverlay", boolInt(v.hasOverlay))

@@ -123,6 +123,8 @@ func (a *app) drawViewMenu() {
 
 	choice("3D", "V", &settings.View, viewOrbit)
 	choice("Map", "V", &settings.View, viewMap)
+	choice("Eye level", "V", &settings.View, viewEye)
+	imgui.SetItemTooltip("Standing on the terrain, at the center of the 3D view: WASD or arrows move, a drag looks around")
 
 	imgui.SeparatorText("Colors")
 	choice("Terrains", "Shift", &settings.Color, colorTerrain)

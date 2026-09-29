@@ -52,6 +52,7 @@ type app struct {
 	mapView  *mapView
 	editor   editor
 	inspect  inspector
+	eyeWalk  eyeWalk
 	dialogs  dialogs
 	autosave autosaver
 
@@ -272,11 +273,13 @@ func (a *app) frame() {
 	a.update()
 	a.updateInspector()
 	a.handleInput()
+	a.walk()
 	a.drawMenu(state)
 	a.drawPanel()
 	a.drawStatus(state)
 	a.drawLegend()
 	a.drawHover()
+	a.drawEyeHelp()
 	a.drawProfile()
 	a.drawRulers()
 	a.drawDialogs()

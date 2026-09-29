@@ -37,7 +37,7 @@ func (a *app) mapPosition(x, y float64) (geom.Vec2, bool) {
 		position = geom.Vec2{X: (x - camera.offset.X()) / camera.zoom, Y: camera.height - (y-camera.offset.Y())/camera.zoom}
 
 	default:
-		near, far, ok := a.orbitRay(x, y, width, height)
+		near, far, ok := a.cameraRay(x, y, width, height)
 		if !ok {
 			return geom.Vec2{}, false
 		}
@@ -55,11 +55,11 @@ func (a *app) mapPosition(x, y float64) (geom.Vec2, bool) {
 	return position, a.inspect.probe.Inside(position)
 }
 
-// orbitRay is the ray under a window position in the 3D view, from the
-// near plane to the far one.
-func (a *app) orbitRay(x, y, width, height float64) (near, far mgl64.Vec3, ok bool) {
-	camera := &a.terrain.orbit
-	inverse := camera.projection(width / height).Mul4(camera.view()).Inv()
+// cameraRay is the ray under a window position in a 3D view, from the near
+// plane to the far one.
+func (a *app) cameraRay(x, y, width, height float64) (near, far mgl64.Vec3, ok bool) {
+	view, projection, _ := a.terrain.camera(a.settings.View, width/height)
+	inverse := projection.Mul4(view).Inv()
 	ndcX, ndcY := 2*x/width-1, 1-2*y/height
 	unproject := func(z float64) (mgl64.Vec3, bool) {
 		p := inverse.Mul4x1(mgl64.Vec4{ndcX, ndcY, z, 1})
@@ -134,11 +134,11 @@ func (a *app) screenPosition(position geom.Vec2, elevation float64) (x, y float6
 
 	default:
 		v := a.terrain
-		camera := &v.orbit
 		if math.IsNaN(elevation) {
 			elevation = 0
 		}
-		clip := camera.projection(width / height).Mul4(camera.view()).Mul4x1(
+		view, projection, _ := v.camera(a.settings.View, width/height)
+		clip := projection.Mul4(view).Mul4x1(
 			mgl64.Vec4{position.X - v.width/2, position.Y - v.height/2, elevation * a.zScale(), 1})
 		if clip.W() <= 0 {
 			return 0, 0, false

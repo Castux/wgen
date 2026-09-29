@@ -132,3 +132,57 @@ func (c *mapCamera) imageScale(pixelRatio float64) float64 {
 }
 
 const maxMapImageSize = 4096
+
+// eyeCamera is a first person camera, at eye level: its position is kept
+// on the ground by the app. heading is the angle around z, with the orbit's
+// convention (0 looking toward +y); pitch is up from horizontal.
+type eyeCamera struct {
+	position       mgl64.Vec3
+	heading, pitch float64
+}
+
+const (
+	eyeFOV      = 70.0 // vertical, degrees
+	eyeMaxPitch = 89 * math.Pi / 180
+)
+
+// fromOrbit places the eye at the orbit's center, looking the same way,
+// level.
+func (c *eyeCamera) fromOrbit(orbit *orbitCamera) {
+	c.position = mgl64.Vec3{orbit.target.X(), orbit.target.Y(), c.position.Z()}
+	c.heading, c.pitch = orbit.theta, 0
+}
+
+// toOrbit centers the orbit where the eye is, looking the same way.
+func (c *eyeCamera) toOrbit(orbit *orbitCamera) {
+	orbit.target = mgl64.Vec3{c.position.X(), c.position.Y(), 0}
+	orbit.theta = c.heading
+}
+
+// forward is the direction looked at.
+func (c *eyeCamera) forward() mgl64.Vec3 {
+	level := math.Cos(c.pitch)
+	return mgl64.Vec3{-level * math.Sin(c.heading), level * math.Cos(c.heading), math.Sin(c.pitch)}
+}
+
+func (c *eyeCamera) view() mgl64.Mat4 {
+	return mgl64.LookAtV(c.position, c.position.Add(c.forward()), mgl64.Vec3{0, 0, 1})
+}
+
+// projection sees from near to far, in map units: a huge range, for the
+// logarithmic depth of the terrain shader.
+func (c *eyeCamera) projection(aspect, near, far float64) mgl64.Mat4 {
+	return mgl64.Perspective(mgl64.DegToRad(eyeFOV), aspect, near, far)
+}
+
+// look turns the eye for a mouse movement, in a view of the given height.
+func (c *eyeCamera) look(dx, dy, viewHeight float64) {
+	c.heading -= math.Pi * dx / viewHeight
+	c.pitch = mgl64.Clamp(c.pitch-math.Pi*dy/viewHeight, -eyeMaxPitch, eyeMaxPitch)
+}
+
+// move moves on the level: forward and right, in map units.
+func (c *eyeCamera) move(forward, right float64) {
+	sin, cos := math.Sin(c.heading), math.Cos(c.heading)
+	c.position = c.position.Add(mgl64.Vec3{-sin*forward + cos*right, cos*forward + sin*right, 0})
+}

@@ -53,6 +53,7 @@ const (
 	// Views
 	viewOrbit = "orbit"
 	viewMap   = "map"
+	viewEye   = "eye" // first person, at eye level
 
 	// Colors: the render bases of the same names
 	colorTerrain = string(render.BaseTerrain)
@@ -69,7 +70,7 @@ const (
 )
 
 var (
-	views        = []string{viewOrbit, viewMap}
+	views        = []string{viewOrbit, viewMap, viewEye}
 	colorModes   = []string{colorTerrain, colorHeight}
 	shadings     = []string{shadingLit, shadingUnlit}
 	heightScales = []string{render.ScaleRainbow, render.ScaleGray}
@@ -229,6 +230,9 @@ func (a *app) initSettings(dir string) {
 // setSettings changes the settings, and saves them.
 func (a *app) setSettings(settings Settings) {
 	settings.keepConsistent()
+	if settings.View != a.settings.View {
+		a.switchView(a.settings.View, settings.View)
+	}
 	watch := settings.Watch != a.settings.Watch || settings.WatchSteps != a.settings.WatchSteps
 	a.settings = settings
 	if watch {

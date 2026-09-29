@@ -136,6 +136,7 @@ func (a *app) devCamera() {
 	camera := &a.terrain.orbit
 	camera.target = mgl64.Vec3{x - a.terrain.width/2, a.terrain.height/2 - y, 0}
 	camera.radius, camera.phi, camera.theta = distance, tilt*math.Pi/180, turn*math.Pi/180
+	a.terrain.eye.fromOrbit(camera)
 }
 
 // devScreenshot saves the screenshot asked by WGEN_SCREENSHOT when it is

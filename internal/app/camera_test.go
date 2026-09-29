@@ -96,3 +96,46 @@ func TestMapCamera(t *testing.T) {
 		}
 	}
 }
+
+func TestEyeCamera(t *testing.T) {
+	var orbit orbitCamera
+	orbit.reset(100, 100)
+	orbit.target = mgl64.Vec3{10, 20, 0}
+	orbit.theta = 0.3
+
+	var eye eyeCamera
+	eye.fromOrbit(&orbit)
+	if eye.position.X() != 10 || eye.position.Y() != 20 || eye.heading != 0.3 {
+		t.Fatalf("eye from orbit: %v, heading %g", eye.position, eye.heading)
+	}
+
+	// Looking the way the orbit camera does, level
+	toTarget := orbit.target.Sub(orbit.position())
+	toTarget[2] = 0
+	if f := eye.forward(); f.Dot(toTarget.Normalize()) < 0.999 {
+		t.Errorf("eye forward %v, orbit looks %v", f, toTarget.Normalize())
+	}
+
+	// Moving forward goes where it looks
+	before := eye.position
+	eye.move(5, 0)
+	if moved := eye.position.Sub(before); !near(moved.Len(), 5) || moved.Normalize().Dot(eye.forward()) < 0.999 {
+		t.Errorf("moved %v, looking %v", moved, eye.forward())
+	}
+	// Right is to the right: forward cross right is up
+	before = eye.position
+	eye.move(0, 5)
+	if right := eye.position.Sub(before); eye.forward().Cross(right).Z() >= 0 {
+		t.Errorf("right %v is not to the right of %v", right, eye.forward())
+	}
+
+	eye.look(0, -1e6, 100)
+	if eye.pitch > eyeMaxPitch+1e-9 {
+		t.Errorf("pitch %g beyond %g", eye.pitch, eyeMaxPitch)
+	}
+
+	eye.toOrbit(&orbit)
+	if orbit.target.X() != eye.position.X() || orbit.target.Z() != 0 || orbit.theta != eye.heading {
+		t.Errorf("orbit from eye: %v, theta %g", orbit.target, orbit.theta)
+	}
+}

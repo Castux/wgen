@@ -45,7 +45,7 @@ func TestSettings(t *testing.T) {
 		t.Errorf("broken file: %+v", loaded)
 	}
 
-	if cycle(views, "map") != "orbit" || cycle(views, "orbit") != "map" {
+	if cycle(views, viewOrbit) != viewMap || cycle(views, viewMap) != viewEye || cycle(views, viewEye) != viewOrbit {
 		t.Error("cycle")
 	}
 }

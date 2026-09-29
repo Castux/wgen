@@ -289,7 +289,14 @@ Files:
   colors (Turbo or gray) in the fragment shader. The margin around the map
   is discarded.
 - `mapview.go`: the 2D view, a textured quad.
-- `camera.go`: orbit and map cameras. Pure math, unit tested.
+- `camera.go`: orbit, map and eye level cameras. Pure math, unit tested.
+- `eye.go`: the eye level view: walking (keys by position, `GetKey` each
+  frame), standing on the mesh (`Probe.Surface`: the triangle under the eye,
+  not the heightmap, which is off the drawn facets on slopes), the switch
+  from and to the orbit's center. The terrain shader writes a logarithmic
+  depth there (`gl_FragDepth`): the eye is millimeters above the ground in
+  map units, the horizon hundreds of kilometers away, too much range for a
+  depth buffer; and a haze toward the sky color.
 - `images.go`: `imageSlot` renders images with `internal/render` in a
   goroutine, one at a time. Only the latest request matters: requests
   arriving while rendering replace each other, stale results are dropped.

@@ -129,6 +129,40 @@ func (p *Probe) Ground(position geom.Vec2) float64 {
 	return geom.Lerp(geom.Lerp(at(x0, y0), at(x1, y0), fx), geom.Lerp(at(x0, y1), at(x1, y1), fx), fy)
 }
 
+// Surface is the elevation of what is seen at a position in 3D, in meters:
+// the mesh itself (not the heightmap, whose pixels only sample it), or the
+// water surface, if higher. NaN outside of the mesh.
+func (p *Probe) Surface(position geom.Vec2) float64 {
+	w := p.w
+	v := p.closest(position)
+	if v < 0 {
+		return math.NaN()
+	}
+	ground := math.NaN()
+	for _, around := range append([]int32{v}, w.Mesh.Neighbours[v]...) {
+		for _, t := range w.Mesh.VertexTriangles[around] {
+			triangle := w.Mesh.Triangles[t]
+			points := w.Mesh.Points
+			a, b, c := geom.Barycentric(points[triangle[0]], points[triangle[1]], points[triangle[2]], position)
+			const epsilon = -1e-9
+			if a >= epsilon && b >= epsilon && c >= epsilon {
+				ground = a*w.Elevation[triangle[0]] + b*w.Elevation[triangle[1]] + c*w.Elevation[triangle[2]]
+				break
+			}
+		}
+		if !math.IsNaN(ground) {
+			break
+		}
+	}
+	if math.IsNaN(ground) {
+		ground = p.Ground(position)
+	}
+	if w.IsWater(v) && w.WaterLevel[v] > ground {
+		return w.WaterLevel[v]
+	}
+	return ground
+}
+
 // closest is the vertex closest to a position, among those of its cell and
 // the neighbouring ones: -1 if none.
 func (p *Probe) closest(position geom.Vec2) int32 {

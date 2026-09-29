@@ -118,3 +118,27 @@ func TestOutlets(t *testing.T) {
 		t.Errorf("%d basins", len(basins))
 	}
 }
+
+func TestSurface(t *testing.T) {
+	w := generate(t, setup(t))
+	probe := NewProbe(w)
+	for v, point := range w.Mesh.Points {
+		if !probe.Inside(point) || v%7 != 0 {
+			continue
+		}
+		surface := probe.Surface(point)
+		want := w.Elevation[v]
+		if w.IsWater(int32(v)) {
+			want = math.Max(want, w.WaterLevel[v])
+		}
+		if math.Abs(surface-want) > 1e-6 {
+			t.Fatalf("at vertex %d: surface %g, want %g", v, surface, want)
+		}
+	}
+	// Between vertices, within their elevations
+	a, b := w.Mesh.Points[0], w.Mesh.Points[w.Mesh.Neighbours[0][0]]
+	middle := geom.Vec2{X: (a.X + b.X) / 2, Y: (a.Y + b.Y) / 2}
+	if s := probe.Surface(middle); math.IsNaN(s) {
+		t.Error("no surface between vertices")
+	}
+}
