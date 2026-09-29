@@ -177,7 +177,7 @@ func (a *app) drawViewMenu() {
 
 	imgui.SeparatorText("Inspect")
 	toggle("Scale bar", "", &settings.ScaleBar)
-	imgui.SetItemTooltip("In the map, in the bottom right corner; in perspective, on the ground, true where it lies")
+	imgui.SetItemTooltip("In the map, in the bottom right corner; in 3D, on the ground, true where it lies")
 	toggle("Information under the cursor", "", &settings.HoverInfo)
 	imgui.SetItemTooltip("Position, terrain, elevation or water depth, drainage, at the top of the window")
 	if measuring := settings.Measuring; imgui.MenuItemBoolPtrV("Measure with rulers", "M", &measuring, true) {

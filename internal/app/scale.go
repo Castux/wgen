@@ -10,7 +10,7 @@ import (
 )
 
 // Scale bars: in the map view, a bar of a round length in the bottom right
-// corner, as on online maps. In perspective, lengths change across the
+// corner, as on online maps. In the 3D view, lengths change across the
 // view: the bar lies on the ground, under a point toward the bottom right
 // (the first on the terrain, from the corner toward the center), level and
 // facing the camera, and follows the relief; it is true there.
@@ -38,7 +38,7 @@ func niceLength(limit float64) float64 {
 }
 
 func (a *app) drawScaleBar() {
-	if !a.settings.ScaleBar || a.world == nil || a.inspect.probe == nil {
+	if !a.settings.ScaleBar || a.settings.View == viewEye || a.world == nil || a.inspect.probe == nil {
 		return
 	}
 	if a.settings.View == viewMap {
@@ -155,7 +155,7 @@ func (a *app) cameraPosition() mgl64.Vec3 {
 
 // distanceTo is the distance from the camera of a 3D view to a map
 // position on the ground, in meters: as it would be without vertical
-// exaggeration.
+// exaggeration. At eye level: from where one stands.
 func (a *app) distanceTo(position geom.Vec2, ground float64) float64 {
 	v := a.terrain
 	camera := a.cameraPosition()

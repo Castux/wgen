@@ -324,16 +324,35 @@ func (a *app) pointOnScreen(p geom.Vec2) (imgui.Vec2, bool) {
 }
 
 // drawHover shows what is under the cursor, at the top of the window.
+//
+// At eye level, two lines: where the eye is, and where the cursor points,
+// with how far.
 func (a *app) drawHover() {
 	point := a.inspect.hover
-	if !a.settings.HoverInfo || point == nil {
+	var lines []string
+	if a.settings.View == viewEye && a.world != nil && a.inspect.probe != nil {
+		v := a.terrain
+		here := a.inspect.probe.At(geom.Vec2{X: v.eye.position.X() + v.width/2, Y: v.eye.position.Y() + v.height/2})
+		if here.Inside {
+			lines = append(lines, "Here:    "+a.describe(&here))
+		}
+		if point != nil {
+			lines = append(lines, "Cursor:  "+a.describe(point)+"  ·  "+formatDistance(a.distanceTo(point.Position, point.Ground))+" away")
+		}
+	} else if point != nil {
+		lines = append(lines, a.describe(point))
+	}
+	if !a.settings.HoverInfo || len(lines) == 0 {
 		return
 	}
+
 	viewWidth, _, _ := a.viewSize()
 	imgui.SetNextWindowPosV(imgui.NewVec2(float32(viewWidth/2), a.menuHeight+8), imgui.CondAlways, imgui.NewVec2(0.5, 0))
 	imgui.SetNextWindowBgAlpha(0.7)
 	if imgui.BeginV("##hover", nil, overlayWindowFlags) {
-		imgui.TextUnformatted(a.describe(point))
+		for _, line := range lines {
+			imgui.TextUnformatted(line)
+		}
 	}
 	imgui.End()
 }
@@ -359,9 +378,6 @@ func (a *app) describe(point *gen.Point) string {
 		if point.Drainage > 0 {
 			parts = append(parts, "drainage "+formatArea(point.Drainage))
 		}
-	}
-	if a.settings.View != viewMap {
-		parts = append(parts, formatDistance(a.distanceTo(point.Position, point.Ground))+" away")
 	}
 	return strings.Join(parts, "  ·  ")
 }

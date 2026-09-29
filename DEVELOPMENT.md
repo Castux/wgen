@@ -327,8 +327,8 @@ Files:
   selecting, clicks told from drags).
 - `profile.go`: the altitude profile window of the selected ruler.
 - `scale.go`: scale bars: a round length, in the corner of the map view;
-  on the ground in perspective, measured where it lies. The distance from
-  the camera, for the information under the cursor.
+  on the ground in 3D, measured where it lies. The distance from the eye,
+  for the information under the cursor at eye level.
 - `pick.go`: between the window and the map: the map position under the
   cursor (in 3D, the mouse ray marched against the heightmap, then
   bisected) and where a map position shows.
