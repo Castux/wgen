@@ -83,10 +83,17 @@ const overlayWindowFlags = imgui.WindowFlagsNoDecoration | imgui.WindowFlagsAlwa
 	imgui.WindowFlagsNoFocusOnAppearing | imgui.WindowFlagsNoNav | imgui.WindowFlagsNoInputs
 
 // drawCues tells what the input does in the current mode, at the bottom
-// of the view: at eye level, while painting or measuring. cueHeight keeps its height,
+// of the view: in 3D, at eye level, while painting or measuring. cueHeight keeps its height,
 // for windows not to hide it.
 func (a *app) drawCues() {
 	var lines []string
+	if a.settings.View == viewOrbit && a.world != nil {
+		if a.settings.Editing {
+			lines = append(lines, "3D: right drag: rotate  ·  Shift+right drag: pan  ·  wheel: zoom  ·  R: reset the view")
+		} else {
+			lines = append(lines, "3D: drag: rotate  ·  right drag or Shift+drag: pan  ·  wheel: zoom  ·  double click: center there  ·  R: reset the view")
+		}
+	}
 	if a.settings.View == viewEye && a.world != nil {
 		lines = append(lines, fmt.Sprintf("Eye level: WASD or arrows move, Shift faster  ·  drag: look around  ·  wheel: speed, %s/s",
 			formatDistance(a.eyeSpeed())))
