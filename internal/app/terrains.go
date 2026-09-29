@@ -93,6 +93,15 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 		case overrideReset:
 			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.CriticalSlope = config.Inherit })
 		}
+		rounding, action := a.overridable(key+"rounding", "Rounding (0-1)", t.Rounding, conf.Simulation.Rounding,
+			t.Rounding != config.Inherit, 0, 1, 0.05,
+			"How rounded the tops are: soil creeping downhill smooths them, as on old mountains. 0: crisp")
+		switch action {
+		case overrideSet:
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Rounding = rounding })
+		case overrideReset:
+			a.setTerrain(conf, t.Name, func(t *config.Terrain) { t.Rounding = config.Inherit })
+		}
 	}
 	if v, done := a.number(key+"erodibility", "Erodibility factor", t.Erodibility, 0, 100, 0.1, false, false,
 		"How easily rivers erode this terrain, relative to the simulation's erodibility: lower is harder rock, steeper valleys"); done && v != t.Erodibility {

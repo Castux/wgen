@@ -63,13 +63,14 @@ type Simulation struct {
 	ErodibilityNoise float64 `json:"erodibilityNoise"` // 0..1: variation of the rock hardness
 	NoiseScale       float64 `json:"noiseScale"`       // km, of that variation
 	FloorSlope       float64 `json:"floorSlope"`       // of the sea and lake floors, meters per meter
+	Rounding         float64 `json:"rounding"`         // 0..1: hillslope diffusion, rounding the tops
 }
 
 // DefaultSimulation are the default simulation parameters.
 var DefaultSimulation = Simulation{
 	UpliftBlur: 30, Erodibility: 2e-6, StreamExponent: 0.5, CriticalSlope: 30,
 	TimeStep: 50, Steps: 300, RefineSteps: 60,
-	ErodibilityNoise: 0.3, NoiseScale: 30, FloorSlope: 0.01,
+	ErodibilityNoise: 0.3, NoiseScale: 30, FloorSlope: 0.01, Rounding: 0,
 }
 
 // withDefaults returns a config with the default map settings and simulation
@@ -132,6 +133,9 @@ func (c *Config) Validate() error {
 	if s.FloorSlope < 0 {
 		add("floorSlope must be positive")
 	}
+	if s.Rounding < 0 || s.Rounding > 1 {
+		add("rounding must be between 0 and 1")
+	}
 
 	if c.Terrain(SeaName) == nil || c.Terrain(LakeName) == nil {
 		add("the sea and lake terrains are required")
@@ -147,6 +151,9 @@ func (c *Config) Validate() error {
 		colors[t.Color] = t.Name
 		if t.Height < 0 || t.Erodibility < 0 {
 			add("terrain %s: height and erodibility must be positive", t.Name)
+		}
+		if r := t.Rounding; r != Inherit && (r < 0 || r > 1) {
+			add("terrain %s: rounding must be between 0 and 1 (or -1, the project's)", t.Name)
 		}
 		if slope := t.CriticalSlope; slope != Inherit && (slope <= 0 || slope >= 90) {
 			add("terrain %s: criticalSlope must be between 0 and 90 degrees (or -1, the project's)", t.Name)
@@ -211,6 +218,7 @@ func (c *Config) Marshal() []byte {
 		fmt.Sprintf("\"erodibilityNoise\": %s", formatNumber(s.ErodibilityNoise)),
 		fmt.Sprintf("\"noiseScale\": %s", formatNumber(s.NoiseScale)),
 		fmt.Sprintf("\"floorSlope\": %s", formatNumber(s.FloorSlope)),
+		fmt.Sprintf("\"rounding\": %s", formatNumber(s.Rounding)),
 	}
 	buf.WriteString("\t\t" + strings.Join(fields, ",\n\t\t") + "\n")
 	buf.WriteString("\t}\n}\n")
@@ -231,6 +239,9 @@ func marshalTerrain(t *Terrain) string {
 	}
 	if t.CriticalSlope != Inherit {
 		fmt.Fprintf(&buf, ", \"criticalSlope\": %s", formatNumber(t.CriticalSlope))
+	}
+	if t.Rounding != Inherit {
+		fmt.Fprintf(&buf, ", \"rounding\": %s", formatNumber(t.Rounding))
 	}
 	if t.Detail != DetailAuto {
 		fmt.Fprintf(&buf, ", \"detail\": %d", t.Detail)

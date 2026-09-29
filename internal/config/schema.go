@@ -58,6 +58,8 @@ func (c *Config) Schema() []Param {
 		number(simulation("noiseScale"), "Variation scale (km)", "Simulation", 1, 1000, 1, ""),
 		number(simulation("floorSlope"), "Sea floor slope", "Simulation", 0, 1, 0.001,
 			"Slope of the sea and lake floors, meters per meter"),
+		number(simulation("rounding"), "Rounding (0-1)", "Simulation", 0, 1, 0.05,
+			"How rounded the tops are: soil creeping downhill smooths them, as on old mountains. 0: crisp"),
 	}
 }
 

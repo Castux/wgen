@@ -549,3 +549,30 @@ func TestTerrainCriticalSlope(t *testing.T) {
 		t.Errorf("mountains barely steep: %.1f°", math.Atan(steepest)*180/math.Pi)
 	}
 }
+
+// Rounding smooths the relief: the land is less rough, at the same summits
+func TestRounding(t *testing.T) {
+	conf := setup(t)
+	crisp := generate(t, conf)
+	rounded := generate(t, patch(t, conf, `{"terrains": {"mountains": {"rounding": 1}, "hills": {"rounding": 1}}}`))
+
+	// Roughness: the mean difference with the neighbours, on land
+	roughness := func(w *World) float64 {
+		sum, count := 0.0, 0
+		for v, neighbours := range w.Mesh.Neighbours {
+			if !w.IsLand(int32(v)) || w.Terrain[v].Name == "plains" {
+				continue
+			}
+			mean := 0.0
+			for _, n := range neighbours {
+				mean += w.Elevation[n]
+			}
+			sum += math.Abs(w.Elevation[v] - mean/float64(len(neighbours)))
+			count++
+		}
+		return sum / float64(count)
+	}
+	if r, c := roughness(rounded), roughness(crisp); r >= 0.9*c {
+		t.Errorf("roughness %g rounded, %g crisp", r, c)
+	}
+}

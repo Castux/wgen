@@ -33,7 +33,17 @@ type simulation struct {
 	uplift      []float64 // meters per year
 	erodibility []float64
 	maxSlope    []float64 // tangent of the critical slope
-	cellArea    []float64 // square meters
+	diffusion   []float64 // of the hillslopes, square meters per year
+
+	// Diffusion, prepared once: the vertices diffusing, their neighbours,
+	// their rates per year, the fastest, and a buffer
+	diffusing           []int32
+	diffusionStart      []int32
+	diffusionNeighbours []int32
+	spread              []float64
+	diffusionRate       float64
+	diffused            []float64
+	cellArea            []float64 // square meters
 
 	metersPerPixel float64
 	areaExponent   float64 // m, of the stream power law
@@ -211,6 +221,7 @@ func (w *World) newSimulation(levelMesh *mesh.Mesh, upliftAt, erodibilityNoise f
 		uplift:           make([]float64, n),
 		erodibility:      make([]float64, n),
 		maxSlope:         make([]float64, n),
+		diffusion:        make([]float64, n),
 		cellArea:         CellAreas(levelMesh),
 		receiver:         make([]int32, n),
 		receiverDistance: make([]float64, n),
@@ -242,6 +253,7 @@ func (w *World) newSimulation(levelMesh *mesh.Mesh, upliftAt, erodibilityNoise f
 			s.active[v] = true
 			s.uplift[v] = upliftAt(p) / 1000
 			s.erodibility[v] = params.Erodibility * terrain.Erodibility * erodibilityNoise(p)
+			s.diffusion[v] = maxDiffusion * terrain.Tops(params)
 		}
 	}
 	return s
@@ -349,6 +361,7 @@ func (s *simulation) run(steps int, timeStep float64) {
 		s.route()
 		s.erode(timeStep)
 		s.collapse()
+		s.diffuse(timeStep)
 		if s.onStep != nil {
 			s.onStep(step)
 		}
@@ -485,6 +498,80 @@ func (s *simulation) erode(dt float64) {
 		}
 		f := s.erodibility[v] * dt * math.Pow(s.drainageArea[v], s.areaExponent) / s.receiverDistance[v]
 		s.elevation[v] = (s.elevation[v] + s.uplift[v]*dt + f*s.elevation[r]) / (1 + f)
+	}
+}
+
+// Hillslope diffusion of a rounding of 1, square meters per year. Real soil
+// creep is slower, but rounds hilltops at the scale of meters: at the
+// scale of the mesh, a kilometer, it must be stronger to show.
+const maxDiffusion = 4.0
+
+// diffuse spreads the land's elevation to its neighbours (hillslope
+// diffusion: soil creeping downhill), which rounds the tops: explicitly,
+// in as many substeps as stability needs, the vertices in parallel (each
+// substep only reads the previous elevations).
+func (s *simulation) diffuse(dt float64) {
+	if s.diffusing == nil {
+		s.prepareDiffusion()
+	}
+	if len(s.diffusing) == 0 {
+		return
+	}
+	// Stable while no vertex moves more than half way to its neighbours'
+	// mean in a substep
+	substeps := max(1, int(math.Ceil(s.diffusionRate*dt/0.5)))
+	share := dt / float64(substeps)
+	for range substeps {
+		copy(s.diffused, s.elevation)
+		parallelRanges(len(s.diffusing), func(start, end int) {
+			for k := start; k < end; k++ {
+				v := s.diffusing[k]
+				neighbours := s.diffusionNeighbours[s.diffusionStart[k]:s.diffusionStart[k+1]]
+				sum := 0.0
+				for _, n := range neighbours {
+					sum += s.elevation[n]
+				}
+				z := s.elevation[v]
+				s.diffused[v] = z + s.spread[k]*share*(sum/float64(len(neighbours))-z)
+			}
+		})
+		s.elevation, s.diffused = s.diffused, s.elevation
+	}
+}
+
+// prepareDiffusion lists the vertices diffusing, with their neighbours of
+// known elevation (compressed: those of the k-th are
+// diffusionNeighbours[diffusionStart[k]:diffusionStart[k+1]]) and their rate
+// per year (the share of the difference with the neighbours' mean they
+// take); and the fastest rate.
+func (s *simulation) prepareDiffusion() {
+	s.diffusing = []int32{}
+	s.diffusionStart = []int32{0}
+	s.diffused = make([]float64, len(s.elevation))
+	for v, d := range s.diffusion {
+		if d == 0 || !s.active[v] {
+			continue
+		}
+		// The Laplacian on a mesh of spacing h: 4 / h² times the difference
+		// with the neighbours' mean
+		spacing, count := 0.0, 0
+		for _, n := range s.mesh.Neighbours[v] {
+			if math.IsNaN(s.elevation[n]) {
+				continue
+			}
+			spacing += s.mesh.Points[v].Dist(s.mesh.Points[n]) * s.metersPerPixel
+			s.diffusionNeighbours = append(s.diffusionNeighbours, n)
+			count++
+		}
+		if count == 0 {
+			continue
+		}
+		spacing /= float64(count)
+		rate := 4 * d / (spacing * spacing)
+		s.diffusing = append(s.diffusing, int32(v))
+		s.diffusionStart = append(s.diffusionStart, int32(len(s.diffusionNeighbours)))
+		s.spread = append(s.spread, rate)
+		s.diffusionRate = math.Max(s.diffusionRate, rate)
 	}
 }
 

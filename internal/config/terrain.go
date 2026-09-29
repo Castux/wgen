@@ -33,6 +33,10 @@ type Terrain struct {
 	// the project's).
 	CriticalSlope float64
 
+	// Rounding of the tops, 0..1: hillslope diffusion (Inherit: the
+	// project's).
+	Rounding float64
+
 	// Number of mesh refinement levels (DetailAuto: all levels on land, one
 	// on water).
 	Detail int
@@ -53,10 +57,18 @@ func (t *Terrain) Slope(s Simulation) float64 {
 	return t.CriticalSlope
 }
 
+// Tops is the terrain's rounding, 0..1: its own, or the project's.
+func (t *Terrain) Tops(s Simulation) float64 {
+	if t.Rounding == Inherit {
+		return s.Rounding
+	}
+	return t.Rounding
+}
+
 // NewTerrain is a terrain of that name, with the default settings: its kind
 // from its name, the project's slopes and erosion, all the detail.
 func NewTerrain(name string, color Color) *Terrain {
-	return &Terrain{Name: name, Color: color, Kind: kindOf(name), Erodibility: 1, CriticalSlope: Inherit, Detail: DetailAuto}
+	return &Terrain{Name: name, Color: color, Kind: kindOf(name), Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
 }
 
 func (t *Terrain) IsWater() bool { return t.Kind != Land }
@@ -67,12 +79,12 @@ func (t *Terrain) Calibrated() bool { return t.Kind == Land && t.Height > 0 }
 
 // Default terrains of new projects
 var (
-	DefaultSea  = Terrain{Name: SeaName, Color: Color{66, 66, 125}, Kind: Sea, Erodibility: 1, CriticalSlope: Inherit, Detail: DetailAuto}
-	DefaultLake = Terrain{Name: LakeName, Color: Color{109, 148, 194}, Kind: Lake, Erodibility: 1, CriticalSlope: Inherit, Detail: DetailAuto}
+	DefaultSea  = Terrain{Name: SeaName, Color: Color{66, 66, 125}, Kind: Sea, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
+	DefaultLake = Terrain{Name: LakeName, Color: Color{109, 148, 194}, Kind: Lake, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
 	DefaultLand = []Terrain{
-		{Name: "plains", Color: Color{135, 168, 81}, Height: 400, Erodibility: 1, CriticalSlope: Inherit, Detail: 1},
-		{Name: "hills", Color: Color{209, 184, 134}, Height: 1500, Erodibility: 1, CriticalSlope: Inherit, Detail: 2},
-		{Name: "mountains", Color: Color{101, 72, 31}, Height: 4500, Erodibility: 1, CriticalSlope: Inherit, Detail: DetailAuto},
+		{Name: "plains", Color: Color{135, 168, 81}, Height: 400, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: 1},
+		{Name: "hills", Color: Color{209, 184, 134}, Height: 1500, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: 2},
+		{Name: "mountains", Color: Color{101, 72, 31}, Height: 4500, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto},
 	}
 )
 

@@ -1,0 +1,21 @@
+{
+	"config": "../assets/example/chasers.json",
+	"region": "mountains",
+	"channelArea": 200,
+	"contours": 250,
+	"crops": {
+		"sw": [60, 1360, 420, 1860],
+		"se": [1080, 1400, 1720, 1820]
+	},
+	"cases": {
+		"map": {}
+	},
+	"variants": {
+		"1-crisp": {},
+		"2-round-0.25": {"terrains": {"mountains": {"rounding": 0.25}}},
+		"3-round-0.5": {"terrains": {"mountains": {"rounding": 0.5}}},
+		"4-round-1": {"terrains": {"mountains": {"rounding": 1}}},
+		"5-slope-20": {"terrains": {"mountains": {"criticalSlope": 20}}},
+		"6-slope-45": {"terrains": {"mountains": {"criticalSlope": 45}}}
+	}
+}
