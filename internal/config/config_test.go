@@ -170,7 +170,7 @@ func TestTerrainSlope(t *testing.T) {
 		"image": "map.png",
 		"terrains": {
 			"plains": { "color": "#87a851", "height": 400 },
-			"cliffs": { "color": "#940a00", "height": 2000, "criticalSlope": 60 }
+			"cliffs": { "color": "#940a00", "height": 2000, "criticalSlope": 60, "upliftBlur": 5 }
 		},
 		"simulation": { "criticalSlope": 25 }
 	}`))
@@ -189,7 +189,10 @@ func TestTerrainSlope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Terrain("plains").CriticalSlope != Inherit || again.Terrain("cliffs").CriticalSlope != 60 {
+	if cliffs := conf.Terrain("cliffs"); cliffs.Ramp(conf.Simulation) != 5 || conf.Terrain("plains").Ramp(conf.Simulation) != conf.Simulation.UpliftBlur {
+		t.Errorf("ramps: cliffs %g, plains %g", cliffs.Ramp(conf.Simulation), conf.Terrain("plains").Ramp(conf.Simulation))
+	}
+	if again.Terrain("plains").CriticalSlope != Inherit || again.Terrain("cliffs").CriticalSlope != 60 || again.Terrain("cliffs").UpliftBlur != 5 {
 		t.Errorf("round trip: %+v, %+v", again.Terrain("plains"), again.Terrain("cliffs"))
 	}
 

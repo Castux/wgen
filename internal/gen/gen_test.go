@@ -582,3 +582,26 @@ func TestSummits(t *testing.T) {
 		t.Error("the sea has a summit")
 	}
 }
+
+// A terrain's uplift ramp overrides the project's: without one, its regions
+// rise at full rate up to their borders
+func TestTerrainUpliftRamp(t *testing.T) {
+	lowestRamp := func(conf *config.Config) float64 {
+		w := generate(t, conf)
+		f := w.newUpliftField()
+		lowest := 1.0
+		for i, region := range f.region {
+			if region >= 0 && f.regionTerrain[region].Name == "mountains" {
+				lowest = math.Min(lowest, f.ramp[i])
+			}
+		}
+		return lowest
+	}
+	conf := setup(t)
+	if ramped := lowestRamp(conf); ramped >= 1 {
+		t.Fatalf("mountains with the project's ramp: lowest factor %g", ramped)
+	}
+	if abrupt := lowestRamp(patch(t, conf, `{"terrains": {"mountains": {"upliftBlur": 0}}}`)); abrupt != 1 {
+		t.Errorf("mountains without a ramp: lowest factor %g, want 1", abrupt)
+	}
+}

@@ -152,6 +152,9 @@ func (c *Config) Validate() error {
 		if t.Height < 0 || t.Erodibility < 0 {
 			add("terrain %s: height and erodibility must be positive", t.Name)
 		}
+		if b := t.UpliftBlur; b != Inherit && b < 0 {
+			add("terrain %s: upliftBlur must be positive (or -1, the project's)", t.Name)
+		}
 		if r := t.Rounding; r != Inherit && (r < 0 || r > 1) {
 			add("terrain %s: rounding must be between 0 and 1 (or -1, the project's)", t.Name)
 		}
@@ -242,6 +245,9 @@ func marshalTerrain(t *Terrain) string {
 	}
 	if t.Rounding != Inherit {
 		fmt.Fprintf(&buf, ", \"rounding\": %s", formatNumber(t.Rounding))
+	}
+	if t.UpliftBlur != Inherit {
+		fmt.Fprintf(&buf, ", \"upliftBlur\": %s", formatNumber(t.UpliftBlur))
 	}
 	if t.Detail != DetailAuto {
 		fmt.Fprintf(&buf, ", \"detail\": %d", t.Detail)

@@ -199,6 +199,8 @@ each:
 - Rounding (0 to 1): how rounded the tops are: soil creeping downhill
   smooths them, as on old mountains.
 - Erosion (×): how deep rivers cut, times the project's river erosion.
+- Uplift ramp (km): how gradually it rises from the lower land around it:
+  longer for broad ranges, shorter for abrupt ones.
 
   Until a terrain sets its own, these show the project's values, grayed
   out; "reset" takes the project's again.
@@ -304,7 +306,8 @@ macOS, `~/.config/wgen` on Linux), with its settings.
 		"lake": { "color": "#6d94c2", "detail": 1 },
 		// land: height, the target summit height in meters; optionally,
 		// overriding the project's: criticalSlope (degrees), rounding (0 to
-		// 1), erodibility (a factor of the project's, default 1)
+		// 1), upliftBlur (km), erodibility (a factor of the project's,
+		// default 1)
 		"plains": { "color": "#87a851", "height": 400, "detail": 1 },
 		"hills": { "color": "#d1b886", "height": 1500, "detail": 2, "rounding": 0.6 },
 		"mountains": { "color": "#65481f", "height": 4500, "criticalSlope": 40 }

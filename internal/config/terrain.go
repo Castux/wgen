@@ -37,6 +37,10 @@ type Terrain struct {
 	// project's).
 	Rounding float64
 
+	// Uplift ramp, km: the uplift ramps up over this distance from the
+	// border with lower terrains (Inherit: the project's).
+	UpliftBlur float64
+
 	// Number of mesh refinement levels (DetailAuto: all levels on land, one
 	// on water).
 	Detail int
@@ -57,6 +61,14 @@ func (t *Terrain) Slope(s Simulation) float64 {
 	return t.CriticalSlope
 }
 
+// Ramp is the terrain's uplift ramp, km: its own, or the project's.
+func (t *Terrain) Ramp(s Simulation) float64 {
+	if t.UpliftBlur == Inherit {
+		return s.UpliftBlur
+	}
+	return t.UpliftBlur
+}
+
 // Tops is the terrain's rounding, 0..1: its own, or the project's.
 func (t *Terrain) Tops(s Simulation) float64 {
 	if t.Rounding == Inherit {
@@ -68,7 +80,7 @@ func (t *Terrain) Tops(s Simulation) float64 {
 // NewTerrain is a terrain of that name, with the default settings: its kind
 // from its name, the project's slopes and erosion, all the detail.
 func NewTerrain(name string, color Color) *Terrain {
-	return &Terrain{Name: name, Color: color, Kind: kindOf(name), Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
+	return &Terrain{Name: name, Color: color, Kind: kindOf(name), Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, UpliftBlur: Inherit, Detail: DetailAuto}
 }
 
 func (t *Terrain) IsWater() bool { return t.Kind != Land }
@@ -134,8 +146,8 @@ func landTerrain(name string, color Color, height float64, detail int, character
 
 // Default terrains of new projects
 var (
-	DefaultSea  = Terrain{Name: SeaName, Color: Color{66, 66, 125}, Kind: Sea, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
-	DefaultLake = Terrain{Name: LakeName, Color: Color{109, 148, 194}, Kind: Lake, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, Detail: DetailAuto}
+	DefaultSea  = Terrain{Name: SeaName, Color: Color{66, 66, 125}, Kind: Sea, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, UpliftBlur: Inherit, Detail: DetailAuto}
+	DefaultLake = Terrain{Name: LakeName, Color: Color{109, 148, 194}, Kind: Lake, Erodibility: 1, CriticalSlope: Inherit, Rounding: Inherit, UpliftBlur: Inherit, Detail: DetailAuto}
 	DefaultLand = []Terrain{
 		landTerrain("plains", Color{135, 168, 81}, 400, 1, "Plains"),
 		landTerrain("hills", Color{209, 184, 134}, 1500, 2, "Hills"),

@@ -180,6 +180,9 @@ func (a *app) drawCharacter(conf *config.Config, t *config.Terrain) {
 	edit("Rounding", "rounding", t.Rounding, project.Rounding, t.Rounding != config.Inherit, 0, 1, 0.05,
 		"How rounded the tops are, 0 to 1: soil creeping downhill smooths them, as on old mountains. 0: crisp",
 		func(t *config.Terrain, v float64) { t.Rounding = v })
+	edit("Uplift ramp (km)", "ramp", t.UpliftBlur, project.UpliftBlur, t.UpliftBlur != config.Inherit, 0, 500, 1,
+		"How gradually this terrain rises from lower land around it: longer for broad ranges, shorter for abrupt ones",
+		func(t *config.Terrain, v float64) { t.UpliftBlur = v })
 	// A multiplier of the project's: 1 is the project's
 	edit("Erosion (×)", "erosion", t.Erodibility, 1, t.Erodibility != 1, 0, 100, 0.1,
 		"How deep rivers cut, times the project's river erosion: more for soft rock and gorges, less for hard rock",

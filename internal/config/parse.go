@@ -104,6 +104,7 @@ type rawTerrain struct {
 	Erodibility   *float64 `json:"erodibility"`
 	CriticalSlope *float64 `json:"criticalSlope"`
 	Rounding      *float64 `json:"rounding"`
+	UpliftBlur    *float64 `json:"upliftBlur"`
 	Detail        *int     `json:"detail"`
 }
 
@@ -146,6 +147,9 @@ func (c *Config) applyTerrains(data json.RawMessage, full bool) error {
 		}
 		if raw.Rounding != nil {
 			t.Rounding = *raw.Rounding
+		}
+		if raw.UpliftBlur != nil {
+			t.UpliftBlur = *raw.UpliftBlur
 		}
 		if raw.Detail != nil {
 			t.Detail = *raw.Detail

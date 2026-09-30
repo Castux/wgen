@@ -68,7 +68,9 @@ func (w *World) newUpliftField() *upliftField {
 
 	terrainAt := w.landTerrainGrid(f)
 	f.findRegions(terrainAt)
-	radius := w.Config.Simulation.UpliftBlur * 1000 / w.MetersPerPixel / cellSize // cells
+	// Each terrain's ramp, in cells
+	params := w.Config.Simulation
+	radius := func(t *config.Terrain) float64 { return t.Ramp(params) * 1000 / w.MetersPerPixel / cellSize }
 	f.computeRamps(terrainAt, radius)
 	return f
 }
@@ -120,9 +122,9 @@ func (f *upliftField) findRegions(terrainAt []*config.Terrain) {
 }
 
 // computeRamps sets the uplift factor of each land cell, from its distance to
-// lower terrain or water, per rank: rampFloor at the border, 1 beyond radius
-// (cells).
-func (f *upliftField) computeRamps(terrainAt []*config.Terrain, radius float64) {
+// lower terrain or water, per rank: rampFloor at the border, 1 beyond its
+// terrain's radius (cells).
+func (f *upliftField) computeRamps(terrainAt []*config.Terrain, radiusOf func(*config.Terrain) float64) {
 	f.ramp = make([]float64, len(terrainAt))
 	ranks := map[float64]bool{}
 	for _, t := range f.regionTerrain {
@@ -144,7 +146,7 @@ func (f *upliftField) computeRamps(terrainAt []*config.Terrain, radius float64) 
 				continue
 			}
 			x := 1.0
-			if radius > 0 {
+			if radius := radiusOf(t); radius > 0 {
 				x = math.Min(1, dist[i]/radius)
 			}
 			x = x * x * (3 - 2*x) // smoothstep
