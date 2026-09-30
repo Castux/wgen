@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/AllenDang/cimgui-go/imgui"
@@ -43,10 +44,7 @@ func (a *app) drawTerrains(conf *config.Config) {
 		imgui.PopID()
 	}
 
-	if imgui.Button("Add terrain") {
-		a.addTerrain(conf)
-	}
-	imgui.SetItemTooltip("A new land terrain, painted with its own color")
+	a.drawTerrainButtons(conf, brush)
 
 	if brush != nil {
 		imgui.SeparatorText("Selected: " + brush.Name)
@@ -91,16 +89,47 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 		a.drawCharacter(conf, t)
 	}
 	a.drawDetail(conf, t)
+}
 
-	if t.Kind == config.Land {
-		land := conf.Land()
-		imgui.BeginDisabledV(len(land) < 2)
-		if imgui.ButtonV("Remove terrain", fullWidth()) {
-			a.removeTerrain(conf, t)
-		}
-		imgui.EndDisabled()
-		imgui.SetItemTooltip("Its pixels become the first other land terrain. Can't be undone")
+// drawTerrainButtons adds a terrain, and moves or removes the selected
+// one. The sea and lakes stay first: land terrains move among themselves.
+func (a *app) drawTerrainButtons(conf *config.Config, selected *config.Terrain) {
+	if imgui.Button("Add") {
+		a.addTerrain(conf)
 	}
+	imgui.SetItemTooltip("A new land terrain, painted with its own color")
+
+	land := selected != nil && selected.Kind == config.Land
+	index := slices.Index(conf.Terrains, selected)
+	button := func(label, tooltip string, enabled bool) bool {
+		imgui.SameLine()
+		imgui.BeginDisabledV(!enabled)
+		clicked := imgui.Button(label)
+		imgui.EndDisabled()
+		tooltipEvenDisabled(tooltip)
+		return clicked
+	}
+	if button("Move up", "Up the list", land && index > 0 && conf.Terrains[index-1].Kind == config.Land) {
+		a.moveTerrain(conf, selected, -1)
+	}
+	if button("Move down", "Down the list", land && index < len(conf.Terrains)-1) {
+		a.moveTerrain(conf, selected, 1)
+	}
+	if button("Remove", "Its pixels become the first other land terrain. Can't be undone", land && len(conf.Land()) > 1) {
+		a.removeTerrain(conf, selected)
+	}
+}
+
+// moveTerrain moves a terrain up or down the list.
+func (a *app) moveTerrain(conf *config.Config, t *config.Terrain, delta int) {
+	a.editConfig(conf, func(c *config.Config) {
+		i := slices.IndexFunc(c.Terrains, func(other *config.Terrain) bool { return other.Name == t.Name })
+		j := i + delta
+		if i < 0 || j < 0 || j >= len(c.Terrains) {
+			return
+		}
+		c.Terrains[i], c.Terrains[j] = c.Terrains[j], c.Terrains[i]
+	})
 }
 
 // drawCharacter is the kind of landform of a land terrain: a choice of
@@ -108,7 +137,7 @@ func (a *app) drawTerrainSettings(conf *config.Config, t *config.Terrain) {
 // which it can take from the project.
 func (a *app) drawCharacter(conf *config.Config, t *config.Terrain) {
 	key := "terrain." + t.Name + "."
-	const fromProject = "The project's"
+	const fromProject = "Project default"
 	inherits := t.CriticalSlope == config.Inherit && t.Rounding == config.Inherit && t.Erodibility == 1
 	current := t.CharacterOf()
 	shown := current

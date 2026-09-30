@@ -128,7 +128,8 @@ func (a *app) drawQuality(conf *config.Config) {
 	if shown == "" {
 		shown = "Custom"
 	}
-	if imgui.BeginCombo("Quality", shown) {
+	// Not "Quality": the ID of its group's header
+	if imgui.BeginCombo("Preset", shown) {
 		for _, q := range config.Qualities {
 			label := q.Name
 			if estimate := a.estimate(conf, q); estimate != "" {

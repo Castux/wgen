@@ -193,7 +193,7 @@ each:
   | Badlands | 38° | 0 | ×5 | soft rock, deeply cut by many small valleys |
   | Plains | 12° | 0.8 | ×0.5 | gentle, softly undulating |
 
-  or the project's (its Landscape settings). New projects start with
+  or Project default (the project's Landscape settings). New projects start with
   plains, hills and young mountains.
 - Slopes (°): the steepest slopes: hillslopes steeper than this collapse.
 - Rounding (0 to 1): how rounded the tops are: soil creeping downhill
