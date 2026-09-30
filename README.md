@@ -39,7 +39,9 @@ projects. It shows whenever no project is open; Help, Welcome shows it
 again. From the File menu:
 
 - New map: an empty sea or a random island, of a chosen size in pixels
-  (powers of two, 256 to 16384) and a real width in kilometers.
+  (powers of two, 256 to 16384) and a real width in kilometers, with the
+  usual terrains (plains, hills and mountains) or those of the current
+  project.
 - Open: a project (`.json`), or an image (`.png`, `.jpg`): with a project
   of the same name next to it, that project; else it becomes a new one (see
   Importing an image). Files can also be dropped on the window.
@@ -166,6 +168,8 @@ and the middle one zooms.
   hard square. `[` and `]` change the size.
 - Lock shoreline: land brushes leave the sea and lakes alone, and water
   brushes the land, to repaint the relief without moving the coasts.
+- Painting opacity: how much the painted map shows over the landscape.
+  The brush size is in pixels of the map, and in km next to it.
 - Each stroke regenerates the landscape: a coarse preview shows first, and
   a new stroke cancels the generation in progress.
 
@@ -174,8 +178,10 @@ and the middle one zooms.
 The Terrains section of the panel lists the terrains, which are also the
 brush colors. The sea and lakes are always there: the sea is at sea level,
 and lakes are flat, at the level of their lowest shore. Land terrains can be
-added, removed, renamed, and recolored (which recolors the map too). For
-each:
+added, renamed, recolored (which recolors the map too), moved up and down
+the list (the order of the project file), and removed (their pixels become
+the first other land terrain; this can't be undone). The buttons under the
+list act on the selected terrain. For each:
 
 - Target height: the summits of each region of this terrain reach about
   this height, in meters. Most of a region is lower, and its valleys much
@@ -194,8 +200,9 @@ each:
   | Badlands | 38° | 0 | ×5 | soft rock, deeply cut by many small valleys |
   | Plains | 12° | 0.8 | ×0.5 | gentle, softly undulating |
 
-  or Project default (the project's Landscape settings). New projects start with
-  plains, hills and young mountains.
+  or Project default (the project's Landscape settings), or Custom once
+  the settings are changed by hand. New projects start with plains, hills
+  and young mountains.
 - Slopes (°): the steepest slopes: hillslopes steeper than this collapse.
 - Rounding (0 to 1): how rounded the tops are: soil creeping downhill
   smooths them, as on old mountains.
@@ -204,7 +211,9 @@ each:
   longer for broad ranges, shorter for abrupt ones.
 
   Until a terrain sets its own, these show the project's values, grayed
-  out; "reset" takes the project's again.
+  out and marked "(project)"; editing one sets the terrain's own, and
+  "reset" takes the project's again. The uplift ramp isn't part of the
+  character.
 - Mesh: how fine the mesh is on it, a spacing: automatic is the finest on
   land, the coarsest on water. Finer gives finer valleys, and is slower.
 
@@ -243,10 +252,12 @@ The project's parameters, in the panel (hover them for help):
 - Map: the map width, in km, which sets the scale of everything, and the
   seed, the randomness of the mesh and of the rock hardness (another seed,
   another landscape of the same map).
-- Quality: Draft (quick, to try things), Normal or Fine (for the final
-  landscape), with an estimate of the time from the last generation, and
-  what they set: the resolution (the finest mesh spacing, in meters, 1000 m
-  by default), refinement levels, and time steps.
+- Quality: a preset, Draft (quick, to try things), Normal or Fine (for the
+  final landscape), each with an estimate of its time from the last
+  generation (whose size and time show under it), and what they set, which
+  can also be edited (the preset then shows Custom): the resolution (the
+  finest mesh spacing, in meters, 1000 m by default), refinement levels, and
+  time steps.
 - Landscape: the project's slopes, rounding and river erosion (×1 is the
   usual), which the terrains take unless they set their own, and the slope
   of the sea floor.
@@ -257,6 +268,7 @@ The project's parameters, in the panel (hover them for help):
 The Simulation menu has "Watch the simulation", which shows the landscape
 as it is simulated, at each generation: the land rising from the sea,
 rivers cutting in, the heights being calibrated, then each finer mesh.
+"Time steps per frame" sets how fast it goes.
 
 The project file and its map are watched: edit them in another program, and
 the app follows.
@@ -373,3 +385,7 @@ go build -o bin/wgen ./cmd/wgen
 The first build takes several minutes (compiling the ImGui bindings), later
 ones a few seconds. `scripts/package.sh` builds the distributed packages.
 See [DEVELOPMENT.md](DEVELOPMENT.md) for more.
+
+## License
+
+wgen is released under the MIT license: see [LICENSE](LICENSE).

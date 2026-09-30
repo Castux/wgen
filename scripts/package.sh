@@ -34,7 +34,7 @@ mkdir -p "$out"
 examples() {
 	mkdir -p "$1/example"
 	cp assets/example/chasers.json assets/example/chasers.png "$1/example/"
-	cp README.md "$1/"
+	cp README.md LICENSE "$1/"
 }
 
 case $os in
