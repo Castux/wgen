@@ -309,11 +309,14 @@ func TestPreviewAndSupersede(t *testing.T) {
 	}
 }
 
-func TestWatchRerun(t *testing.T) {
+// Watching, a change of the simulation shows it in steps
+func TestWatch(t *testing.T) {
 	h := setup(t)
 	h.s.Engine.SetWatch(20)
 	v0 := h.s.Engine.State().Version
-	h.s.Engine.Rerun()
+	if err := h.s.Patch([]byte(`{"simulation": {"erodibility": 3e-6}}`)); err != nil {
+		t.Fatal(err)
+	}
 
 	var progress []string
 	st := h.waitFor(func(st State) bool {
@@ -326,6 +329,6 @@ func TestWatchRerun(t *testing.T) {
 		t.Errorf("progress: %v", progress)
 	}
 	if st.Error != "" || st.Preview {
-		t.Errorf("after rerun: %+v", st)
+		t.Errorf("after watching: %+v", st)
 	}
 }

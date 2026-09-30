@@ -190,10 +190,6 @@ func (a *app) drawViewMenu() {
 	}
 
 	imgui.Separator()
-	if imgui.MenuItemBoolV("Compare with the previous result", "C", a.compare.on, true) {
-		a.toggleCompare()
-	}
-	imgui.SetItemTooltip("In the map: the landscape before the last change left of a line, the current one right of it; drag the line")
 	if imgui.MenuItemBoolV("Reset the view", "R", false, true) {
 		a.resetView()
 	}
@@ -219,10 +215,4 @@ func (a *app) drawSimulationMenu(state engine.State) {
 	if changed || edited {
 		a.setSettings(settings)
 	}
-
-	imgui.Separator()
-	if imgui.MenuItemBoolV("Replay the simulation", "", false, !state.Busy && a.world != nil) {
-		a.replay()
-	}
-	imgui.SetItemTooltip("Run it again, to watch it")
 }

@@ -121,8 +121,8 @@ meshes, which depend on the terrains' details), terrain (assign terrains,
 simulate, water depth), raster. `World.Update` reruns the pipeline from the
 first stage a config change affects (`gen.ChangedStage`), and returns a new
 world sharing the unchanged data with the old one. `World.ReloadImage` does
-the same for a new map image, `World.WithMap` for a map in memory (the
-editor's), and `World.Rerun` reruns the simulation, to watch it.
+the same for a new map image, and `World.WithMap` for a map in memory (the
+editor's).
 
 The random generator is seeded by the config's `seed`, with a separate stream
 per use, so that runs are reproducible and a stage's randomness doesn't
@@ -204,7 +204,7 @@ the base of incremental updates, apart from the displayed one.
 
 Requests are a config (`SetConfig`), reloading the image file
 (`ReloadImage`), a map in memory (`SetMap`, the editor's), which
-replaces the file's until it is reloaded, a rerun (`Rerun`), or a whole new
+replaces the file's until it is reloaded, or a whole new
 project (`Replace`: a config and a map, generated from scratch). `SavedAs`
 records that the project was saved, possibly under a new path: the current
 world is rebased on the new paths instead of being regenerated.
@@ -329,9 +329,6 @@ Files:
 - `inspect.go`: the information under the cursor, and rulers (drawing,
   selecting, clicks told from drags).
 - `profile.go`: the altitude profile window of the selected ruler.
-- `compare.go`: comparing with the previous result, in the map: the last
-  complete world before the current, rendered in its own image slot, drawn
-  by the map shader left of the line.
 - `scale.go`: scale bars: a round length, in the corner of the map view;
   on the ground in 3D, measured where it lies. The distance from the eye,
   for the information under the cursor at eye level.
@@ -354,7 +351,6 @@ Environment variables, for development:
   from vertical and turn in degrees.
 - `WGEN_DIALOG=new|open|export|help`: open that dialog at startup.
 - `WGEN_AUTOSAVE=seconds`: autosave at that interval instead of a minute.
-- `WGEN_COMPARE=1`: compare with the previous result at startup.
 - `WGEN_CLICK=x,y;x,y...`: click there (window coordinates) after a
   second, one click every 10 frames (the same point twice is a double
   click): to open a menu, or draw a ruler.

@@ -205,16 +205,6 @@ func (a *app) metersPerPixel(conf *config.Config) float64 {
 	return conf.MetersPerPixel(width)
 }
 
-// replay runs the simulation again, watching it.
-func (a *app) replay() {
-	if !a.settings.Watch {
-		settings := a.settings
-		settings.Watch = true
-		a.setSettings(settings)
-	}
-	a.session.Engine.Rerun()
-}
-
 // patch applies a parameter change, such as ["simulation", "erodibility"] =
 // 1e-6, as the partial config {"simulation": {"erodibility": 1e-6}}.
 func (a *app) patch(path []string, value any) {

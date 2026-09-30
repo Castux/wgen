@@ -69,12 +69,11 @@ type request struct {
 	conf       *config.Config // a new config
 	image      bool           // reload the image file
 	paintedMap *Map           // a map in memory
-	rerun      bool           // generate again, to watch the simulation
 	fresh      bool           // don't start from the current world: another project
 }
 
 func (r request) empty() bool {
-	return r.conf == nil && !r.image && r.paintedMap == nil && !r.rerun && !r.fresh
+	return r.conf == nil && !r.image && r.paintedMap == nil && !r.fresh
 }
 
 func NewEngine() *Engine {
@@ -202,15 +201,6 @@ func (e *Engine) SetWatch(steps int) {
 	e.mu.Lock()
 	e.watchSteps = steps
 	e.mu.Unlock()
-}
-
-// Rerun requests generating again with the same config, to watch the
-// simulation.
-func (e *Engine) Rerun() {
-	e.mu.Lock()
-	e.pending.rerun = true
-	e.mu.Unlock()
-	e.signal()
 }
 
 // SetError reports an error that happened outside of generation (such as
@@ -345,9 +335,6 @@ func (j job) generate(options gen.Options) (next *gen.World, stage gen.Stage, er
 		}
 		next, stage, err = base.WithMap(j.latest, j.paintedMap.Width, j.paintedMap.Height, j.paintedMap.Pixels, options)
 
-	case j.rerun && j.conf == nil && !j.image && j.base != nil:
-		next, stage, err = j.base.Rerun(options)
-
 	case j.base == nil:
 		// Nothing generated yet (or the first generation failed): full run
 		stage = gen.StageImage
@@ -381,8 +368,6 @@ func (e *Engine) finish(done request, next *gen.World, stage gen.Stage, err erro
 			e.pending.paintedMap = done.paintedMap
 		}
 		e.pending.image = e.pending.image || done.image
-		// Any other request generates again anyway
-		e.pending.rerun = e.pending.rerun || (done.rerun && e.pending.empty())
 		e.pending.fresh = e.pending.fresh || done.fresh
 		return
 	}

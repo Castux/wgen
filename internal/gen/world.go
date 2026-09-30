@@ -184,16 +184,6 @@ func (w *World) WithMap(conf *config.Config, width, height int, paintedMap []con
 	return result, stage, err
 }
 
-// Rerun generates the world again from the simulation, with the same
-// config: to watch it again.
-func (w *World) Rerun(opts Options) (*World, Stage, error) {
-	if w.Config == nil || w.Mesh == nil {
-		return nil, StageImage, errors.New("nothing generated yet")
-	}
-	next, err := w.run(w.Config, StageSimulation, opts)
-	return next, StageSimulation, err
-}
-
 // mapStage is the first stage to rerun when the map changed from the
 // old world's.
 func (w *World) mapStage(old *World) Stage {

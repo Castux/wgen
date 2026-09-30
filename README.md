@@ -77,7 +77,6 @@ or quitting, removes the copy.
 | `L` | Lock the shoreline |
 | `M` | Measure with rulers |
 | `B` | Rivers colored by drainage basin, or blue |
-| `C` | Map: compare with the previous result |
 | `Enter`, `Escape`, `Delete` | Finish the ruler, deselect it, delete it |
 | `Ctrl+Z`, `Ctrl+Y` | Undo, redo painting |
 | `Ctrl+N`, `O`, `S`, `Shift+S`, `E`, `Q` | New, open, save, save as, export, quit |
@@ -252,15 +251,11 @@ The project's parameters, in the panel (hover them for help):
   of the sea floor.
 - Advanced: the uplift ramp (how gradually ranges rise from the lower land
   around them), the time step, the river size exponent (of the stream
-  power law), the variation of the rock hardness and its scale. The Simulation menu has "Watch the simulation", which shows the
-landscape as it is simulated: the land rising from the sea, rivers cutting
-in, the heights being calibrated, then each finer mesh. "Replay the
-simulation" runs it again, to watch it.
+  power law), the variation of the rock hardness and its scale.
 
-View, Compare with the previous result (`C`), in the map view, shows the
-landscape before the last change on the left of a line, the current one on
-its right: drag the line to compare. The previous result is the last
-complete one: after a stroke or a changed setting, the landscape before it.
+The Simulation menu has "Watch the simulation", which shows the landscape
+as it is simulated, at each generation: the land rising from the sea,
+rivers cutting in, the heights being calibrated, then each finer mesh.
 
 The project file and its map are watched: edit them in another program, and
 the app follows.

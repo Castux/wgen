@@ -49,7 +49,6 @@ const (
 	shortcutReset
 	shortcutMeasure
 	shortcutBasin
-	shortcutCompare
 	shortcutFinishRuler // Escape, Enter
 	shortcutDeleteRuler // Delete, Backspace
 )
@@ -69,7 +68,6 @@ var (
 		"]": shortcutLarger,
 		"m": shortcutMeasure,
 		"b": shortcutBasin,
-		"c": shortcutCompare,
 	}
 	// Keys without names, without modifiers
 	namelessKeys = map[glfw.Key]shortcut{
@@ -271,8 +269,6 @@ func (a *app) applyShortcuts() {
 			change(func(settings *Settings) { settings.setMeasuring(!settings.Measuring) })
 		case shortcutBasin:
 			change(func(settings *Settings) { settings.BasinColors = !settings.BasinColors })
-		case shortcutCompare:
-			a.toggleCompare()
 		case shortcutFinishRuler:
 			a.finishRuler()
 		case shortcutDeleteRuler:
@@ -285,11 +281,7 @@ func (a *app) applyShortcuts() {
 func (a *app) handleMouse() {
 	io := imgui.CurrentIO()
 
-	// The comparison's line takes the left button near it; painting takes
-	// it; measuring its clicks
-	if a.compareInput() {
-		return
-	}
+	// Painting takes the left button; measuring its clicks
 	painting := a.settings.painting()
 	if a.paintInput() {
 		return

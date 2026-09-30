@@ -376,7 +376,7 @@ codebase (S: hours, M: a few days, L: weeks).
 | 13 | Map styles and cartographic layers (hillshade, smoothed rivers, contours) | 6 | Medium | M |
 | 14 | Timeline of the simulation, GIF/MP4 export | 8 | Medium | M |
 | 15 | Draft mode, cost estimates, progress bar | 2, 9 | Medium | M |
-| 16 | Achieved height per terrain, compare snapshots (done) | 4 | Medium | M |
+| 16 | Achieved height per terrain (done), compare snapshots (tried, removed) | 4 | Medium | M |
 | 17 | Native file dialogs, macOS notarization and document opening | cross | Medium | M |
 | 18 | glTF export, simplified or tiled meshes | 5 | Medium | M |
 | 19 | River and lake design inputs | new | High | L |

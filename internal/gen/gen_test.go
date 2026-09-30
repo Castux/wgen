@@ -425,14 +425,6 @@ func TestWatch(t *testing.T) {
 	}
 }
 
-func TestRerun(t *testing.T) {
-	w := generate(t, setup(t))
-	again, stage, err := w.Rerun(Options{})
-	if err != nil || stage != StageSimulation || !equalNaN(w.Elevation, again.Elevation) {
-		t.Errorf("rerun: stage %v, err %v", stage, err)
-	}
-}
-
 // A map given in memory gives the same world as from the file.
 func TestWithMap(t *testing.T) {
 	conf := setup(t)

@@ -104,13 +104,6 @@ func (a *app) drawCues() {
 		default:
 			lines = append(lines, "Map: drag: pan  ·  wheel: zoom  ·  double click or R: fit the map")
 		}
-		if a.compare.on {
-			if a.comparing() {
-				lines = append(lines, "Comparing, before the last change on the left: drag the line  ·  C: stop")
-			} else {
-				lines = append(lines, "Comparing: after the next change, the landscape before it shows on the left  ·  C: stop")
-			}
-		}
 	}
 	if a.settings.View == viewEye && a.world != nil {
 		lines = append(lines, fmt.Sprintf("Eye level: WASD or arrows move, Shift faster  ·  drag: look around  ·  wheel: speed, %s/s",

@@ -14,9 +14,6 @@ type mapView struct {
 
 	paint        texture // the edited map
 	paintOpacity float64 // 0 hides it
-
-	previous texture // the previous result, when comparing
-	split    float64 // the previous shows left of it, 0..1; negative when not comparing
 }
 
 // Background around the map
@@ -47,16 +44,11 @@ uniform vec3 background;
 uniform bool hasPaint;
 uniform sampler2D paint;
 uniform float paintOpacity;
-uniform bool comparing;
-uniform sampler2D previous; // left of split
-uniform float split;
 
 out vec4 fragColor;
 
 void main() {
 	vec3 color = hasImage ? texture(image, vUV).rgb : background;
-	if (comparing && vUV.x < split)
-		color = texture(previous, vUV).rgb;
 	if (hasPaint)
 		color = mix(color, texture(paint, vUV).rgb, paintOpacity);
 	fragColor = vec4(color, 1.0);
@@ -102,11 +94,6 @@ func (v *mapView) draw(viewWidth, viewHeight, pixelRatio float64) {
 	if hasPaint {
 		v.paint.setSmooth(camera.zoom*pixelRatio < float64(v.paint.width)/camera.width*2)
 	}
-	// (setSmooth binds: before binding them to their units)
-	comparing := v.split >= 0 && v.previous.id != 0
-	if comparing {
-		v.previous.setSmooth(camera.zoom*pixelRatio < float64(v.previous.width)/camera.width*2)
-	}
 
 	x0, y0 := camera.offset.X(), camera.offset.Y()
 	x1, y1 := x0+camera.width*camera.zoom, y0+camera.height*camera.zoom
@@ -121,12 +108,6 @@ func (v *mapView) draw(viewWidth, viewHeight, pixelRatio float64) {
 	gl.Uniform3f(p.location("background"), mapBackground[0], mapBackground[1], mapBackground[2])
 	if v.image.id != 0 {
 		v.image.bind(0)
-	}
-	p.setInt("comparing", boolInt(comparing))
-	p.setInt("previous", 3)
-	p.setFloat("split", v.split)
-	if comparing {
-		v.previous.bind(3)
 	}
 	p.setInt("hasPaint", boolInt(hasPaint))
 	p.setInt("paint", 1)
