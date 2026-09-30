@@ -113,21 +113,22 @@ func New(conf *config.Config) (*World, error) {
 
 // ChangedStage returns the first stage that must be rerun when going from the
 // old config to the new one. The mesh depends on the terrains (their
-// details), the simulation on everything else.
+// details) and on its spacing in pixels (the resolution and the map width),
+// the simulation on everything else.
 func ChangedStage(old, conf *config.Config) Stage {
 	switch {
 	case old == nil || conf.ImagePath() != old.ImagePath():
 		return StageImage
 
 	case conf.Resolution != old.Resolution ||
+		conf.MapWidth != old.MapWidth ||
 		conf.Seed != old.Seed ||
 		conf.Levels != old.Levels ||
 		!config.TerrainMeshesEqual(conf, old):
 		return StageMesh
 
 	case !config.TerrainsEqual(conf, old) ||
-		conf.Simulation != old.Simulation ||
-		conf.MapWidth != old.MapWidth:
+		conf.Simulation != old.Simulation:
 		return StageSimulation
 	}
 

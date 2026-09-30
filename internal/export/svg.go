@@ -38,8 +38,8 @@ func SVG(w *gen.World, path string) error {
 		}
 
 		// River widths grow like the square root of the drainage, in vertices
-		// of the finest mesh (hexagonal cells, the resolution apart)
-		resolution := w.Config.Resolution
+		// of the finest mesh (hexagonal cells, the resolution apart), pixels
+		resolution := w.Config.PixelSpacing(w.Width)
 		vertexArea := resolution * resolution * math.Sqrt(3) / 2
 		for v, d := range w.Downhill {
 			if d < 0 {

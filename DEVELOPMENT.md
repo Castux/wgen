@@ -182,7 +182,9 @@ water points take the level of the closest vertex.
 - Water (`stages.go`): the sea is at level 0, each lake at the level of its
   lowest shore; their floors slope down from the shore by `floorSlope`.
 - Elevations are in meters, positions in pixels: `World.MetersPerPixel`
-  converts. The hillshading of `render`, the OBJ export and the app (a
+  converts. The resolution is in meters: `Config.PixelSpacing` is the
+  finest mesh spacing in pixels, so a new map width rebuilds the mesh. The
+  hillshading of `render`, the OBJ export and the app (a
   `zScale` uniform, with the vertical exaggeration) use it. River widths
   come from `World.Drainage`, the drainage area in square pixels, since the
   mesh isn't uniform.

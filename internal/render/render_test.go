@@ -17,7 +17,7 @@ import (
 
 const testConfig = `{
 	"image": "island.png",
-	"mapWidth": 50, "resolution": 2, "levels": 1,
+	"mapWidth": 50, "resolution": 1000, "levels": 1,
 	"terrains": {
 		"sea": { "color": "#42427d" },
 		"land": { "color": "#87a851", "height": 500 }

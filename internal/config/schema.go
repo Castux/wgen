@@ -38,7 +38,7 @@ func (c *Config) Schema() []Param {
 		integer(top("seed"), "Seed", GroupMap, 0, 1e9,
 			"Randomness of the mesh and of the rock hardness: another seed, another landscape of the same map"),
 
-		number(top("resolution"), "Resolution", GroupQuality, 0.5, 64, 0.5,
+		number(top("resolution"), "Resolution (m)", GroupQuality, 10, 100000, 10,
 			"Mesh spacing where the detail is finest: finer is slower"),
 		integer(top("levels"), "Refinement levels", GroupQuality, 0, 6,
 			"How many times the mesh is refined, where terrains want the detail: each is twice as fine"),
@@ -80,16 +80,16 @@ const (
 // Quality is a choice of the parameters of the Quality group.
 type Quality struct {
 	Name               string
-	Resolution         float64 // map pixels
+	Resolution         float64 // meters
 	Levels             int
 	Steps, RefineSteps int
 }
 
 // Qualities, from the fastest
 var Qualities = []Quality{
-	{Name: "Draft", Resolution: 4, Levels: 2, Steps: 150, RefineSteps: 30},
-	{Name: "Normal", Resolution: 2, Levels: 3, Steps: 300, RefineSteps: 60},
-	{Name: "Fine", Resolution: 1, Levels: 4, Steps: 400, RefineSteps: 80},
+	{Name: "Draft", Resolution: 2000, Levels: 2, Steps: 150, RefineSteps: 30},
+	{Name: "Normal", Resolution: 1000, Levels: 3, Steps: 300, RefineSteps: 60},
+	{Name: "Fine", Resolution: 500, Levels: 4, Steps: 400, RefineSteps: 80},
 }
 
 // QualityOf is the quality a config has, "" if none of them.

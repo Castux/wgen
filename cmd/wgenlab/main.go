@@ -11,7 +11,7 @@
 //
 //	{
 //		"config": "../assets/example/chasers.json", // base config, relative to the experiment file
-//		"cases": {"small": {}, "continent": {"resolution": 8}},
+//		"cases": {"small": {}, "continent": {"resolution": 4000}},
 //		"variants": {"baseline": {}, "soft": {"simulation": {"erodibility": 4e-6}}},
 //		"region": "mountains",              // terrain measured
 //		"channelArea": 20000,               // drainage area of channels for the measures, square pixels

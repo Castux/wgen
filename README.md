@@ -244,10 +244,8 @@ The project's parameters, in the panel (hover them for help):
   another landscape of the same map).
 - Quality: Draft (quick, to try things), Normal or Fine (for the final
   landscape), with an estimate of the time from the last generation, and
-  what they set: the resolution (the finest mesh spacing, in meters; the
-  project file has it in pixels of the map, so that it stays the same
-  fraction of it when the map width changes), refinement levels, and time
-  steps.
+  what they set: the resolution (the finest mesh spacing, in meters, 1000 m
+  by default), refinement levels, and time steps.
 - Landscape: the project's slopes, rounding and river erosion (×1 is the
   usual), which the terrains take unless they set their own, and the slope
   of the sea floor.
@@ -295,7 +293,7 @@ macOS, `~/.config/wgen` on Linux), with its settings.
 {
 	"image": "chasers.png",       // the map, relative to the project file
 	"mapWidth": 1000,             // km
-	"resolution": 2,              // mesh spacing of the finest level, pixels
+	"resolution": 1000,           // mesh spacing of the finest level, meters
 	"levels": 3,                  // the coarse mesh is 2^levels coarser
 	"seed": 0,
 

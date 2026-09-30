@@ -198,13 +198,8 @@ func (a *app) drawCharacter(conf *config.Config, t *config.Terrain) {
 // per refinement level, or automatic (the finest on land, the coarsest on
 // water).
 func (a *app) drawDetail(conf *config.Config, t *config.Terrain) {
-	metersPerPixel := a.metersPerPixel(conf)
 	spacing := func(level int) string {
-		meters := conf.Resolution * math.Pow(2, float64(conf.Levels-level)) * metersPerPixel
-		if metersPerPixel == 0 {
-			return fmt.Sprintf("%g px", conf.Resolution*math.Pow(2, float64(conf.Levels-level)))
-		}
-		return formatDistance(meters)
+		return formatDistance(conf.Resolution * math.Pow(2, float64(conf.Levels-level)))
 	}
 	automatic := conf.Levels
 	if t.IsWater() {

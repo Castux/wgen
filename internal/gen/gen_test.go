@@ -30,7 +30,7 @@ var (
 // The test island, 100 km wide
 const testConfig = `{
 	"image": "island.png",
-	"mapWidth": 100, "resolution": 2, "levels": 2, "seed": 7,
+	"mapWidth": 100, "resolution": 1000, "levels": 2, "seed": 7,
 	"terrains": {
 		"sea": { "color": "#42427d" },
 		"lake": { "color": "#6d94c2" },
@@ -259,7 +259,7 @@ func TestIncremental(t *testing.T) {
 	}{
 		{`{"terrains": {"mountains": {"height": 2000}}}`, StageSimulation},
 		{`{"simulation": {"erodibility": 4e-6, "criticalSlope": 25}}`, StageSimulation},
-		{`{"mapWidth": 80}`, StageSimulation},
+		{`{"mapWidth": 80}`, StageMesh}, // the spacing in pixels changes
 		{`{"terrains": {"hills": {"detail": 1}}}`, StageMesh},
 		{`{"levels": 1}`, StageMesh},
 		{`{"seed": 3}`, StageMesh},

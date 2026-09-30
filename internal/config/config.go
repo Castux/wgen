@@ -7,7 +7,7 @@
 //	{
 //		"image": "map.png",          // relative to the project file
 //		"mapWidth": 1000,            // km
-//		"resolution": 2,             // finest mesh spacing, pixels
+//		"resolution": 1000,          // finest mesh spacing, meters
 //		"levels": 3,                 // mesh refinements
 //		"seed": 0,
 //		"terrains": {
@@ -39,7 +39,7 @@ type Config struct {
 
 	Image      string  `json:"image"`      // map image, relative to the project file
 	MapWidth   float64 `json:"mapWidth"`   // km
-	Resolution float64 `json:"resolution"` // mesh spacing of the finest level, pixels
+	Resolution float64 `json:"resolution"` // mesh spacing of the finest level, meters
 	Levels     int     `json:"levels"`     // refinements of the coarse mesh
 	Seed       uint64  `json:"seed"`
 
@@ -76,7 +76,7 @@ var DefaultSimulation = Simulation{
 // withDefaults returns a config with the default map settings and simulation
 // parameters, and no terrains.
 func withDefaults(image string) *Config {
-	return &Config{Image: image, MapWidth: 1000, Resolution: 2, Levels: 3, Simulation: DefaultSimulation}
+	return &Config{Image: image, MapWidth: 1000, Resolution: 1000, Levels: 3, Simulation: DefaultSimulation}
 }
 
 // Default returns the config of a new project, for a map image.
@@ -254,6 +254,12 @@ func marshalTerrain(t *Terrain) string {
 	}
 	buf.WriteString(" }")
 	return buf.String()
+}
+
+// PixelSpacing is the mesh spacing of the finest level in pixels of a map
+// of the given width.
+func (c *Config) PixelSpacing(width int) float64 {
+	return c.Resolution / c.MetersPerPixel(width)
 }
 
 // MetersPerPixel is the horizontal scale of a map of the given width in

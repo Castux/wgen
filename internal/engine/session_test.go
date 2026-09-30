@@ -19,7 +19,7 @@ import (
 
 const testConfig = `{
 	"image": "island.png",
-	"mapWidth": 50, "resolution": 2, "levels": 1,
+	"mapWidth": 50, "resolution": 1000, "levels": 1,
 	"terrains": {
 		"sea": { "color": "#42427d" },
 		"land": { "color": "#87a851", "height": 500 }
@@ -154,7 +154,7 @@ func TestHotReload(t *testing.T) {
 	}
 
 	// Fixed: regenerated, error cleared
-	os.WriteFile("config.json", []byte(strings.Replace(testConfig, `"resolution": 2`, `"resolution": 3`, 1)), 0o644)
+	os.WriteFile("config.json", []byte(strings.Replace(testConfig, `"resolution": 1000`, `"resolution": 1500`, 1)), 0o644)
 	st = h.waitFor(func(st State) bool { return st.Version > v0 && !st.Busy })
 	if st.Error != "" || st.Stage != "mesh" {
 		t.Errorf("after fixed project: %+v", st)
@@ -287,7 +287,7 @@ func TestNewSaveAs(t *testing.T) {
 
 func TestPreviewAndSupersede(t *testing.T) {
 	h := setup(t)
-	if err := h.s.Patch([]byte(`{"resolution": 1, "levels": 2, "terrains": {"land": {"height": 1000}}}`)); err != nil {
+	if err := h.s.Patch([]byte(`{"resolution": 500, "levels": 2, "terrains": {"land": {"height": 1000}}}`)); err != nil {
 		t.Fatal(err)
 	}
 	// Right away, superseding it

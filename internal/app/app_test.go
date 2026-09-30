@@ -84,7 +84,7 @@ func island(t *testing.T) *gen.World {
 
 	conf, _, err := config.Parse([]byte(`{
 		"image": "island.png",
-		"mapWidth": 50, "resolution": 2, "levels": 1,
+		"mapWidth": 50, "resolution": 1600, "levels": 1,
 		"terrains": {
 			"sea": { "color": "#42427d" },
 			"land": { "color": "#87a851", "height": 500 }

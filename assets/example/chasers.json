@@ -1,7 +1,7 @@
 {
 	"image": "chasers.png",
 	"mapWidth": 1000,
-	"resolution": 2,
+	"resolution": 1000,
 	"levels": 3,
 	"seed": 0,
 

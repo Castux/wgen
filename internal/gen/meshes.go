@@ -18,7 +18,7 @@ import (
 // levelSpacing is the mesh spacing of a level, in pixels. The last level has
 // the configured resolution.
 func (w *World) levelSpacing(level int) float64 {
-	return w.Config.Resolution * math.Pow(2, float64(w.Config.Levels-level))
+	return w.Config.PixelSpacing(w.Width) * math.Pow(2, float64(w.Config.Levels-level))
 }
 
 // detailAt is the number of refinement levels wanted at a position.

@@ -9,7 +9,7 @@ import (
 const sample = `{
 	"image": "map.png",
 	"mapWidth": 500,
-	"resolution": 4,
+	"resolution": 4000,
 	"levels": 2,
 	"somethingElse": 3,
 	"terrains": {
@@ -29,7 +29,7 @@ func TestParse(t *testing.T) {
 		t.Errorf("warnings: %v", warnings)
 	}
 
-	if c.MapWidth != 500 || c.Resolution != 4 || c.Levels != 2 {
+	if c.MapWidth != 500 || c.Resolution != 4000 || c.Levels != 2 {
 		t.Errorf("parsed %+v", c)
 	}
 	if c.Simulation.Erodibility != 3e-6 || c.Simulation.Steps != DefaultSimulation.Steps {

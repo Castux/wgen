@@ -105,13 +105,6 @@ func (a *app) drawParams(conf *config.Config) {
 // its label, tooltip, and the factor from the project's unit.
 func (a *app) displayUnit(conf *config.Config, key, label, tooltip string) (string, string, float64) {
 	switch key {
-	case "resolution":
-		// Map pixels in the project, so that it stays the same fraction of
-		// the map when its width changes
-		if metersPerPixel := a.metersPerPixel(conf); metersPerPixel > 0 {
-			return "Resolution (m)", tooltip, metersPerPixel
-		}
-		return "Resolution (px)", tooltip, 1
 	case "simulation.erodibility":
 		return "River erosion (×)", tooltip + " (1: the usual)", 1 / config.DefaultSimulation.Erodibility
 	case "simulation.floorSlope":
@@ -189,21 +182,6 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%.0f s", d.Seconds())
 	}
 	return fmt.Sprintf("%.1f s", d.Seconds())
-}
-
-// metersPerPixel is the scale of the project's map, 0 without a map.
-func (a *app) metersPerPixel(conf *config.Config) float64 {
-	width := 0
-	switch {
-	case a.editor.canvas != nil:
-		width = a.editor.canvas.width
-	case a.world != nil:
-		width = a.world.Width
-	}
-	if width == 0 {
-		return 0
-	}
-	return conf.MetersPerPixel(width)
 }
 
 // patch applies a parameter change, such as ["simulation", "erodibility"] =
