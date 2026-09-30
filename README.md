@@ -144,7 +144,8 @@ Eye level ground chooses what is drawn around you instead:
   ground could look like, consistent with the landscape.
 - Blocks: 1 m blocks within 128 m, their heights rounded from the smooth
   ground, water flat at its level, then the smooth ground: a sense of
-  scale.
+  scale. Each block is a little lighter or darker than its neighbors, in
+  every color mode.
 - Facets: the mesh as it is.
 
 The finer ground follows you, rebuilt in the background as you walk. Your

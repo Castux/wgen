@@ -185,7 +185,7 @@ func groundVertex(probe *gen.Probe, position geom.Vec2, z float64) terrainVertex
 	if t := probe.TerrainAt(position); t != nil {
 		v.r, v.g, v.b = t.Color[0], t.Color[1], t.Color[2]
 		if t.IsWater() {
-			v.a = 255
+			v.a = waterBit
 		}
 	}
 	return v
@@ -218,7 +218,7 @@ func buildBlocks(probe *gen.Probe, world *gen.World, center geom.Vec2, below *gr
 				}
 				top := math.Round(ground / blockMeters)
 				vertex := groundVertex(probe, position, 0)
-				if vertex.a == 255 {
+				if vertex.a&waterBit != 0 {
 					if point := probe.At(position); point.Water {
 						top = math.Round(point.Surface / blockMeters)
 					}
@@ -226,9 +226,7 @@ func buildBlocks(probe *gen.Probe, world *gen.World, center geom.Vec2, below *gr
 				p.tops[j*n+i] = top * blockMeters
 
 				// A little variation between blocks, as in the games
-				shade := 0.93 + 0.14*float64(blockHash(origin, step, i, j)&0xff)/255
-				vertex.r, vertex.g, vertex.b = scaleByte(vertex.r, shade), scaleByte(vertex.g, shade), scaleByte(vertex.b, shade)
-				colors[j*n+i] = vertex
+				colors[j*n+i] = vertex.withShade(0.93 + 0.14*float64(blockHash(origin, step, i, j)&0xff)/255)
 			}
 		}
 	})
@@ -259,8 +257,7 @@ func buildBlocks(probe *gen.Probe, world *gen.World, center geom.Vec2, below *gr
 			x1, y1 := x0+step, y0+step
 			quad(color, [4][3]float64{{x0, y0, top}, {x1, y0, top}, {x1, y1, top}, {x0, y1, top}})
 
-			side := color
-			side.r, side.g, side.b = scaleByte(color.r, 0.8), scaleByte(color.g, 0.8), scaleByte(color.b, 0.8)
+			side := color.withShade(0.8 * float64(color.a&^waterBit) / 100)
 			for _, s := range []struct {
 				di, dj  int
 				corners [2][2]float64 // along the side, counterclockwise seen from outside
@@ -291,10 +288,6 @@ func blockHash(origin geom.Vec2, step float64, i, j int) uint64 {
 	h ^= h >> 31
 	h *= 0x94d049bb133111eb
 	return h ^ h>>29
-}
-
-func scaleByte(b uint8, factor float64) uint8 {
-	return uint8(math.Round(math.Min(255, float64(b)*factor)))
 }
 
 func smoothstep(t float64) float64 {

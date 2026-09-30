@@ -311,6 +311,9 @@ Files:
   by two cells, with a skirt, so that no crack shows between the facets
   and the grid. Built in the background, rebuilt from the first layer the
   eye went too far from; the eye stands on the finest one.
+  The shade of a block (its variation, and darker sides) is in the low
+  bits of its vertices' alpha, above them the water flag (`waterBit`), so
+  that the shader applies it whatever the color mode.
 - `images.go`: `imageSlot` renders images with `internal/render` in a
   goroutine, one at a time. Only the latest request matters: requests
   arriving while rendering replace each other, stale results are dropped.

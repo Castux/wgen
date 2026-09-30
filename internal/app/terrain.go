@@ -49,7 +49,7 @@ const terrainVertexShader = `
 #version 330 core
 
 layout(location = 0) in vec3 position;     // map coordinates
-layout(location = 1) in vec4 terrainColor; // sRGB, alpha 1 for water
+layout(location = 1) in vec4 terrainColor; // sRGB; alpha: see terrainVertex
 
 uniform mat4 view;
 uniform mat4 projection;
@@ -61,6 +61,8 @@ uniform vec3 landColor; // sRGB, of the single color mode
 uniform bool rainbow;
 uniform float highest;
 uniform float zScale; // elevation to map units
+
+const int waterBit = 128; // as in Go
 
 out vec3 vPosition;
 out vec3 vViewPosition;
@@ -105,13 +107,19 @@ void main() {
 	vec4 viewPosition = view * vec4(position.xy - size / 2.0, position.z * zScale, 1.0);
 	vViewPosition = viewPosition.xyz;
 
-	bool water = terrainColor.a > 0.5;
+	int alpha = int(round(terrainColor.a * 255.0));
+	bool water = alpha >= waterBit;
 	if (heightColors)
 		vColor = heightColor(position.z, water);
 	else if (singleColor && !water)
 		vColor = srgbToLinear(landColor);
 	else
 		vColor = srgbToLinear(terrainColor.rgb);
+
+	// The shade of blocks, in hundredths, of the sRGB color
+	int shade = alpha % waterBit;
+	if (shade > 0)
+		vColor *= pow(float(shade) / 100.0, 2.2);
 
 	// The overlay is top row first
 	vUV = vec2(position.x / size.x, 1.0 - position.y / size.y);
@@ -193,7 +201,18 @@ void main() {
 
 type terrainVertex struct {
 	x, y, z    float32
-	r, g, b, a uint8 // a: 255 for water
+	r, g, b, a uint8 // a: waterBit for water, plus a shade (see withShade)
+}
+
+// waterBit is the flag of water vertices, in their alpha. The other bits
+// are a shade of the color in hundredths (0: none), in every color mode,
+// which tells the blocks apart.
+const waterBit = 128
+
+// withShade has the color multiplied by factor, from 0.01 to 1.27.
+func (v terrainVertex) withShade(factor float64) terrainVertex {
+	v.a = v.a&waterBit | uint8(math.Max(1, math.Min(waterBit-1, math.Round(factor*100))))
+	return v
 }
 
 func newTerrainView() (*terrainView, error) {
@@ -278,7 +297,7 @@ func (v *terrainView) setMesh(w *gen.World) bool {
 		color := render.VertexColor(w, int32(i))
 		vertices[i] = terrainVertex{x: float32(p.X), y: float32(p.Y), z: float32(z), r: color[0], g: color[1], b: color[2]}
 		if w.IsWater(int32(i)) {
-			vertices[i].a = 255
+			vertices[i].a = waterBit
 		}
 	}
 
